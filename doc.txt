@@ -1,0 +1,30 @@
+By Chris Kukelwicz, started 2008-07-08
+
+I am uploading this to hackage early, in case someone wished to avoid
+duplicating effort.
+
+http://code.google.com/apis/protocolbuffers/docs/overview.html
+http://code.google.com/p/protobuf/downloads/list
+http://groups.google.com/group/protobuf
+http://code.google.com/apis/protocolbuffers/docs/proto.html
+
+In particular you need 'descriptor.proto' from the source from Google.
+This file describes the programatic representation of a ".proto" file.
+
+to bootstrap:
+
+DONE (1) Decide on how to make the namespaces work
+DONE (2) Manually translate 'descriptor.proto' into basic data types under its "DescriptorProtos" namespace
+     (3) Write Parsec parser that can load 'descriptor.proto' into basic data types from (2)
+     (4) Write automatic translator that can generate haskell source to replace (2) using parsed data from (3)
+     (5) Expand (3) to handle full specification for '.proto' files
+     (5) Add API (see Java/Python/C++ APIs) to manipulate data/messages/enums/groups/extensions
+     (6) Expand (4) to create stub instances for API in (5)
+     (7) Implement stub instances for serializing to and from the wire (use Data.Binary ?)
+     (8) Implement stub instances for 'rpc' calls
+
+The self-hosting nature of "DescriptorProtos" means that opportunities
+for type safety are being lost.  The ranges of the integers and
+contents of the strings are not part of the '.proto' file, so the
+generated data structures do not reflect bounds or encodings.  The
+parser in (3) can be tweaked to use more fine-grained (new)types.
