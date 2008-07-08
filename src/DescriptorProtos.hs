@@ -1,4 +1,23 @@
-module DescriptorProtos.DescriptorProtos() where
+module DescriptorProtos
+    (DescriptorProtos.DescriptorProto
+    ,DescriptorProtos.DescriptorProto.ExtensionRange
+    ,DescriptorProtos.EnumDescriptorProto
+    ,DescriptorProtos.EnumOptions
+    ,DescriptorProtos.EnumValueDescriptorProto
+    ,DescriptorProtos.EnumValueOptions
+    ,DescriptorProtos.FieldDescriptorProto
+    ,DescriptorProtos.FieldDescriptorProto.Label
+    ,DescriptorProtos.FieldDescriptorProto.Type
+    ,DescriptorProtos.FieldOptions
+    ,DescriptorProtos.FieldOptions.CType
+    ,DescriptorProtos.FileOptions
+    ,DescriptorProtos.FileOptions.OptimizeMode
+    ,DescriptorProtos.MessageOptions
+    ,DescriptorProtos.MethodDescriptorProto
+    ,DescriptorProtos.MethodOptions
+    ,DescriptorProtos.ServiceDescriptorProto
+    ,DescriptorProtos.ServiceOptions 
+    ) where
 
 import qualified DescriptorProtos.DescriptorProto as DescriptorProtos(DescriptorProto) 
 import qualified DescriptorProtos.DescriptorProto.ExtensionRange as DescriptorProtos.DescriptorProto(ExtensionRange)
