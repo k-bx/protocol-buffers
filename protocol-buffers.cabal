@@ -1,0 +1,51 @@
+name: protocol-buffers
+version: 0.0.1
+cabal-version: >= 1.2
+build-type: Simple
+license: BSD3
+license-file: LICENSE
+copyright: (c) 2008 Christopher Edward Kuklewicz
+author: Christopher Edward Kuklewicz
+maintainer: Chris Kuklewicz <protobuf@personal.mightyreason.com>
+stability: vapor
+-- homepage: http://hackage.haskell.org/
+-- package-url: URL
+synopsis: Parse Google Protocol Buffer specifications
+description: Parse http://code.google.com/apis/protocolbuffers/docs/proto.html
+  and perhaps general haskell code to use them
+category: Language
+tested-with: ghc-6.8.3
+-- data-files:
+-- extra-source-files:
+-- extra-tmp-files:
+
+-- Library
+--   exposed-modules: Proto.hs
+--   build-depends:
+--   hs-source-dirs: ./src
+
+-- Executable proto-hs
+--   main-is:
+--   build-depends:
+
+-- buildable:
+-- other-modules:
+-- hs-source-dirs:
+-- extensions:
+-- build-tools:
+-- ghc-options:  token list
+-- ghc-prof-options: token list
+-- ghc-shared-options: token list
+-- hugs-options: token list
+-- nhc98-options: token list
+-- includes: filename list
+-- install-includes: filename list
+-- include-dirs: directory list
+-- c-sources: filename list
+-- extra-libraries: token list
+-- extra-lib-dirs: directory list
+-- cc-options: token list
+-- ld-options: token list
+-- pkgconfig-depends: package list
+-- frameworks: token list
+
