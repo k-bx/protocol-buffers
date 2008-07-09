@@ -8,8 +8,8 @@ copyright: (c) 2008 Christopher Edward Kuklewicz
 author: Christopher Edward Kuklewicz
 maintainer: Chris Kuklewicz <protobuf@personal.mightyreason.com>
 stability: vapor
--- homepage: http://hackage.haskell.org/
--- package-url: URL
+homepage: http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
+package-url: http://darcs.haskell.org/packages/protocol-buffers/
 synopsis: Parse Google Protocol Buffer specifications
 description: Parse http://code.google.com/apis/protocolbuffers/docs/proto.html
   and perhaps general haskell code to use them
