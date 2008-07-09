@@ -1,25 +1,28 @@
-name: protocol-buffers
-version: 0.0.2
-cabal-version: >= 1.2
-build-type: Simple
-license: BSD3
-license-file: LICENSE
-copyright: (c) 2008 Christopher Edward Kuklewicz
-author: Christopher Edward Kuklewicz
-maintainer: Chris Kuklewicz <protobuf@personal.mightyreason.com>
-stability: vapor
-homepage: http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
-package-url: http://darcs.haskell.org/packages/protocol-buffers/
-synopsis: Parse Google Protocol Buffer specifications
-description: Parse http://code.google.com/apis/protocolbuffers/docs/proto.html
+name:           protocol-buffers
+version:        0.0.2
+cabal-version:  >= 1.2
+build-type:     Simple
+license:        BSD3
+license-file:   LICENSE
+copyright:      (c) 2008 Christopher Edward Kuklewicz
+author:         Christopher Edward Kuklewicz
+maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
+stability:      Experimental
+homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
+package-url:    http://darcs.haskell.org/packages/protocol-buffers/
+synopsis:       Parse Google Protocol Buffer specifications
+description:    Parse http://code.google.com/apis/protocolbuffers/docs/proto.html
   and perhaps general haskell code to use them
-category: Language
+category:       Text
 Tested-With: GHC ==6.8.3
 -- data-files:
 extra-source-files: Setup.hs
                     doc.txt
                     test
 -- extra-tmp-files:
+
+flag small_base
+    description: Choose the new smaller, split-up base package.
 
 Library
   hs-source-dirs: ./src
@@ -48,7 +51,7 @@ Library
                    ProtocolBuffers.Instances
                    ProtocolBuffers.Option
                    ProtocolBuffers.ParseProto
-  build-depends: derive, base, containers, bytestring, array, parsec
+  build-depends: derive
   extensions: GADTs, EmptyDataDecls, TemplateHaskell, DeriveDataTypeable, FlexibleInstances
 
 -- Executable proto-hs
