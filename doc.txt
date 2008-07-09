@@ -3,6 +3,13 @@ By Chris Kukelwicz, started 2008-07-08
 I am uploading this to hackage early, in case someone wished to avoid
 duplicating effort.
 
+I am loeading version 0.0.2 with
+
+cd src
+ghci -XTemplateHaskell -XEmptyDataDecls -XGADTs -XFlexibleInstances -XDeriveDataTypeable ProtocolBuffers/ParseProto.hs
+
+Which ensure that DescriptorProtos/* all compile and tests the stub-like parsec parser (runs agains the "test" file).
+
 http://code.google.com/apis/protocolbuffers/docs/overview.html
 http://code.google.com/p/protobuf/downloads/list
 http://groups.google.com/group/protobuf
@@ -38,4 +45,3 @@ Rather than use
 "type MyMaybe a = (Data.Monoid.Last (Data.Maybe.Maybe a))"
 I have create ProtocolBuffers.Option which uses a phantom type to record whether it is required,
 and it has the last-biased mappend semantics.
-

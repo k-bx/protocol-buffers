@@ -1,0 +1,16 @@
+//I START WITH A COMMENT
+
+// Currently keeps the LAST package statement
+package i.will.be.ignored;
+package i.will.be.kept;
+
+// Not quite ready yet
+// option java_outer_classname = "Super.Proto.First";
+// option java_outer_classname = 'Super.Proto.Middle';
+// option java_outer_classname = "Super.Proto.Last";
+
+ ; // Extra semicolon
+
+message Whee
+
+ ;  ; message Whoops;
