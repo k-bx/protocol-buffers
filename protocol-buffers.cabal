@@ -48,7 +48,6 @@ Library
                    DescriptorProtos.ServiceOptions
                    ProtocolBuffers.Default
                    ProtocolBuffers.Header
-                   ProtocolBuffers.Instances
                    ProtocolBuffers.Option
                    ProtocolBuffers.ParseProto
   build-depends: derive
