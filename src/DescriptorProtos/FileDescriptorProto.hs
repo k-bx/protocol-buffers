@@ -10,12 +10,19 @@ import qualified DescriptorProtos.FileOptions as DescriptorProtos(FileOptions)
 import qualified DescriptorProtos.ServiceDescriptorProto as DescriptorProtos(ServiceDescriptorProto) 
 
 data FileDescriptorProto = FileDescriptorProto
-    { name :: Maybe String
-    , package :: Maybe String
-    , dependency :: Seq String
+    { name :: Optional ByteString
+    , package :: Optional ByteString
+    , dependency :: Seq ByteString
     , message_type :: Seq DescriptorProtos.DescriptorProto
     , enum_type :: Seq DescriptorProtos.EnumDescriptorProto
     , service :: Seq DescriptorProtos.ServiceDescriptorProto
     , extension :: Seq DescriptorProtos.FieldDescriptorProto
-    , options :: Maybe DescriptorProtos.FileOptions
+    , options :: Optional DescriptorProtos.FileOptions
     }
+  deriving (Show,Eq,Ord,Typeable)
+
+$( derive makeMonoid ''FileDescriptorProto )
+
+instance OptionFlag a => Monoid (Option a FileDescriptorProto) where mempty = Absent; mappend = op'Merge
+
+instance Default FileDescriptorProto where

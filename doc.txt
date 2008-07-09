@@ -28,3 +28,14 @@ for type safety are being lost.  The ranges of the integers and
 contents of the strings are not part of the '.proto' file, so the
 generated data structures do not reflect bounds or encodings.  The
 parser in (3) can be tweaked to use more fine-grained (new)types.
+
+MONOID !
+
+The text at http://code.google.com/apis/protocolbuffers/docs/encoding.html#optional specifies that Messages are Monoids!
+And the rule is simple: Take the last value in the case of conflicts, or concatenate if repeated.
+
+Rather than use
+"type MyMaybe a = (Data.Monoid.Last (Data.Maybe.Maybe a))"
+I have create ProtocolBuffers.Option which uses a phantom type to record whether it is required,
+and it has the last-biased mappend semantics.
+

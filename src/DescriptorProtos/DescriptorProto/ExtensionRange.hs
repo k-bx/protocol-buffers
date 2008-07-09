@@ -5,6 +5,13 @@ module DescriptorProtos.DescriptorProto.ExtensionRange
 import ProtocolBuffers.Header
 
 data ExtensionRange = ExtensionRange
-    { start :: Int32
-    , end :: Int32
+    { start :: Optional Int32
+    , end :: Optional Int32
     }
+  deriving (Show,Eq,Ord,Typeable)
+
+$( derive makeMonoid ''ExtensionRange )
+
+instance OptionFlag a => Monoid (Option a ExtensionRange) where mempty = Absent; mappend = op'Merge
+
+instance Default ExtensionRange where

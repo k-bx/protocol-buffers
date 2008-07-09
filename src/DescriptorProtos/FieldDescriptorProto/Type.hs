@@ -23,3 +23,8 @@ data Type = TYPE_DOUBLE
           | TYPE_SFIXED64
           | TYPE_SINT32 -- Uses ZipZag encoding
           | TYPE_SINT64 -- Uses ZipZag encoding
+  deriving (Show,Eq,Ord,Typeable)
+
+instance OptionFlag a => Monoid (Option a Type) where
+  mempty = Absent
+  mappend = flip const

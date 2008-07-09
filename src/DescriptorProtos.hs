@@ -19,7 +19,7 @@ module DescriptorProtos
     ,DescriptorProtos.ServiceOptions 
     ) where
 
-import qualified DescriptorProtos.DescriptorProto as DescriptorProtos(DescriptorProto) 
+import qualified DescriptorProtos.DescriptorProto as DescriptorProtos(DescriptorProto)
 import qualified DescriptorProtos.DescriptorProto.ExtensionRange as DescriptorProtos.DescriptorProto(ExtensionRange)
 import qualified DescriptorProtos.EnumDescriptorProto as DescriptorProtos(EnumDescriptorProto) 
 import qualified DescriptorProtos.EnumOptions as DescriptorProtos(EnumOptions)
