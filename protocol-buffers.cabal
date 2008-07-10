@@ -45,9 +45,10 @@ Library
                    DescriptorProtos.ServiceOptions
                    ProtocolBuffers.Default
                    ProtocolBuffers.Header
+                   ProtocolBuffers.Instances
                    ProtocolBuffers.Option
                    ProtocolBuffers.ParseProto
-  build-depends: derive
+  build-depends: derive, base, containers, bytestring, array, parsec
   extensions: GADTs, EmptyDataDecls, TemplateHaskell, DeriveDataTypeable, FlexibleInstances
 
 -- Executable proto-hs

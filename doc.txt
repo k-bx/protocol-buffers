@@ -45,3 +45,34 @@ Rather than use
 "type MyMaybe a = (Data.Monoid.Last (Data.Maybe.Maybe a))"
 I have create ProtocolBuffers.Option which uses a phantom type to record whether it is required,
 and it has the last-biased mappend semantics.
+
+Design issues for generated Haskell code:
+
+ * Wire protocol reading
+   http://code.google.com/apis/protocolbuffers/docs/encoding.html
+
+  The wire protocol decodes a fixed length buffer into a Message.
+
+  The wire protocol reader can break the input into a top level series of (field#,wireType#,data#)
+    field# is the 29 bit: 0 to 2^29-1 field #
+    wireType# is 3 bit value (currently Varint, 64-Bit, string, endian 32-Bit)
+    data# is decoded to some (Varint, Word64, ByteString, Word32)
+
+  see src/ProtocolBuffers/WireMessage.hs for an intermediate repesentation in Haskell
+
+ * Generating Haskell data types
+
+  The parsing result may have unknown fields which will need to be stored somewhere.
+  These come of the Wire, and can only be stored as a left over ProtocolBuffers.WireMessage
+
+  Should the generated class use "Maybe" for optional fields?
+  If Yes then
+    => This implies a new type class "Mergable" which is isomorphic to Data.Monoid but with instances needed to merge messages.
+
+  Should the generated class use "Maybe" for required fields?
+  If No then
+    => This implies the API cannot return a partially filled in message
+      => This implies you cannot split the encoded bytes into two pieces then decode them into two messages and finially merge the two message, because one of the halves will be missing a required field!
+  If Yes then
+    => This implies that the type are more complicated and invalid message can be repesented.
+
