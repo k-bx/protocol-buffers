@@ -8,14 +8,12 @@ import qualified Text.DescriptorProtos.EnumValueDescriptorProto as DescriptorPro
 import qualified Text.DescriptorProtos.EnumOptions as DescriptorProtos(EnumOptions)
 
 data EnumDescriptorProto = EnumDescriptorProto
-    { name :: Optional ByteString
+    { name :: Maybe ByteString
     , value :: Seq DescriptorProtos.EnumValueDescriptorProto
-    , options :: Optional DescriptorProtos.EnumOptions
+    , options :: Maybe DescriptorProtos.EnumOptions
     }
   deriving (Show,Eq,Ord,Typeable)
 
-$( derive makeMonoid ''EnumDescriptorProto )
-
-instance OptionFlag a => Monoid (Option a EnumDescriptorProto) where mempty = Absent; mappend = op'Merge
+$( makeMergeable ''EnumDescriptorProto )
 
 instance Default EnumDescriptorProto where

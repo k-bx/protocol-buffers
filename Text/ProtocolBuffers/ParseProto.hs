@@ -43,7 +43,6 @@ import qualified Text.DescriptorProtos.ServiceOptions                 as D.Servi
 
 import Text.ProtocolBuffers.Header
 import Text.ProtocolBuffers.Instances
-import Text.ProtocolBuffers.Option
 
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Language(emptyDef,LanguageDef(..))
@@ -106,10 +105,10 @@ data TopLevel = P !ByteString
               | O D.FileOptions
   deriving Show
 
-unique :: OptionFlag a => String -> [b] -> (Option a b,Maybe String)
-unique e [] = (Absent,Nothing)
-unique e [b] = (Present b,Nothing)
-unique e bs = (Present (last bs),Just e)
+unique :: String -> [b] -> (Maybe b,Maybe String)
+unique e [] = (Nothing,Nothing)
+unique e [b] = (Just b,Nothing)
+unique e bs = (Just (last bs),Just e)
 
 fileDescriptorProto :: CharParser US D.FileDescriptorProto
 fileDescriptorProto = do
@@ -120,13 +119,13 @@ fileDescriptorProto = do
 --                                 [ x | P x <- val ]
 --   maybe (return ()) fail mayErr
   return (defaultValue { -- D.FileDescriptorProto.package = opPackage
-                         D.FileDescriptorProto.package      = mconcat [ Present x | P x <- val ]
+                         D.FileDescriptorProto.package      = mergeConcat [ Just x | P x <- val ]
                        , D.FileDescriptorProto.dependency   = Seq.fromList [ x | D x <- val ]
                        , D.FileDescriptorProto.message_type = Seq.fromList [ x | M x <- val ]
                        , D.FileDescriptorProto.enum_type    = Seq.fromList [ x | E x <- val ]
                        , D.FileDescriptorProto.service      = Seq.fromList [ x | S x <- val ]
                        , D.FileDescriptorProto.extension    = Seq.fromList [ x | F x <- val ]
-                       , D.FileDescriptorProto.options      = mconcat [ Present x | O x <- val ]
+                       , D.FileDescriptorProto.options      = mergeConcat [ Just x | O x <- val ]
                        } )
 
 skipTop :: a -> CharParser US a
@@ -145,7 +144,7 @@ topLevel =  choice [ messageTop
 messageTop = string "message" >> do
   skip
   name <- ident
-  return (M (defaultValue { D.DescriptorProto.name = Present (pack name) }))
+  return (M (defaultValue { D.DescriptorProto.name = Just (pack name) }))
  
 enumTop = pzero
 serviceTop = pzero
@@ -171,16 +170,16 @@ optionTop = string "option" >> do
  where
    optionByName "java_package" = do
      bs <- parseString
-     return (defaultValue { D.FileOptions.java_package = Present bs })
+     return (defaultValue { D.FileOptions.java_package = Just bs })
    optionByName "java_outer_classname" = do
      bs <- parseString
-     return (defaultValue { D.FileOptions.java_outer_classname = Present bs })
+     return (defaultValue { D.FileOptions.java_outer_classname = Just bs })
    optionByName "java_multiple_files" = do
      bool <- parseBool
-     return (defaultValue { D.FileOptions.java_multiple_files = Present bool })
+     return (defaultValue { D.FileOptions.java_multiple_files = Just bool })
    optionByName "optimize_for" = do
      mode <- parseOptimizeMode
-     return (defaultValue { D.FileOptions.optimize_for = Present mode })
+     return (defaultValue { D.FileOptions.optimize_for = Just mode })
 
 parseString = pzero
 parseBool = pzero

@@ -7,14 +7,12 @@ import Text.ProtocolBuffers.Header
 import qualified Text.DescriptorProtos.FieldOptions.CType as DescriptorProtos.FieldOptions(CType)
 
 data FieldOptions = FieldOptions
-    { ctype :: Optional DescriptorProtos.FieldOptions.CType
-    , experimental_map_key :: Optional ByteString
+    { ctype :: Maybe DescriptorProtos.FieldOptions.CType
+    , experimental_map_key :: Maybe ByteString
     }
   deriving (Show,Eq,Ord,Typeable)
 
-$( derive makeMonoid ''FieldOptions )
-
-instance OptionFlag a => Monoid (Option a FieldOptions) where mempty = Absent; mappend = op'Merge
+$( makeMergeable ''FieldOptions )
 
 instance Default FieldOptions where
 

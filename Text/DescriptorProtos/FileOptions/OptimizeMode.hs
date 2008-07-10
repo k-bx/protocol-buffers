@@ -8,7 +8,7 @@ import Text.ProtocolBuffers.Header
 data OptimizeMode = SPEED | CODE_SIZE
   deriving (Show,Eq,Ord,Typeable)
 
-instance OptionFlag a => Monoid (Option a OptimizeMode) where mempty = Absent; mappend = op'Last
+$( makeMergeableEnum ''OptimizeMode )
 
 err'Name :: String
 err'Name = "DescriptorProtos.FileOptions.OptimizeMode"

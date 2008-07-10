@@ -48,9 +48,10 @@ Library
                    Text.ProtocolBuffers.Default
                    Text.ProtocolBuffers.Header
                    Text.ProtocolBuffers.Instances
-                   Text.ProtocolBuffers.Option
                    Text.ProtocolBuffers.ParseProto
                    Text.ProtocolBuffers.WireMessage
+                   Text.ProtocolBuffers.Mergeable
+                   Text.ProtocolBuffers.DeriveMergeable
 
   if flag(small_base)
         build-depends: base >= 3,

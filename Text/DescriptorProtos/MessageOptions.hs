@@ -5,15 +5,13 @@ module Text.DescriptorProtos.MessageOptions
 import Text.ProtocolBuffers.Header
 
 data MessageOptions = MessageOptions
-    { message_set_wire_format :: Optional Bool
+    { message_set_wire_format :: Maybe Bool
     }
   deriving (Show,Eq,Ord,Typeable)
 
-$( derive makeMonoid ''MessageOptions )
-
-instance OptionFlag a => Monoid (Option a MessageOptions) where mempty = Absent; mappend = op'Merge
+$( makeMergeable ''MessageOptions )
 
 instance Default MessageOptions where
-  defaultValue = mempty
-    { message_set_wire_format = Present False
+  defaultValue = mergeEmpty
+    { message_set_wire_format = Just False
     }

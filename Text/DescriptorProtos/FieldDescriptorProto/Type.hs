@@ -25,6 +25,4 @@ data Type = TYPE_DOUBLE
           | TYPE_SINT64 -- Uses ZipZag encoding
   deriving (Show,Eq,Ord,Typeable)
 
-instance OptionFlag a => Monoid (Option a Type) where
-  mempty = Absent
-  mappend = flip const
+$( makeMergeableEnum ''Type )

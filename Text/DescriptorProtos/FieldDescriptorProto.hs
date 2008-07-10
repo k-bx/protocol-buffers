@@ -8,19 +8,17 @@ import qualified Text.DescriptorProtos.FieldDescriptorProto.Type as DescriptorPr
 import qualified Text.DescriptorProtos.FieldOptions as DescriptorProtos(FieldOptions)
 
 data FieldDescriptorProto = FieldDescriptorProto
-    { name :: Optional ByteString
-    , number :: Optional Int32
-    , labelEnum :: Optional DescriptorProtos.FieldDescriptorProto.Label
-    , typeEnum :: Optional DescriptorProtos.FieldDescriptorProto.Type
-    , type_name :: Optional ByteString
-    , extendee :: Optional ByteString
-    , default_value :: Optional ByteString
-    , options :: Optional DescriptorProtos.FieldOptions
+    { name :: Maybe ByteString
+    , number :: Maybe Int32
+    , labelEnum :: Maybe DescriptorProtos.FieldDescriptorProto.Label
+    , typeEnum :: Maybe DescriptorProtos.FieldDescriptorProto.Type
+    , type_name :: Maybe ByteString
+    , extendee :: Maybe ByteString
+    , default_value :: Maybe ByteString
+    , options :: Maybe DescriptorProtos.FieldOptions
     }
   deriving (Show,Eq,Ord,Typeable)
 
-$( derive makeMonoid ''FieldDescriptorProto )
-
-instance OptionFlag a => Monoid (Option a FieldDescriptorProto) where mempty = Absent; mappend = op'Merge
+$( makeMergeable ''FieldDescriptorProto )
 
 instance Default FieldDescriptorProto where

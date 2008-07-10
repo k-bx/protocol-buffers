@@ -8,14 +8,12 @@ import qualified Text.DescriptorProtos.MethodDescriptorProto as DescriptorProtos
 import qualified Text.DescriptorProtos.ServiceOptions as DescriptorProtos(ServiceOptions)
 
 data ServiceDescriptorProto = ServiceDescriptorProto
-    { name :: Optional ByteString
+    { name :: Maybe ByteString
     , method :: Seq DescriptorProtos.MethodDescriptorProto
-    , options :: Optional DescriptorProtos.ServiceOptions
+    , options :: Maybe DescriptorProtos.ServiceOptions
     }
   deriving (Show,Eq,Ord,Typeable)
 
-$( derive makeMonoid ''ServiceDescriptorProto )
-
-instance OptionFlag a => Monoid (Option a ServiceDescriptorProto) where mempty = Absent; mappend = op'Merge
+$( makeMergeable ''ServiceDescriptorProto )
 
 instance Default ServiceDescriptorProto where

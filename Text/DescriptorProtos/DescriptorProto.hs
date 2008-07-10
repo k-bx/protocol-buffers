@@ -10,18 +10,16 @@ import qualified Text.DescriptorProtos.MessageOptions as DescriptorProtos(Messag
 import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as DescriptorProtos.DescriptorProto(ExtensionRange)
 
 data DescriptorProto = DescriptorProto
-    { name :: Optional ByteString
+    { name :: Maybe ByteString
     , field :: Seq DescriptorProtos.FieldDescriptorProto
     , extension :: Seq DescriptorProtos.FieldDescriptorProto
     , nested_type :: Seq DescriptorProto
     , enum_type :: Seq DescriptorProtos.EnumDescriptorProto
     , extension_range :: Seq DescriptorProtos.DescriptorProto.ExtensionRange
-    , options :: Optional DescriptorProtos.MessageOptions
+    , options :: Maybe DescriptorProtos.MessageOptions
     }
   deriving (Show,Eq,Ord,Typeable)
 
-$( derive makeMonoid ''DescriptorProto )
-
-instance OptionFlag a => Monoid (Option a DescriptorProto) where mempty = Absent; mappend = op'Merge
+$( makeMergeable ''DescriptorProto )
 
 instance Default DescriptorProto where

@@ -7,8 +7,6 @@ import Text.ProtocolBuffers.Header
 data MethodOptions = MethodOptions
   deriving (Show,Eq,Ord,Typeable)
 
-$( derive makeMonoid ''MethodOptions )
-
-instance OptionFlag a => Monoid (Option a MethodOptions) where mempty = Absent; mappend = op'Merge
+$( makeMergeable ''MethodOptions )
 
 instance Default MethodOptions where

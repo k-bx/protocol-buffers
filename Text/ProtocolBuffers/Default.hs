@@ -1,7 +1,7 @@
 module Text.ProtocolBuffers.Default(Default(..)) where
 
-import Data.Monoid
+import Text.ProtocolBuffers.Mergeable
 
-class Monoid a => Default a where
+class Mergeable a => Default a where
   defaultValue :: a
-  defaultValue = mempty
+  defaultValue = mergeEmpty
