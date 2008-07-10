@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        0.0.4
+version:        0.0.5
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -52,6 +52,7 @@ Library
                    Text.ProtocolBuffers.WireMessage
                    Text.ProtocolBuffers.Mergeable
                    Text.ProtocolBuffers.DeriveMergeable
+                   Text.ProtocolBuffers.Get
 
   if flag(small_base)
         build-depends: base >= 3,

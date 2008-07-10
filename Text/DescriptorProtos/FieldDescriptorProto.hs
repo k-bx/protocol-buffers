@@ -10,8 +10,8 @@ import qualified Text.DescriptorProtos.FieldOptions as DescriptorProtos(FieldOpt
 data FieldDescriptorProto = FieldDescriptorProto
     { name :: Maybe ByteString
     , number :: Maybe Int32
-    , labelEnum :: Maybe DescriptorProtos.FieldDescriptorProto.Label
-    , typeEnum :: Maybe DescriptorProtos.FieldDescriptorProto.Type
+    , label :: Maybe DescriptorProtos.FieldDescriptorProto.Label
+    , type' :: Maybe DescriptorProtos.FieldDescriptorProto.Type
     , type_name :: Maybe ByteString
     , extendee :: Maybe ByteString
     , default_value :: Maybe ByteString
