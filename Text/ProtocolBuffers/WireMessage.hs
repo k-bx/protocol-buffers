@@ -1,3 +1,5 @@
+module Text.ProtocolBuffers.WireMessage where
+
 import Data.Map
 
 {- The point of this module:
@@ -59,6 +61,6 @@ decomposeFieldWire x = (FieldId (x `shiftR` 3), WireId (x .&. 7))
 encodeWireMessage :: WireMessage -> ByteString
 encodeWireMessage = undefined
 
-decodeWireMessage :: ByteString -> WireStream
+decodeWireMessage :: ByteString -> WireMessage
 decodeWireMessage = undefined
 
