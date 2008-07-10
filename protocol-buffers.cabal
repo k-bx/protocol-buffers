@@ -48,33 +48,22 @@ Library
                    DescriptorProtos.ServiceOptions
                    ProtocolBuffers.Default
                    ProtocolBuffers.Header
+                   ProtocolBuffers.Instances
                    ProtocolBuffers.Option
                    ProtocolBuffers.ParseProto
-  build-depends: derive
-  extensions: GADTs, EmptyDataDecls, TemplateHaskell, DeriveDataTypeable, FlexibleInstances
+                   ProtocolBuffers.WireMessage
 
--- Executable proto-hs
---   main-is:
---   build-depends:
+  if flag(small_base)
+        build-depends: base >= 3,
+                       containers,
+                       bytestring,
+                       array
+  else
+        build-depends: base < 3
 
--- buildable:
--- other-modules:
--- hs-source-dirs:
--- extensions:
--- build-tools:
--- ghc-options:  token list
--- ghc-prof-options: token list
--- ghc-shared-options: token list
--- hugs-options: token list
--- nhc98-options: token list
--- includes: filename list
--- install-includes: filename list
--- include-dirs: directory list
--- c-sources: filename list
--- extra-libraries: token list
--- extra-lib-dirs: directory list
--- cc-options: token list
--- ld-options: token list
--- pkgconfig-depends: package list
--- frameworks: token list
-
+  build-depends:   derive, parsec
+  extensions:      GADTs,
+                   EmptyDataDecls,
+                   TemplateHaskell,
+                   DeriveDataTypeable,
+                   FlexibleInstances
