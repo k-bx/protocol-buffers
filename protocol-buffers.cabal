@@ -52,7 +52,7 @@ Library
                    Text.ProtocolBuffers.WireMessage
                    Text.ProtocolBuffers.Mergeable
                    Text.ProtocolBuffers.DeriveMergeable
-                   Text.ProtocolBuffers.Get
+                   Text.ProtocolBuffers.Gen
 
   if flag(small_base)
         build-depends: base >= 3,
