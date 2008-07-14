@@ -1,5 +1,13 @@
 By Chris Kukelwicz, started 2008-07-08
 
+---- In Progress
+
+The Gen.hs can spit out full modules for EnumDescriptorProto records,
+with a bunch of instances and with (unconnected for now) an "ascList'"
+association list to allow a more dynamic API.
+
+----
+
 I am uploading this to hackage early, in case someone wished to avoid
 duplicating effort.
 
@@ -76,3 +84,4 @@ Design issues for generated Haskell code:
   If Yes then
     => This implies that the type are more complicated and invalid message can be repesented.
 
+"If an invalid enum value is read when parsing a message, it will be treated as an unknown field."
