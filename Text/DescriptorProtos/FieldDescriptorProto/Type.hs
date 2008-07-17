@@ -23,6 +23,6 @@ data Type = TYPE_DOUBLE
           | TYPE_SFIXED64
           | TYPE_SINT32 -- Uses ZipZag encoding
           | TYPE_SINT64 -- Uses ZipZag encoding
-  deriving (Show,Eq,Ord,Typeable)
+  deriving (Show,Read,Eq,Ord,Typeable,Data)
 
 $( makeMergeableEnum ''Type )

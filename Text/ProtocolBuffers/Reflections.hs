@@ -2,51 +2,62 @@
 -- The to-be-bootstrapped descriptor.proto structures are not parsed enough for sane default usage.
 -- So this is currently over-designed for the immediate need of DescriptorInfo -> number -> FieldInfo -> Maybe HsDefault.
 -- These data structures and API are quite likely to be rewritten.
-module Text.ProtocolBuffers.Reflections(DescriptorInfo(..),FieldInfo(..),EnumInfo,EnumInfoApp) where
+--
+-- A strong feature of this is that it does not contain any structures defined by descriptor.proto!
+-- This prevents me hitting any circular dependencies
+module Text.ProtocolBuffers.Reflections(ProtoName(..),DescriptorInfo(..),FieldInfo(..)
+                                       ,HsDefault(..),EnumInfo(..),EnumInfoApp
+                                       ,ReflectDescriptor(..),ReflectEnum(..)
+                                       ) where
 
-import Text.ProtocolBuffers.Header
-import qualified Text.DescriptorProtos.FieldDescriptorProto.Label as DescriptorProtos.FieldDescriptorProto(Label)
-import qualified Text.DescriptorProtos.FieldDescriptorProto.Type as DescriptorProtos.FieldDescriptorProto(Type)
-import qualified Text.DescriptorProtos.FieldOptions as DescriptorProtos(FieldOptions)
+import Data.Map(Map)
+import Text.ProtocolBuffers.Basic
+import Data.Generics(Data)
+import Data.Typeable(Typeable)
 
-data DescriptorInfo = DescriptorInfo { haskellPrefix :: String  -- Haskell specific prefix to module hierarchy
-                                     , parentModule :: String   -- Proto specified namespace
-                                     , name :: String           -- unqualfied name of this type
-                                     , fields :: Map MyInt32 FieldInfo
-                                     }
+data ProtoName = ProtoName { haskellPrefix :: String  -- Haskell specific prefix to module hierarchy (e.g. Text)
+                           , parentModule :: String   -- Proto specified namespace (like java)
+                           , baseName :: String       -- unqualfied name of this thing
+                           }
+  deriving (Show,Read,Eq,Ord,Data,Typeable)
+
+data DescriptorInfo = DescriptorInfo { descName :: ProtoName
+                                     , fields :: Map MyInt32 FieldInfo }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data FieldInfo = FieldInfo { name :: String
                            , number :: MyInt32
-                           , label :: DescriptorProtos.FieldDescriptorProto.Label
-                           , type' :: DescriptorProtos.FieldDescriptorProto.Type
-                           , type_name :: Maybe 
+                           , isRequired :: Bool
+                           , canRepeat :: Bool
+                           , typeCode :: MyInt32
+                           , type_name :: Maybe (Either DescriptorInfo EnumInfo)
                            , hsRawDefult :: Maybe ByteString -- crappy, perhaps escaped, thing
                            , hsDefault :: Maybe HsDefault    -- nice parsed thing
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
-data HsDefault = HsDef'Bool Boolean
+data HsDefault = HsDef'Bool Bool
                | HsDef'ByteString ByteString
                | HsDef'Double Double
                | HsDef'Float Float
                | HsDef'Integer Integer
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
-class ReflectDescriptor m where
-  reflectDescriptor :: Map MyInt32 FieldInfo
-  parentOfDescriptor :: Maybe DescriptorInfo 
+data EnumInfo = EnumInfo { enumName :: ProtoName
+                         , enumItems :: [(MyInt32,String)]
+                         }
+  deriving (Show,Read,Eq,Ord,Data,Typeable)
 
-type EnumInfo = [(Integer,String)]
-type EnumInfoApp e = [(Integer,String,e)]
+type EnumInfoApp e = [(MyInt32,String,e)]
+
+class ReflectDescriptor m where
+  reflectDescriptor :: m -> Map MyInt32 FieldInfo   -- Must not inspect argument
+  parentOfDescriptor :: m -> Maybe DescriptorInfo   -- Must not inspect argument
+  parentOfDescriptor _ = Nothing
 
 class ReflectEnum e where
-  reflectEnums :: EnumInfoApp e
-  reflectEnumInfo :: EnumInfo
-  reflectEnumInfo = let eia :: EnumInfoApp
-                        eia = reflectEnums
-                    in map (\(a,b_) -> (a,b)) eia
-  -- Must not inspect
-  parentOfEnum :: e -> Maybe DescriptorInfo
+  reflectEnum :: EnumInfoApp e
+  reflectEnumInfo :: e -> EnumInfo            -- Must not inspect argument
+  parentOfEnum :: e -> Maybe DescriptorInfo   -- Must not inspect argument
   parentOfEnum _ = Nothing
 
