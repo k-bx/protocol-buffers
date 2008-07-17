@@ -53,6 +53,7 @@ Library
                    Text.ProtocolBuffers.Mergeable
                    Text.ProtocolBuffers.DeriveMergeable
                    Text.ProtocolBuffers.Gen
+                   Text.ProtocolBuffers.Reflections
 
   if flag(small_base)
         build-depends: base >= 3,

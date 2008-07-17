@@ -2,7 +2,7 @@ module Text.ProtocolBuffers.Header (
     UArray,
     ByteString,
     Data(..),
-    Int32,
+    Int32,MyInt32,
     Int64,Seq,
     Typeable(..),
     Word32,
@@ -26,6 +26,13 @@ import Data.Word(Word32,Word64)
 import Text.ProtocolBuffers.Default
 import Text.ProtocolBuffers.DeriveMergeable
 import Text.ProtocolBuffers.Mergeable
+
+-- This is what an sint32 is in Haskell.  "Int" is more widespread,
+-- but not guaranteed to be the right size.
+type MyInt32 = Data.Int.Int32
+
+myInt32 :: String
+myInt32 = "Int32"
 
 {-
 --instance OptionFlag a => Monoid (Option a (UArray i e)) where mempty = Absent; mappend = op'Last
