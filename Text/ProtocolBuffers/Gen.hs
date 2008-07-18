@@ -232,12 +232,14 @@ instanceMergeableEnum :: D.EnumDescriptorProto -> [HsDecl]
 instanceMergeableEnum (D.EnumDescriptorProto.EnumDescriptorProto
               { D.EnumDescriptorProto.name = Just name }) =
     [ HsInstDecl src [] (private "Mergeable") [HsTyCon (unqual name)] []
+{-
     , HsInstDecl src [] (private "Mergeable") [typeApp "Maybe" $ HsTyCon (unqual name)]
       [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeEmpty") [] 
                                           (HsUnGuardedRhs (HsCon (private "Nothing"))) noWhere])
       , HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeAppend") [] 
                                           (HsUnGuardedRhs (HsVar (private "mayMerge"))) noWhere])
       ]
+-}
     ]
 
 {- from google's descriptor.h, about line 346:
@@ -376,12 +378,14 @@ instanceMergeable (D.DescriptorProto.DescriptorProto
                                                                        (zipWith append vars1 vars2)
                                               ))) noWhere])
         ]
+{-
       , HsInstDecl src [] (private "Mergeable") [typeApp "Maybe" $ HsTyCon (qual name)]
         [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeEmpty") [] 
                                 (HsUnGuardedRhs (HsCon (private "Nothing"))) noWhere])
         , HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeAppend") [] 
                                 (HsUnGuardedRhs (HsVar (private "mayMerge"))) noWhere])
         ]
+-}
       ]
   where len = S.length field
         con = HsCon (qual name)

@@ -12,10 +12,6 @@ instance P'.Mergeable ServiceOptions where
         mergeEmpty = ServiceOptions
         mergeAppend (ServiceOptions) (ServiceOptions) = ServiceOptions
  
-instance P'.Mergeable (P'.Maybe ServiceOptions) where
-        mergeEmpty = P'.Nothing
-        mergeAppend = P'.mayMerge
- 
 instance P'.Default ServiceOptions
 
 {-

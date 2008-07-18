@@ -10,10 +10,6 @@ data Label = LABEL_OPTIONAL
  
 instance P'.Mergeable Label
  
-instance P'.Mergeable (P'.Maybe Label) where
-        mergeEmpty = P'.Nothing
-        mergeAppend = P'.mayMerge
- 
 instance P'.Bounded Label where
         minBound = LABEL_OPTIONAL
         maxBound = LABEL_REPEATED

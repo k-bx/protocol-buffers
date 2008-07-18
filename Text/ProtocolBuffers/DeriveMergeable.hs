@@ -19,10 +19,11 @@ example = (,) "Mergeable" [d|
     mergeAppend = mayMerge
  |]
 
+--makeMergeable t = liftM2 (++) (derive makeMergeable1 t) (derive makeMergeable2 t)
+makeMergeable t = derive makeMergeable1 t
 
-makeMergeable t = liftM2 (++) (derive makeMergeable1 t) (derive makeMergeable2 t)
-
-makeMergeableEnum t = liftM2 (++) (derive makeMergeable1Enum t) (derive makeMergeable2Enum t)
+makeMergeableEnum t = derive makeMergeable1Enum t
+-- makeMergeableEnum t = liftM2 (++) (derive makeMergeable1Enum t) (derive makeMergeable2Enum t)
 
 makeMergeable1 :: Derivation
 makeMergeable1 = derivation mergeable1' "Mergeable"
@@ -37,7 +38,7 @@ mergeable1' dat | length (dataCtors dat) == 1
                          lK (ctorName ctor) (zipWith (l2 "mergeAppend") (ctv ctor 'x') (ctv ctor 'y'))
 
 mergeable1' dat = []
-
+{-
 makeMergeable2 :: Derivation
 makeMergeable2 = derivation mergeable2' "Mergeable2"
 --  instance Mergeable (Maybe a) where
@@ -50,7 +51,7 @@ mergeable2' dat = [InstanceD []
                              ,(ValD (VarP (mkName "mergeAppend"))
                                     (NormalB (VarE (mkName "mayMerge"))) [])]]
   where foo = dataName dat
-
+-}
 
 makeMergeable1Enum :: Derivation
 makeMergeable1Enum = derivation mergeable1Enum' "Mergeable1Enum"
@@ -60,7 +61,7 @@ mergeable1Enum' dat = [InstanceD []
                                          (ConT (mkName foo)))
                              []]
   where foo = dataName dat
-
+{-
 makeMergeable2Enum :: Derivation
 makeMergeable2Enum = derivation mergeable2Enum' "Mergeable2Enum"
 --  instance Mergeable (Maybe a) where
@@ -73,7 +74,7 @@ mergeable2Enum' dat = [InstanceD []
                              ,(ValD (VarP (mkName "mergeAppend"))
                                     (NormalB (VarE (mkName "mayMerge"))) [])]]
   where foo = dataName dat
-
+-}
 {-
 --  instance Mergeable a => Mergeable (Maybe a) where
 mergeable2' dat = [InstanceD (concat ([[(AppT (ConT (mkName "Mergeable"))

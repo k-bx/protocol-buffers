@@ -23,12 +23,7 @@ instance Mergeable Int64 where
 instance Mergeable Word32 where
 instance Mergeable Word64 where
 instance Mergeable ByteString where
-instance Mergeable (Maybe Bool) where mergeEmpty = Nothing; mergeAppend = mayMerge
-instance Mergeable (Maybe Int32) where mergeEmpty = Nothing; mergeAppend = mayMerge
-instance Mergeable (Maybe Int64) where mergeEmpty = Nothing; mergeAppend = mayMerge
-instance Mergeable (Maybe Word32) where mergeEmpty = Nothing; mergeAppend = mayMerge
-instance Mergeable (Maybe Word64) where mergeEmpty = Nothing; mergeAppend = mayMerge
-instance Mergeable (Maybe ByteString) where mergeEmpty = Nothing; mergeAppend = mayMerge
+instance Mergeable a => Mergeable (Maybe a) where mergeEmpty = Nothing; mergeAppend = mayMerge
 instance Mergeable (Seq a) where mergeEmpty = mempty; mergeAppend = mappend
 
 {-# INLINE mayMerge #-}
@@ -36,9 +31,3 @@ mayMerge :: (Mergeable b) => Maybe b -> Maybe b -> Maybe b
 mayMerge Nothing y = y
 mayMerge x Nothing = x
 mayMerge (Just x) (Just y) = Just (mergeAppend x y)
-
-{-# INLINE mayLast #-}
-mayLast :: Maybe b -> Maybe b -> Maybe b
-mayLast Nothing y = y
-mayLast x Nothing = x
-mayLast _ y = y
