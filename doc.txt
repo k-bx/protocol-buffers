@@ -2,9 +2,15 @@ By Chris Kukelwicz, started 2008-07-08
 
 ---- In Progress
 
-The Gen.hs can spit out full modules for EnumDescriptorProto records,
-with a bunch of instances and with (unconnected for now) an "ascList'"
-association list to allow a more dynamic API.
+Make Gen.hs generate trivial Get.hs instances for EnumDescriptorProto and DescriptorProtos.
+  (will be simply get f m = f m, or get = ($))
+
+Make Gen.hs generate Default instances for DescriptorProtos.
+Make Gen.hs generate Reflections instances for DescriptorProtos.
+  (both the above are messier than EnumDescriptorProto code)
+
+Once the above is done then I think I have all the I need for bootstrapping.
+
 
 ----
 
