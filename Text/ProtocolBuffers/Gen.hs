@@ -85,7 +85,7 @@ import qualified Data.ByteString.UTF8 as U
 import qualified Data.Map as M
 import Data.Maybe(fromMaybe,catMaybes)
 import Data.List(sort,group,foldl)
-import Data.Sequence(Seq)
+import Data.Sequence(Seq,viewl,ViewL(..))
 import qualified Data.Sequence as S
 import Data.Foldable as F
 import Language.Haskell.Exts.Syntax
@@ -165,6 +165,7 @@ enumModule prefix
              standardImports
              (enumDecls protoName e)
   
+
 enumValues :: D.EnumDescriptorProto -> [(Integer,HsName)]
 enumValues (D.EnumDescriptorProto.EnumDescriptorProto
             { D.EnumDescriptorProto.value = value}) 
@@ -175,15 +176,13 @@ enumValues (D.EnumDescriptorProto.EnumDescriptorProto
                   , D.EnumValueDescriptorProto.number = Just number })
             = (toInteger number,ident name)
       
-enumValueX :: (Integer,HsName) -> HsQualConDecl
-enumValueX (_,hsName) = HsQualConDecl src [] [] (HsConDecl hsName [])
-
 enumX :: D.EnumDescriptorProto -> HsDecl
 enumX e@(D.EnumDescriptorProto.EnumDescriptorProto
          { D.EnumDescriptorProto.name = Just rawName})
     = HsDataDecl src DataType [] (base rawName) [] (map enumValueX values) derives
         where values = enumValues e
-
+              enumValueX :: (Integer,HsName) -> HsQualConDecl
+              enumValueX (_,hsName) = HsQualConDecl src [] [] (HsConDecl hsName [])
 
 enumDecls :: ProtoName -> D.EnumDescriptorProto -> [HsDecl]
 enumDecls p e = enumX e : Prelude.concat [ instanceMergeableEnum e
@@ -225,9 +224,6 @@ hsZero = HsLit (HsInt 0)
 hsEmpty :: HsExp
 hsEmpty = HsVar (private "emptyBS")
 
-hsMinBound :: HsExp
-hsMinBound = HsVar (private "minBound")
-
 instanceMergeableEnum :: D.EnumDescriptorProto -> [HsDecl]
 instanceMergeableEnum (D.EnumDescriptorProto.EnumDescriptorProto
               { D.EnumDescriptorProto.name = Just name }) =
@@ -253,11 +249,18 @@ instanceMergeableEnum (D.EnumDescriptorProto.EnumDescriptorProto
 
 instanceDefaultEnum :: D.EnumDescriptorProto -> HsDecl
 instanceDefaultEnum (D.EnumDescriptorProto.EnumDescriptorProto
-                     { D.EnumDescriptorProto.name = Just name })
+                     { D.EnumDescriptorProto.name = Just name
+                     , D.EnumDescriptorProto.value = value})
     = HsInstDecl src [] (private "Default") [HsTyCon (unqual name)]
       [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "defaultValue") [] 
-                                          (HsUnGuardedRhs hsMinBound) noWhere])
+                                          (HsUnGuardedRhs firstValue) noWhere])
       ]
+  where firstValue :: HsExp
+        firstValue = case viewl value of
+                       (:<) (D.EnumValueDescriptorProto.EnumValueDescriptorProto
+                             { D.EnumValueDescriptorProto.name = Just name }) _ ->
+                                 HsCon (UnQual (ident name))
+                       EmptyL -> error "EnumDescriptorProto had empty sequence of EnumValueDescriptorProto"
 
 instanceReflectEnum :: ProtoName -> D.EnumDescriptorProto -> HsDecl
 instanceReflectEnum protoName@(ProtoName a b c)
