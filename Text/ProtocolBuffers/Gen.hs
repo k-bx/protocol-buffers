@@ -14,6 +14,9 @@
 --   (*) lowercase all field names
 --   (*) add a prime after all field names than conflict with reserved words
 --
+-- The names are also assumed to have become fully-qualified, and all
+-- the optional type codes have been set.
+--
 -- default values are an awful mess.  They are documented in descriptor.proto as
 {-
   // For numeric types, contains the original text representation of the value.
@@ -77,7 +80,7 @@ import qualified Text.DescriptorProtos.ServiceOptions                 as D.Servi
 -}
 
 import Text.ProtocolBuffers.Header
-import Text.ProtocolBuffers.Reflections
+import Text.ProtocolBuffers.Reflections as R
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
@@ -159,12 +162,9 @@ enumModule prefix
     = let protoName = case splitMod rawName of
                         Left (m,b) -> ProtoName prefix (U.toString m) (U.toString b)
                         Right b    -> ProtoName prefix ""             (U.toString b)
-      in HsModule src
-             (Module (fqName protoName))
-             (Just [HsEThingAll (UnQual (HsIdent (baseName protoName)))])
-             standardImports
-             (enumDecls protoName e)
-  
+      in HsModule src (Module (fqName protoName))
+                  (Just [HsEThingAll (UnQual (HsIdent (baseName protoName)))])
+                  standardImports (enumDecls protoName e)
 
 enumValues :: D.EnumDescriptorProto -> [(Integer,HsName)]
 enumValues (D.EnumDescriptorProto.EnumDescriptorProto
@@ -185,12 +185,11 @@ enumX e@(D.EnumDescriptorProto.EnumDescriptorProto
               enumValueX (_,hsName) = HsQualConDecl src [] [] (HsConDecl hsName [])
 
 enumDecls :: ProtoName -> D.EnumDescriptorProto -> [HsDecl]
-enumDecls p e = enumX e : Prelude.concat [ instanceMergeableEnum e
-                                         , [ instanceBounded e
-                                           , instanceDefaultEnum e
-                                           , instanceEnum e
-                                           , instanceReflectEnum p e ] ]
-
+enumDecls p e = enumX e :  [ instanceMergeableEnum e
+                           , instanceBounded e
+                           , instanceDefaultEnum e
+                           , instanceEnum e
+                           , instanceReflectEnum p e ]
 
 instanceBounded :: D.EnumDescriptorProto -> HsDecl
 instanceBounded e@(D.EnumDescriptorProto.EnumDescriptorProto
@@ -224,19 +223,10 @@ hsZero = HsLit (HsInt 0)
 hsEmpty :: HsExp
 hsEmpty = HsVar (private "emptyBS")
 
-instanceMergeableEnum :: D.EnumDescriptorProto -> [HsDecl]
+instanceMergeableEnum :: D.EnumDescriptorProto -> HsDecl
 instanceMergeableEnum (D.EnumDescriptorProto.EnumDescriptorProto
               { D.EnumDescriptorProto.name = Just name }) =
-    [ HsInstDecl src [] (private "Mergeable") [HsTyCon (unqual name)] []
-{-
-    , HsInstDecl src [] (private "Mergeable") [typeApp "Maybe" $ HsTyCon (unqual name)]
-      [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeEmpty") [] 
-                                          (HsUnGuardedRhs (HsCon (private "Nothing"))) noWhere])
-      , HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeAppend") [] 
-                                          (HsUnGuardedRhs (HsVar (private "mayMerge"))) noWhere])
-      ]
--}
-    ]
+    HsInstDecl src [] (private "Mergeable") [HsTyCon (unqual name)] []
 
 {- from google's descriptor.h, about line 346:
 
@@ -295,7 +285,11 @@ descriptorModule prefix
     = let self = UnQual . HsIdent . U.toString . either snd id . splitMod $ rawName
           fqModuleName = Module (dotPre prefix (U.toString rawName))
           imports = standardImports ++ map formatImport (toImport d)
-      in HsModule src fqModuleName (Just [HsEThingAll self]) imports (descriptorX d : instancesDescriptor d)
+          protoName = case splitMod rawName of
+                        Left (m,b) -> ProtoName prefix (U.toString m) (U.toString b)
+                        Right b    -> ProtoName prefix ""             (U.toString b)
+          (insts,di) = instancesDescriptor protoName d
+      in HsModule src fqModuleName (Just [HsEThingAll self]) imports (descriptorX d : insts)
   where formatImport (Left (m,t)) = HsImportDecl src (Module (dotPre prefix (dotPre m t))) True
                                       (Just (Module m)) (Just (False,[HsIAbs (HsIdent t)]))
         formatImport (Right t)    = HsImportDecl src (Module (dotPre prefix t)) False
@@ -353,43 +347,106 @@ descriptorX :: D.DescriptorProto -> HsDecl
 descriptorX (D.DescriptorProto.DescriptorProto
               { D.DescriptorProto.name = Just name
               , D.DescriptorProto.field = field })
-    = HsDataDecl src DataType [] (ident name) [] [con] derives
-        where con = HsQualConDecl src [] [] (HsRecDecl (ident name) fields)
+    = HsDataDecl src DataType [] (base name) [] [con] derives
+        where con = HsQualConDecl src [] [] (HsRecDecl (base name) fields)
                   where fields = F.foldr ((:) . fieldX) [] field
 
 -- | HsInstDecl     SrcLoc HsContext HsQName [HsType] [HsInstDecl]
-instancesDescriptor :: D.DescriptorProto -> [HsDecl]
-instancesDescriptor d = instanceMergeable d ++ [instanceDefault d]
+instancesDescriptor :: ProtoName -> D.DescriptorProto -> ([HsDecl],DescriptorInfo)
+instancesDescriptor protoName d = ([ instanceMergeable d, def, instanceReflectDescriptor di ],di)
+  where (def,di) = instanceDefault protoName d
 
-instanceDefault :: D.DescriptorProto -> HsDecl
-instanceDefault (D.DescriptorProto.DescriptorProto
-              { D.DescriptorProto.name = Just name
-              , D.DescriptorProto.field = field })
-    = HsInstDecl src [] (private "Default") [HsTyCon (qual name)] []
+instanceReflectDescriptor :: DescriptorInfo -> HsDecl
+instanceReflectDescriptor di
+    = HsInstDecl src [] (private "ReflectDescriptor") [HsTyCon (UnQual (HsIdent (baseName (descName di))))]
+        [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "reflectDescriptorInfo") [ HsPWildCard ] 
+                                            (HsUnGuardedRhs rdi) noWhere]) ]
+  where -- massive shortcut through show and read
+        rdi :: HsExp
+        rdi = HsApp (HsVar (private "read")) (HsLit (HsString (show di)))
 
-instanceMergeable :: D.DescriptorProto -> [HsDecl]
+instanceDefault :: ProtoName -> D.DescriptorProto -> (HsDecl,DescriptorInfo)
+instanceDefault protoName (D.DescriptorProto.DescriptorProto
+                           { D.DescriptorProto.name = Just name
+                           , D.DescriptorProto.field = field })
+    = ( HsInstDecl src [] (private "Default") [HsTyCon (unqual name)]
+          [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "defaultValue") [] 
+                                          (HsUnGuardedRhs (Prelude.foldl HsApp (HsCon (unqual name)) deflist)) noWhere])]
+      , descriptorInfo )
+  where len = S.length field
+        old =  (replicate len (HsCon (private "defaultValue")))
+        fieldInfos :: [FieldInfo]
+        (deflist,fieldInfos) = unzip (F.foldr ((:) . defX) [] field)
+        descriptorInfo = DescriptorInfo { descName = protoName
+                                        , fields = M.fromAscList . sort . map (\f -> (fieldNumber f,f)) $ fieldInfos }
+
+defaultValueExp :: D.FieldDescriptorProto -> (HsExp,FieldInfo)
+defaultValueExp  d@(D.FieldDescriptorProto.FieldDescriptorProto
+                     { D.FieldDescriptorProto.name = Just rawName
+                     , D.FieldDescriptorProto.number = Just number
+                     , D.FieldDescriptorProto.label = Just label
+                     , D.FieldDescriptorProto.type' = Just type'
+                     , D.FieldDescriptorProto.type_name = mayTypeName
+                     , D.FieldDescriptorProto.default_value = mayRawDef })
+    = ( maybe (HsCon (private "defaultValue")) (HsParen . toSyntax) mayDef
+      , fieldInfo )
+  where toSyntax :: HsDefault -> HsExp
+        toSyntax x = case x of
+                       HsDef'Bool b -> HsCon (private (show b))
+                       HsDef'ByteString bs -> HsApp (HsVar (private "pack"))
+                                                    (HsLit (HsString (BSC.unpack bs)))
+                       HsDef'Rational r -> HsLit (HsFrac r)
+                       HsDef'Integer i -> HsLit (HsInt i)
+        mayDef = parseDefaultValue d
+        fieldInfo = FieldInfo (U.toString rawName) number (label == LABEL_REQUIRED) (label == LABEL_REPEATED) (fromEnum type')
+                              (fmap U.toString mayTypeName) mayRawDef mayDef 
+
+-- "Nothing" means no value specified
+-- A failure to parse a provided value will result in an error at the moment
+parseDefaultValue :: D.FieldDescriptorProto -> Maybe HsDefault
+parseDefaultValue d@(D.FieldDescriptorProto.FieldDescriptorProto
+                     { D.FieldDescriptorProto.type' = type'
+                     , D.FieldDescriptorProto.default_value = mayDef })
+    = do bs <- mayDef
+         t <- type'
+         todo <- case t of
+                   TYPE_MESSAGE -> Nothing
+                   TYPE_ENUM    -> Nothing
+                   TYPE_GROUP   -> error "<TYPE_GROUP IS UNIMPLEMENTED>"
+                   TYPE_BOOL    -> return parseDefBool
+                   TYPE_BYTES   -> return parseDefBytes
+                   TYPE_DOUBLE  -> return parseDefDouble
+                   TYPE_FLOAT   -> return parseDefFloat
+                   TYPE_STRING  -> return parseDefString
+                   _            -> return parseDefInteger
+         case todo bs of
+           Nothing -> error ("Could not parse the default value for "++show d)
+           Just value -> return value
+
+defX :: D.FieldDescriptorProto -> (HsExp,FieldInfo)
+defX d@(D.FieldDescriptorProto.FieldDescriptorProto
+         { D.FieldDescriptorProto.name = Just name
+         , D.FieldDescriptorProto.label = Just labelEnum
+         , D.FieldDescriptorProto.type' = type'
+         , D.FieldDescriptorProto.type_name = type_name })
+    =  ( HsParen $ case labelEnum of LABEL_OPTIONAL -> HsApp (HsCon (private "Just")) dv
+                                     _ -> dv
+       , fi )
+  where (dv,fi) = defaultValueExp d
+
+instanceMergeable :: D.DescriptorProto -> HsDecl
 instanceMergeable (D.DescriptorProto.DescriptorProto
               { D.DescriptorProto.name = Just name
               , D.DescriptorProto.field = field })
-    = [ HsInstDecl src [] (private "Mergeable") [HsTyCon (qual name)]
+    = HsInstDecl src [] (private "Mergeable") [HsTyCon (unqual name)]
         [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeEmpty") [] 
-                                (HsUnGuardedRhs (Prelude.foldl1 HsApp (HsCon (qual name) : replicate len (HsCon (private "mergeEmpty")))))
+                                (HsUnGuardedRhs (Prelude.foldl1 HsApp (HsCon (unqual name) : replicate len (HsCon (private "mergeEmpty")))))
                                 noWhere])
-        , HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeAppend") [ HsPApp (qual name) patternVars1
-                                                                    , HsPApp (qual name) patternVars2]
-                                (HsUnGuardedRhs (Prelude.foldl1 HsApp (HsCon (qual name) : 
+        , HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeAppend") [ HsPApp (unqual name) patternVars1
+                                                                    , HsPApp (unqual name) patternVars2]
+                                (HsUnGuardedRhs (Prelude.foldl1 HsApp (HsCon (unqual name) : 
                                                                        (zipWith append vars1 vars2)
-                                              ))) noWhere])
-        ]
-{-
-      , HsInstDecl src [] (private "Mergeable") [typeApp "Maybe" $ HsTyCon (qual name)]
-        [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeEmpty") [] 
-                                (HsUnGuardedRhs (HsCon (private "Nothing"))) noWhere])
-        , HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeAppend") [] 
-                                (HsUnGuardedRhs (HsVar (private "mayMerge"))) noWhere])
-        ]
--}
-      ]
+                                              ))) noWhere])]
   where len = S.length field
         con = HsCon (qual name)
         patternVars1 :: [HsPat]
@@ -405,6 +462,7 @@ instanceMergeable (D.DescriptorProto.DescriptorProto
         vars2 = take len inf
             where inf = map (\n -> HsVar (UnQual (HsIdent ("y'" ++ show n)))) [1..]
         append x y = HsParen $ HsApp (HsApp (HsVar (private "mergeAppend")) x) y
+
 
 ------------------------------------------------------------------
 
@@ -433,41 +491,100 @@ useType TYPE_GROUP    = error "<TYPE_GROUP IS UNIMPLEMENTED>"
 
 noWhere = (HsBDecls [])
 
-testD = putStrLn . prettyPrint . descriptorModule "Text" $ d
+test = putStrLn . prettyPrint . descriptorModule "Text" $ d
 
-test = putStrLn  . unlines . Prelude.concat $
-         [ map prettyPrint ( descriptorX d : instancesDescriptor d )
-         ]
+testDesc =  putStrLn . prettyPrint . descriptorModule "Text" $ genFieldOptions
+
+-- try and generate a small replacement for my manual file
+genFieldOptions :: D.DescriptorProto.DescriptorProto
+genFieldOptions =
+  defaultValue
+  { D.DescriptorProto.name = Just (BSC.pack "DescriptorProtos.FieldOptions") 
+  , D.DescriptorProto.field = S.fromList
+    [ defaultValue
+      { D.FieldDescriptorProto.name = Just (BSC.pack "ctype")
+      , D.FieldDescriptorProto.number = Just 1
+      , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
+      , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
+      , D.FieldDescriptorProto.type_name = Just (BSC.pack "DescriptorProtos.FieldOptions.CType")
+      , D.FieldDescriptorProto.default_value = Nothing
+      }
+    , defaultValue
+      { D.FieldDescriptorProto.name = Just (BSC.pack "experimental_map_key")
+      , D.FieldDescriptorProto.number = Just 9
+      , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
+      , D.FieldDescriptorProto.type' = Just TYPE_STRING
+      , D.FieldDescriptorProto.default_value = Nothing
+      }
+    ]
+  }
+
+-- test several features
 d :: D.DescriptorProto.DescriptorProto
 d = defaultValue
     { D.DescriptorProto.name = Just (BSC.pack "SomeMod.ServiceOptions") 
     , D.DescriptorProto.field = S.fromList
        [ defaultValue
-         { D.FieldDescriptorProto.name = Just (BSC.pack "field1TestPrimitive")
+         { D.FieldDescriptorProto.name = Just (BSC.pack "fieldString")
+         , D.FieldDescriptorProto.number = Just 1
+         , D.FieldDescriptorProto.label = Just LABEL_REQUIRED
+         , D.FieldDescriptorProto.type' = Just TYPE_STRING
+         , D.FieldDescriptorProto.default_value = Just (BSC.pack "Hello World")
+        }
+       , defaultValue
+         { D.FieldDescriptorProto.name = Just (BSC.pack "fieldBytes")
+         , D.FieldDescriptorProto.number = Just 2
+         , D.FieldDescriptorProto.label = Just LABEL_REQUIRED
+         , D.FieldDescriptorProto.type' = Just TYPE_STRING
+         , D.FieldDescriptorProto.default_value = Just (BSC.pack . cEncode $ [0,5..255])
+        }
+       , defaultValue
+         { D.FieldDescriptorProto.name = Just (BSC.pack "fieldInt64")
+         , D.FieldDescriptorProto.number = Just 3
+         , D.FieldDescriptorProto.label = Just LABEL_REQUIRED
+         , D.FieldDescriptorProto.type' = Just TYPE_INT64
+         , D.FieldDescriptorProto.default_value = Just (BSC.pack "-0x40")
+        }
+       , defaultValue
+         { D.FieldDescriptorProto.name = Just (BSC.pack "fieldDouble")
+         , D.FieldDescriptorProto.number = Just 4
+         , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
+         , D.FieldDescriptorProto.type' = Just TYPE_DOUBLE
+         , D.FieldDescriptorProto.default_value = Just (BSC.pack "+5.5e-10")
+        }
+       , defaultValue
+         { D.FieldDescriptorProto.name = Just (BSC.pack "fieldBool")
+         , D.FieldDescriptorProto.number = Just 5
          , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
          , D.FieldDescriptorProto.type' = Just TYPE_STRING
-         }
+         , D.FieldDescriptorProto.default_value = Just (BSC.pack "False")
+        }
        , defaultValue
          { D.FieldDescriptorProto.name = Just (BSC.pack "field2TestSelf")
+         , D.FieldDescriptorProto.number = Just 6
          , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
          , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
          , D.FieldDescriptorProto.type_name = Just (BSC.pack "ServiceOptions")
          }
        , defaultValue
          { D.FieldDescriptorProto.name = Just (BSC.pack "field3TestQualified")
+         , D.FieldDescriptorProto.number = Just 7
          , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
          , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
          , D.FieldDescriptorProto.type_name = Just (BSC.pack "A.B.C.Label")
          }
        , defaultValue
          { D.FieldDescriptorProto.name = Just (BSC.pack "field4TestUnqualified")
+         , D.FieldDescriptorProto.number = Just 8
          , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
          , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
          , D.FieldDescriptorProto.type_name = Just (BSC.pack "Maybe")
          }
        ]
     }
-{-
+
+
+ {-
 -- http://haskell.org/onlinereport/lexemes.html#sect2.4
 -- The .proto parser should have handled this
 mangle :: String -> String

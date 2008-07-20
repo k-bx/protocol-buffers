@@ -69,4 +69,5 @@ Library
                    EmptyDataDecls,
                    TemplateHaskell,
                    DeriveDataTypeable,
-                   FlexibleInstances
+                   FlexibleInstances,
+                   PatternGuards

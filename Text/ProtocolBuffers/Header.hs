@@ -1,5 +1,5 @@
 module Text.ProtocolBuffers.Header (
-   emptyBS,Data(..),Typeable(..)
+   emptyBS,pack,Data(..),Typeable(..)
   ,module Text.ProtocolBuffers.Default
   ,module Data.Monoid
   ,module Data.DeriveTH
@@ -9,6 +9,7 @@ module Text.ProtocolBuffers.Header (
   ,module Text.ProtocolBuffers.DeriveMergeable) where
 
 import Data.ByteString(empty)
+import Data.ByteString.Char8(pack)
 import Data.DeriveTH
 import Data.Dynamic(Dynamic)
 import Data.Generics(Data(..))

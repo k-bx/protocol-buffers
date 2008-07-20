@@ -5,7 +5,10 @@ module Text.DescriptorProtos.FieldOptions.CType
 import Text.ProtocolBuffers.Header
 
 data CType = CORD | STRING_PIECE
-  deriving (Show,Eq,Ord,Typeable)
+  deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 $( makeMergeableEnum ''CType )
+
+instance Default CType
+
 
