@@ -5,12 +5,31 @@ By Chris Kukelwicz, started 2008-07-08
 Make Gen.hs generate trivial Get.hs instances for EnumDescriptorProto and DescriptorProtos.
   (will be simply get f m = f m, or get = ($))
 
-Make Gen.hs generate Default instances for DescriptorProtos.
-Make Gen.hs generate Reflections instances for DescriptorProtos.
-  (both the above are messier than EnumDescriptorProto code)
+I think Gen.hs has all I need for bootstrapping.
+Now needed is
+  (1) A .proto file parser or lexer/parser that works on descriptor.proto (take old Parsec or new Alex?)
+  (2) A name-resolution pass to turn all message & enum references into fully qualified names.
+  (3) A mangling pass to make all names valid in haskell
+  (4) Ensure the needed fields are set (name/number/label/type, and when relevant, the type_name)
 
-Once the above is done then I think I have all the I need for bootstrapping.
+From there the Gen.hs can generate the module text, only an output routine is missing.
 
+At that point the basic system will be bootstrapped.  
+
+Then TODO is still quite long
+(*) Create the wire format
+   (**) Class API
+   (**) Gen.hs instances for writing
+   (**) Gen.hs instances for reading
+(*) Add more support to .proto loading
+   (**) extension support
+   (**) groups
+   (**) service/rpc
+(*) Add support to Gen.hs code generation
+   (**) Get.hs style API instances
+   (**) extension, group, service support
+   (**) detect and handle mutually recursive module references
+(*) RPC API and instances
 
 ----
 
