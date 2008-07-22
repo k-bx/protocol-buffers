@@ -2,11 +2,8 @@
 -- It also gives a default implementation to mergeAppend to take the second entry.
 module Text.ProtocolBuffers.Mergeable(Mergeable(..),mayMerge) where
 
-import Data.ByteString(ByteString)
-import Data.Sequence(Seq)
+import Text.ProtocolBuffers.Basic
 import Data.Monoid(mempty,mappend)
-import Data.Int(Int32,Int64)
-import Data.Word(Word32,Word64)
 
 class Mergeable a where
   mergeEmpty :: a

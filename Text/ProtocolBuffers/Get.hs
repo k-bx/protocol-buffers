@@ -2,8 +2,9 @@
   , TypeSynonymInstances, PatternGuards #-}
 module Get where
 
-import Data.ByteString(ByteString,empty)
-import Data.ByteString.Char8(pack)
+--import Text.ProtocolBuffers.Basic
+import Data.ByteString.Lazy(ByteString,empty)
+import Data.ByteString.Lazy.Char8(pack)
 import Data.Sequence(Seq,empty,null)
 
 data Message = Message { number :: Int

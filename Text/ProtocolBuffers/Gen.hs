@@ -1,4 +1,4 @@
--- try "testD" and "testLabel"
+-- try "test", "testDesc", and "testLabel" to see sample output
 --
 -- Turn *Proto into Language.Haskell.Exts.Syntax from haskell-src-exts package
 -- Need to get this just far enough to allow bootstrapping of 'descriptor.proto'
@@ -36,7 +36,7 @@ module Text.ProtocolBuffers.Gen where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
-{-
+{- not yet used
 import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D.DescriptorProto(ExtensionRange)
 import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D.DescriptorProto.ExtensionRange(ExtensionRange(..))
 -}
@@ -82,15 +82,17 @@ import qualified Text.DescriptorProtos.ServiceOptions                 as D.Servi
 import Text.ProtocolBuffers.Header
 import Text.ProtocolBuffers.Reflections as R
 
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BSC
-import qualified Data.ByteString.UTF8 as U
+import qualified Data.ByteString(concat)
+import qualified Data.ByteString.Char8(spanEnd)
+import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString.Lazy.Char8 as BSC
+import qualified Data.ByteString.Lazy.UTF8 as U
 import qualified Data.Map as M
 import Data.Maybe(fromMaybe,catMaybes)
 import Data.List(sort,group,foldl)
 import Data.Sequence(Seq,viewl,ViewL(..))
 import qualified Data.Sequence as S
-import Data.Foldable as F
+import Data.Foldable as F(foldr)
 import Language.Haskell.Exts.Syntax
 import Language.Haskell.Exts.Pretty
 
@@ -101,9 +103,12 @@ dotPre "" = id
 dotPre s | '.' == last s = (s ++)
          | otherwise = (s ++) . ('.':)
 
+spanEndL f bs = let (a,b) = Data.ByteString.Char8.spanEnd f (Data.ByteString.concat . BSC.toChunks $ bs)
+               in (BSC.fromChunks [a],BSC.fromChunks [b])
+
 -- Take a bytestring of "A" into "Right A" and "A.B.C" into "Left (A.B,C)"
 splitMod :: ByteString -> Either (ByteString,ByteString) ByteString
-splitMod bs = case BSC.spanEnd ('.'/=) bs of
+splitMod bs = case spanEndL ('.'/=) bs of
                 (pre,post) | BSC.length pre <= 1 -> Right bs
                            | otherwise -> Left (BSC.init pre,post)
 
@@ -351,6 +356,13 @@ descriptorX (D.DescriptorProto.DescriptorProto
         where con = HsQualConDecl src [] [] (HsRecDecl (base name) fields)
                   where fields = F.foldr ((:) . fieldX) [] field
 
+-- There is some confusing code below.  The FieldInfo and
+-- DescriptorInfo are getting built as a "side effect" of
+-- instanceDefault generating the instances for the Default class.
+-- This DescriptorInfo information is then passed to
+-- instanceReflectDescriptor to generate the instance of the
+-- ReflectDescriptor class.
+
 -- | HsInstDecl     SrcLoc HsContext HsQName [HsType] [HsInstDecl]
 instancesDescriptor :: ProtoName -> D.DescriptorProto -> ([HsDecl],DescriptorInfo)
 instancesDescriptor protoName d = ([ instanceMergeable d, def, instanceReflectDescriptor di ],di)
@@ -377,8 +389,8 @@ instanceDefault protoName (D.DescriptorProto.DescriptorProto
         old =  (replicate len (HsCon (private "defaultValue")))
         fieldInfos :: [FieldInfo]
         (deflist,fieldInfos) = unzip (F.foldr ((:) . defX) [] field)
-        descriptorInfo = DescriptorInfo { descName = protoName
-                                        , fields = M.fromAscList . sort . map (\f -> (fieldNumber f,f)) $ fieldInfos }
+        descriptorInfo = DescriptorInfo protoName
+                           (M.fromAscList . sort . map (\f -> (fieldNumber f,f)) $ fieldInfos)
 
 defaultValueExp :: D.FieldDescriptorProto -> (HsExp,FieldInfo)
 defaultValueExp  d@(D.FieldDescriptorProto.FieldDescriptorProto
@@ -479,9 +491,9 @@ useType TYPE_UINT32   = Just "Word32"
 useType TYPE_FIXED32  = Just "Word32"
 useType TYPE_UINT64   = Just "Word64"
 useType TYPE_FIXED64  = Just "Word64"
-useType TYPE_INT32    = Just myInt32
-useType TYPE_SINT32   = Just myInt32
-useType TYPE_SFIXED32 = Just myInt32
+useType TYPE_INT32    = Just "Int32"
+useType TYPE_SINT32   = Just "Int32"
+useType TYPE_SFIXED32 = Just "Int32"
 useType TYPE_INT64    = Just "Int64"
 useType TYPE_SINT64   = Just "Int64"
 useType TYPE_SFIXED64 = Just "Int64"

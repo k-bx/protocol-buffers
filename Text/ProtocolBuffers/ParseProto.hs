@@ -41,6 +41,7 @@ import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D.Servi
 import qualified Text.DescriptorProtos.ServiceOptions                 as D(ServiceOptions)
 import qualified Text.DescriptorProtos.ServiceOptions                 as D.ServiceOptions(ServiceOptions(..))
 
+import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Header
 import Text.ProtocolBuffers.Instances
 
@@ -53,7 +54,7 @@ import Data.Maybe(maybe)
 import Data.Maybe(maybe)
 import Data.Monoid
 import System.IO(readFile)
-import Data.ByteString.Char8(pack)
+import Data.ByteString.Lazy.Char8(pack)
 
 import qualified Data.Sequence as Seq
 

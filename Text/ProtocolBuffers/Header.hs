@@ -8,8 +8,9 @@ module Text.ProtocolBuffers.Header (
   ,module Text.ProtocolBuffers.Mergeable
   ,module Text.ProtocolBuffers.DeriveMergeable) where
 
-import Data.ByteString(empty)
-import Data.ByteString.Char8(pack)
+import Data.ByteString.Lazy(empty)
+import Data.ByteString.Lazy.Char8(pack)
+-- to delete
 import Data.DeriveTH
 import Data.Dynamic(Dynamic)
 import Data.Generics(Data(..))
@@ -23,5 +24,5 @@ import Text.ProtocolBuffers.Mergeable
 import Text.ProtocolBuffers.Reflections
 
 emptyBS :: ByteString
-emptyBS = Data.ByteString.empty
+emptyBS = Data.ByteString.Lazy.empty
 

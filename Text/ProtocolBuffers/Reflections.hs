@@ -5,6 +5,8 @@
 --
 -- A strong feature of this is that it does not contain any structures defined by descriptor.proto!
 -- This prevents me hitting any circular dependencies.
+--
+-- 
 module Text.ProtocolBuffers.Reflections(ProtoName(..),DescriptorInfo(..),FieldInfo(..)
                                        ,HsDefault(..),EnumInfo(..),EnumInfoApp
                                        ,ReflectDescriptor(..),ReflectEnum(..)
@@ -14,15 +16,16 @@ module Text.ProtocolBuffers.Reflections(ProtoName(..),DescriptorInfo(..),FieldIn
                                        ,cEncode,cDecode
                                        ) where
 
-import qualified Data.ByteString.UTF8 as U
-import qualified Data.ByteString as BS (ByteString,null,pack,unpack)
-import qualified Data.ByteString.Char8 as BSC(pack,unpack)
-import Numeric
+import Text.ProtocolBuffers.Basic
+
+import qualified Data.ByteString.Lazy.UTF8 as U
+import qualified Data.ByteString.Lazy as BS (null,pack,unpack)
+import qualified Data.ByteString.Lazy.Char8 as BSC(pack,unpack)
+import Numeric(readHex,readOct,readDec,showOct)
 import Data.Char(ord,chr,isHexDigit,isOctDigit,toLower)
 import Data.List(unfoldr)
 import Data.Word(Word8)
 import Data.Map(Map)
-import Text.ProtocolBuffers.Basic
 import Data.Generics(Data)
 import Data.Typeable(Typeable)
 import Test.QuickCheck(quickCheck)
@@ -35,11 +38,11 @@ data ProtoName = ProtoName { haskellPrefix :: String  -- Haskell specific prefix
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
-                                     , fields :: Map MyInt32 FieldInfo }
+                                     , fields :: Map Int32 FieldInfo }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data FieldInfo = FieldInfo { fieldName :: String
-                           , fieldNumber :: MyInt32
+                           , fieldNumber :: Int32
                            , isRequired :: Bool
                            , canRepeat :: Bool
                            , typeCode :: Int                  -- ^ fromEnum of Text.DescriptorProtos.FieldDescriptorProto.Type
@@ -56,11 +59,11 @@ data HsDefault = HsDef'Bool Bool
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data EnumInfo = EnumInfo { enumName :: ProtoName
-                         , enumItems :: [(MyInt32,String)]
+                         , enumItems :: [(Int32,String)]
                          }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
-type EnumInfoApp e = [(MyInt32,String,e)]
+type EnumInfoApp e = [(Int32,String,e)]
 
 class ReflectDescriptor m where
   reflectDescriptorInfo :: m -> DescriptorInfo        -- Must not inspect argument
@@ -194,7 +197,6 @@ cDecode = concat . unfoldr one where
                  | i <= maxChar = encode [ toEnum . fromInteger $ i ]
                  | otherwise = error "Text.ProtocolBuffers.Reflections.cDecode found Unicode Char out of range 0..0x10FFFF"
     where maxChar = toInteger (fromEnum (maxBound ::Char)) -- 0x10FFFF
-
 
 testEncodeDecode = let q :: [Int] -> Bool
                        q =  (\y -> let x = map (\z->abs z `mod` 255) y

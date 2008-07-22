@@ -55,6 +55,7 @@ Library
                    Text.ProtocolBuffers.Gen
                    Text.ProtocolBuffers.Reflections
                    Text.ProtocolBuffers.Get
+                   Text.ProtocolBuffers.WireMessage
 
   if flag(small_base)
         build-depends: base >= 3,
@@ -64,7 +65,7 @@ Library
   else
         build-depends: base < 3
 
-  build-depends:   derive, parsec, utf8-string, haskell-src-exts
+  build-depends:   binary,derive, parsec, utf8-string, haskell-src-exts
   extensions:      GADTs,
                    EmptyDataDecls,
                    TemplateHaskell,
