@@ -105,7 +105,7 @@ instance Wire Bool where
   wirePut {- TYPE_BOOL -} 8    False = putWord8 0
   wirePut {- TYPE_BOOL -} 8    True  = putWord8 1
   wireGet {- TYPE_BOOL -} 8          = do
-    x <- getWord8
+    x <- getVarInt :: Get Word32 -- google's wire_format_inl.h line 97
     case x of
       0 -> return False
       x | x < 128 -> return True
@@ -148,7 +148,7 @@ zzDecode64 w = (fromIntegral w `shiftR` 1) `xor` (negate (fromIntegral (w .&. 1)
 
 {-# INLINE getVarInt #-}
 getVarInt :: (Integral a, Bits a) => Get a
-getVarInt = do
+getVarInt = do -- optimize first read instead of calling (go 0 0)
   b <- getWord8
   if testBit b 7 then go 7 (fromIntegral (b .&. 0x7F))
     else return (fromIntegral b)
@@ -170,12 +170,11 @@ putVarSInt b =
           in go b len
     EQ -> putWord8 0
     GT -> let go i | i < 0x80 = putWord8 (fromIntegral i)
-                   | otherwise = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7)
+                   | testBit b 7 = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7)
           in go b
 
 {-# INLINE putVarUInt #-}
 putVarUInt :: (Integral a, Bits a) => a -> Put
-putVarUInt 0 = putWord8 0
 putVarUInt b = let go i | i < 0x80 = putWord8 (fromIntegral i)
                         | otherwise = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7)
                in go b
@@ -267,11 +266,13 @@ newtype FieldId = FieldId { getFieldID :: Word32 } -- really 29 bits, 0 to 2^29-
 newtype WireId = WireId { getWireID :: Word32 } -- really 3 bits
   deriving (Eq,Ord,Show,Data,Typeable)
 
-data WireData = Fix4 Word32 
+data WireData = VarInt ByteString -- the 128 bit variable encoding (least significant first)
               | Fix8 Word32 -- 4 and 8 byte fixed length types, lsb first on wire
-              | VarInt ByteString -- the 128 bit variable encoding (least significant first)
               | VarString ByteString -- length of contents as a VarInt
-                          ByteString -- the contents on the wire
+              |           ByteString -- the contents on the wire
+              | StartGroup
+              | EndGroup
+              | Fix4 Word32 
   deriving (Eq,Ord,Show,Data,Typeable)
 
 newtype WireMessage = WireMessage (Map FieldId (Seq WireData))
@@ -281,10 +282,25 @@ instance Monoid WireMessage where
   mappend (WireMessage a) (WireMessage b) = WireMessage (unionWith mappend a b)
 
 wireId :: WireData -> WireId
-wireId  (Fix4 {}) = WireId 5
-wireId  (Fix8 {}) = WireId 1
-wireId  (VarInt {}) = WireId 0
-wireId  (VarString {}) = WireId 2
+wireId (VarInt {})    = WireId 0
+wireId (Fix8 {})      = WireId 1
+wireId (VarString {}) = WireId 2
+wireId  StartGroup    = WireId 3
+wireId  StopGroup     = WireId 4
+wireId (Fix4 {})      = WireId 5
+
+lookAheadVarIntLength :: Get Int
+lookAheadVarIntLength = fmap (either id (error "impossible in lookAheadVarIntLength"))
+                             (lookAheadE (go 1))
+  where go i = do b <- getWord8
+                  if setBit b 7 then go $! succ i else return (Left i)
+
+getWireData = do
+  w <- getWord32
+  let fieldId = (w `shiftR` 3)
+      wireId = w .&. 7
+  case wireId of
+    0 -> fmap VarInt (getByte
 
 composeFieldWire :: FieldId -> WireId -> Word32
 composeFieldWire (FieldId f) (WireId w) = (f `shiftL` 3) .|. w
