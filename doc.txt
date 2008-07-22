@@ -31,6 +31,12 @@ Then TODO is still quite long
    (**) detect and handle mutually recursive module references
 (*) RPC API and instances
 
+
+----
+
+wire format: Using Data.Binary.Get/Put/Builder will make this trivial.
+  Only ugly piece is Double <-> [Word8] which I have prototyped in WireMessage.hs
+
 ----
 
 I am uploading this to hackage early, in case someone wished to avoid

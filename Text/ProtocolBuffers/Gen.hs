@@ -79,7 +79,9 @@ import qualified Text.DescriptorProtos.ServiceOptions                 as D(Servi
 import qualified Text.DescriptorProtos.ServiceOptions                 as D.ServiceOptions(ServiceOptions(..))
 -}
 
-import Text.ProtocolBuffers.Header
+--import Text.ProtocolBuffers.Header
+import Text.ProtocolBuffers.Basic
+import Text.ProtocolBuffers.Default
 import Text.ProtocolBuffers.Reflections as R
 
 import qualified Data.ByteString(concat)

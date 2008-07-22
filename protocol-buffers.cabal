@@ -71,4 +71,5 @@ Library
                    TemplateHaskell,
                    DeriveDataTypeable,
                    FlexibleInstances,
-                   PatternGuards
+                   PatternGuards,
+                   MagicHash
