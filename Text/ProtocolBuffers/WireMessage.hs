@@ -201,6 +201,7 @@ getVarInt = do -- optimize first read instead of calling (go 0 0)
     if testBit b 7 then go (n+7) (val .|. ((fromIntegral (b .&. 0x7F)) `shiftL` n))
       else return (val .|. ((fromIntegral b) `shiftL` n))
 
+-- This can be used on any Integral type and is needed for signed types; unsigned can use putVarUInt below.
 {-# INLINE putVarSInt #-}
 putVarSInt :: (Integral a, Bits a) => a -> Put
 putVarSInt b =
@@ -212,16 +213,17 @@ putVarSInt b =
               go i n = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7) (pred n)
           in go b len
     EQ -> putWord8 0
-    GT -> let go i | i < 0x80 = putWord8 (fromIntegral i)
-                   | otherwise = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7)
-          in go b
+    GT -> putVarUInt b
 
+-- This should be used on unsigned Integral types only (not checked)
 {-# INLINE putVarUInt #-}
 putVarUInt :: (Integral a, Bits a) => a -> Put
 putVarUInt b = let go i | i < 0x80 = putWord8 (fromIntegral i)
                         | otherwise = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7)
                in go b
 
+
+{-
 
 {- Useful for testing -}
 
@@ -256,7 +258,6 @@ toVarInt b = case compare b 0 of
                GT -> let go i | i < 0x80 = [fromIntegral i]
                               | otherwise = (fromIntegral (i .&. 0x7F) .|. 0x80) : go (i `shiftR` 7)
                      in go b
-{-
 {-  On my G4 (big endian) powerbook:
 
 le is the protocol-buffer standard (x86 optimized)
