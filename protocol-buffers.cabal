@@ -65,7 +65,7 @@ Library
   else
         build-depends: base < 3
 
-  build-depends:   binary,derive, parsec, utf8-string, haskell-src-exts
+  build-depends:   binary, binary-strict, derive, parsec, utf8-string, haskell-src-exts
   extensions:      GADTs,
                    EmptyDataDecls,
                    TemplateHaskell,
