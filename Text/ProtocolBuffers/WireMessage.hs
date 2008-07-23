@@ -20,21 +20,43 @@ of a class instance.
 import Text.ProtocolBuffers.Basic
 
 import Data.Bits(Bits(..))
-import qualified Data.ByteString.Lazy as BS (length,pack,unpack)
+import qualified Data.ByteString.Lazy as Strict (ByteString,empty)
+import qualified Data.ByteString.Lazy as BS (length,pack,unpack,fromChunks,toChunks)
+import qualified Data.ByteString.Lazy.Internal as BS (ByteString(Empty,Chunk),chunk)
 import Data.Generics(Data(..),Typeable(..))
 import Data.List(unfoldr,genericLength)
 import Data.Map(Map,unionWith)
 import Data.Monoid(Monoid(..))
 import Data.Word(Word8)
 
+import Data.Binary.Strict.Class
 import Data.Binary.Put as Put
-import Data.Binary.Get as Get
+import Data.Binary.Strict.Class(BinaryParser(..))
+import qualified Data.Binary.Strict.IncrementalGet as Get(Get,runGet,Result(..))
 import qualified Data.Binary.Builder as Build
 
 import GHC.Exts
 import GHC.Word
 import Numeric
 
+-- Make IncrementalGet run on the Lazy ByteStrings
+data LazyResult r = Failed String
+                  | Finished ByteString r
+                  | Partial (ByteString -> LazyResult r)
+
+runGetOnLazy :: Get.Get r r -> ByteString -> LazyResult r
+runGetOnLazy parser lbs =
+  let chunks = BS.toChunks lbs
+      resolve rest (Get.Failed s) = Failed s
+      resolve rest (Get.Finished b s) = Finished (BS.chunk b rest) s
+      resolve (BS.Chunk x rest) (Get.Partial f) = resolve rest (f x)
+      resolve BS.Empty (Get.Partial f) = newPartial
+        where newPartial= Partial f'
+              f' BS.Empty = newPartial
+              f' (BS.Chunk x rest) = resolve rest (f x)
+  in case lbs of
+       BS.Chunk x rest -> resolve rest $ Get.runGet parser x
+       BS.Empty -> resolve BS.Empty $ Get.runGet parser mempty -- might get lucky and succeed.
 
 -- --
 tagSize :: Int64
@@ -50,7 +72,7 @@ class Wire b where
   {-# INLINE wirePut #-}
   wirePut :: Int -> b -> Put
   {-# INLINE wireGet #-}
-  wireGet :: Int -> Get b
+  wireGet :: BinaryParser get => Int -> get b
 
 instance Wire Double where
   wireSize {- TYPE_DOUBLE -} 1     _ = 8
@@ -70,7 +92,7 @@ instance Wire Int64 where
   wirePut {- TYPE_SINT64 -} 18     x = putVarUInt (zzEncode64 x)
   wirePut {- TYPE_SFIXED64 -} 16   x = putWord64be (fromIntegral x)
   wireGet {- TYPE_INT64 -} 3         = getVarInt
-  wireGet {- TYPE_SINT64 -} 18       = fmap zzDecode64 getWord64be
+  wireGet {- TYPE_SINT64 -} 18       = fmap zzDecode64 getVarInt
   wireGet {- TYPE_SFIXED64 -} 16     = fmap fromIntegral getWord64be
 
 instance Wire Int32 where
@@ -81,7 +103,7 @@ instance Wire Int32 where
   wirePut {- TYPE_SINT32 -} 17     x = putVarUInt (zzEncode32 x)
   wirePut {- TYPE_SFIXED32 -} 15   x = putWord32be (fromIntegral x)
   wireGet {- TYPE_INT32 -} 5         = getVarInt
-  wireGet {- TYPE_SINT32 -} 17       = fmap zzDecode32 getWord32be
+  wireGet {- TYPE_SINT32 -} 17       = fmap zzDecode32 getVarInt
   wireGet {- TYPE_SFIXED32 -} 15     = fmap fromIntegral getWord32be
 
 instance Wire Word64 where
@@ -105,7 +127,7 @@ instance Wire Bool where
   wirePut {- TYPE_BOOL -} 8    False = putWord8 0
   wirePut {- TYPE_BOOL -} 8    True  = putWord8 1
   wireGet {- TYPE_BOOL -} 8          = do
-    x <- getVarInt :: Get Word32 -- google's wire_format_inl.h line 97
+    (x :: Word32) <- getVarInt -- google's wire_format_inl.h line 97
     case x of
       0 -> return False
       x | x < 128 -> return True
@@ -116,8 +138,11 @@ instance Wire ByteString where
   wireSize {- TYPE_BYTES -} 12     x = size'Varint len + len where len = BS.length x
   wirePut {- TYPE_STRING -} 9      x = putVarUInt (BS.length x) >> putLazyByteString x
   wirePut {- TYPE_BYTES -} 12      x = putVarUInt (BS.length x) >> putLazyByteString x
-  wireGet {- TYPE_STRING -} 9        = getVarInt >>= getLazyByteString 
-  wireGet {- TYPE_BYTES -} 12        = getVarInt >>= getLazyByteString
+  wireGet {- TYPE_STRING -} 9        = getVarInt >>= getByteString >>= return . toLazy --getLazyByteString 
+  wireGet {- TYPE_BYTES -} 12        = getVarInt >>= getByteString >>= return . toLazy --getLazyByteString
+
+--toLazy :: Strict.ByteString -> ByteString
+toLazy = BS.fromChunks . (:[])
 
 -- TYPE_GROUP 10
 -- TYPE_MESSAGE 11
@@ -137,17 +162,35 @@ divBy :: (Ord a, Integral a) => a -> a -> a
 divBy a b = let (q,r) = quotRem (abs a) b
             in if r==0 then q else succ q
 
+-- Taken from google's code, but I had to explcitly add fromIntegral in the right places:
 zzEncode32 :: Int32 -> Word32
 zzEncode32 x = fromIntegral ((x `shiftL` 1) `xor` (x `shiftR` 31))
 zzEncode64 :: Int64 -> Word64
 zzEncode64 x = fromIntegral ((x `shiftL` 1) `xor` (x `shiftR` 63))
 zzDecode32 :: Word32 -> Int32
-zzDecode32 w = (fromIntegral w `shiftR` 1) `xor` (negate (fromIntegral (w .&. 1)))
+zzDecode32 w = (fromIntegral (w `shiftR` 1)) `xor` (negate (fromIntegral (w .&. 1)))
 zzDecode64 :: Word64 -> Int64
-zzDecode64 w = (fromIntegral w `shiftR` 1) `xor` (negate (fromIntegral (w .&. 1)))
+zzDecode64 w = (fromIntegral (w `shiftR` 1)) `xor` (negate (fromIntegral (w .&. 1)))
+
+-- The above is tricky, so the testing roundtrips and versus examples is needed:
+testZZ = and (concat testsZZ)
+  where testsZZ = [ map (\v -> v ==zzEncode64 (zzDecode64 v)) values
+                  , map (\v -> v ==zzEncode32 (zzDecode32 v)) values
+                  , map (\v -> v ==zzDecode64 (zzEncode64 v)) values
+                  , map (\v -> v ==zzDecode32 (zzEncode32 v)) values
+                  , [ zzEncode32 minBound == maxBound
+                    , zzEncode32 maxBound == pred maxBound
+                    , zzEncode64 minBound == maxBound
+                    , zzEncode64 maxBound == pred maxBound
+                    , zzEncode64 0 == 0,    zzEncode32 0 == 0
+                    , zzEncode64 (-1) == 1, zzEncode32 (-1) == 1
+                    , zzEncode64 1 == 2,    zzEncode32 1 == 2
+                    ] ]
+        values :: forall a. (Bounded a,Integral a) => [a]
+        values = [minBound,div minBound 2,-3,-2,-1,0,1,2,3,div maxBound 2, maxBound]
 
 {-# INLINE getVarInt #-}
-getVarInt :: (Integral a, Bits a) => Get a
+getVarInt :: (Integral a, Bits a, BinaryParser get) => get a
 getVarInt = do -- optimize first read instead of calling (go 0 0)
   b <- getWord8
   if testBit b 7 then go 7 (fromIntegral (b .&. 0x7F))
@@ -170,7 +213,7 @@ putVarSInt b =
           in go b len
     EQ -> putWord8 0
     GT -> let go i | i < 0x80 = putWord8 (fromIntegral i)
-                   | testBit b 7 = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7)
+                   | otherwise = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7)
           in go b
 
 {-# INLINE putVarUInt #-}
@@ -180,7 +223,7 @@ putVarUInt b = let go i | i < 0x80 = putWord8 (fromIntegral i)
                in go b
 
 
-{- Useful for testing
+{- Useful for testing -}
 
 testVarInt :: (Integral a, Enum a, Ord a, Bits a) => a -> (Bool,[Word8],Either String a)
 testVarInt i = let w = toVarInt i
@@ -213,7 +256,7 @@ toVarInt b = case compare b 0 of
                GT -> let go i | i < 0x80 = [fromIntegral i]
                               | otherwise = (fromIntegral (i .&. 0x7F) .|. 0x80) : go (i `shiftR` 7)
                      in go b
-
+{-
 {-  On my G4 (big endian) powerbook:
 
 le is the protocol-buffer standard (x86 optimized)
@@ -260,6 +303,9 @@ gle s = let pairs = Data.List.unfoldr (\a -> if Prelude.null a then Nothing
 
 -}
 
+
+-- Some to-be-reviewed-for-sanity prototypes for the bytestream reader
+
 newtype FieldId = FieldId { getFieldID :: Word32 } -- really 29 bits, 0 to 2^29-1
   deriving (Eq,Ord,Show,Data,Typeable)
 
@@ -267,12 +313,12 @@ newtype WireId = WireId { getWireID :: Word32 } -- really 3 bits
   deriving (Eq,Ord,Show,Data,Typeable)
 
 data WireData = VarInt ByteString -- the 128 bit variable encoding (least significant first)
-              | Fix8 Word32 -- 4 and 8 byte fixed length types, lsb first on wire
+              | Fix8 ByteString -- 4 and 8 byte fixed length types, lsb first on wire
               | VarString ByteString -- length of contents as a VarInt
               |           ByteString -- the contents on the wire
               | StartGroup
-              | EndGroup
-              | Fix4 Word32 
+              | StopGroup
+              | Fix4 ByteString
   deriving (Eq,Ord,Show,Data,Typeable)
 
 newtype WireMessage = WireMessage (Map FieldId (Seq WireData))
@@ -288,20 +334,7 @@ wireId (VarString {}) = WireId 2
 wireId  StartGroup    = WireId 3
 wireId  StopGroup     = WireId 4
 wireId (Fix4 {})      = WireId 5
-
-lookAheadVarIntLength :: Get Int
-lookAheadVarIntLength = fmap (either id (error "impossible in lookAheadVarIntLength"))
-                             (lookAheadE (go 1))
-  where go i = do b <- getWord8
-                  if setBit b 7 then go $! succ i else return (Left i)
-
-getWireData = do
-  w <- getWord32
-  let fieldId = (w `shiftR` 3)
-      wireId = w .&. 7
-  case wireId of
-    0 -> fmap VarInt (getByte
-
+                        
 composeFieldWire :: FieldId -> WireId -> Word32
 composeFieldWire (FieldId f) (WireId w) = (f `shiftL` 3) .|. w
 
