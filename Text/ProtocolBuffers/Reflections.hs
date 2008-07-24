@@ -9,7 +9,7 @@
 -- 
 module Text.ProtocolBuffers.Reflections(ProtoName(..),DescriptorInfo(..),FieldInfo(..)
                                        ,HsDefault(..),EnumInfo(..),EnumInfoApp
-                                       ,ReflectDescriptor(..),ReflectEnum(..)
+                                       ,ReflectDescriptor(..),ReflectEnum(..),GetMessageInfo(..)
                                        ,parseDefDouble,parseDefFloat
                                        ,parseDefBool,parseDefInteger
                                        ,parseDefString,parseDefBytes
@@ -23,9 +23,12 @@ import qualified Data.ByteString.Lazy as BS (null,pack,unpack)
 import qualified Data.ByteString.Lazy.Char8 as BSC(pack,unpack)
 import Numeric(readHex,readOct,readDec,showOct)
 import Data.Char(ord,chr,isHexDigit,isOctDigit,toLower)
-import Data.List(unfoldr)
+import Data.List(sort,unfoldr)
+import qualified Data.Foldable as F(toList)
+import Data.Bits(Bits((.|.),shiftL))
 import Data.Word(Word8)
-import Data.Map(Map)
+import Data.Set(Set)
+import qualified Data.Set as Set
 import Data.Generics(Data)
 import Data.Typeable(Typeable)
 import Test.QuickCheck(quickCheck)
@@ -38,20 +41,36 @@ data ProtoName = ProtoName { haskellPrefix :: String  -- Haskell specific prefix
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
-                                     , fields :: Map Int32 FieldInfo }
+                                     , fields :: Seq FieldInfo }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
+data GetMessageInfo = GetMessageInfo { requiredTags :: Set WireTag
+                                     , allowedTags :: Set WireTag
+                                     }
+  deriving (Show,Read,Eq,Ord,Data,Typeable)
+
+makeMessageInfo :: DescriptorInfo -> GetMessageInfo
+makeMessageInfo di = GetMessageInfo { requiredTags = Set.fromDistinctAscList . sort $
+                                        [ wireTag f | f <- F.toList (fields di), isRequired f]
+                                    , allowedTags = Set.fromDistinctAscList . sort $
+                                        [ wireTag f | f <- F.toList (fields di)]
+                                    }
+
 data FieldInfo = FieldInfo { fieldName :: String
-                           , fieldNumber :: Int32
+                           , fieldNumber :: FieldId
+                           , wireTag :: WireTag
                            , isRequired :: Bool
                            , canRepeat :: Bool
-                           , typeCode :: Int                  -- ^ fromEnum of Text.DescriptorProtos.FieldDescriptorProto.Type
+                           , typeCode :: FieldType            -- ^ fromEnum of Text.DescriptorProtos.FieldDescriptorProto.Type
                            , typeName :: Maybe String
                            , hsRawDefault :: Maybe ByteString -- ^ crappy, perhaps escaped, thing
                            , hsDefault :: Maybe HsDefault     -- ^ nice parsed thing
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
+-- | 'HsDefault' stores the parsed default from the proto file in a
+-- form that will make a nice literal in the
+-- Language.Haskell.Exts.Syntax sense.
 data HsDefault = HsDef'Bool Bool
                | HsDef'ByteString ByteString
                | HsDef'Rational Rational
@@ -59,14 +78,16 @@ data HsDefault = HsDef'Bool Bool
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data EnumInfo = EnumInfo { enumName :: ProtoName
-                         , enumItems :: [(Int32,String)]
+                         , enumItems :: [(EnumCode,String)]
                          }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
-type EnumInfoApp e = [(Int32,String,e)]
+type EnumInfoApp e = [(EnumCode,String,e)]
 
 class ReflectDescriptor m where
-  reflectDescriptorInfo :: m -> DescriptorInfo        -- Must not inspect argument
+  getMessageInfo :: m -> GetMessageInfo           -- Must not inspect argument
+  getMessageInfo x = cached where cached = makeMessageInfo (reflectDescriptorInfo (undefined `asTypeOf` x))
+  reflectDescriptorInfo :: m -> DescriptorInfo    -- Must not inspect argument
   parentOfDescriptor :: m -> Maybe DescriptorInfo -- Must not inspect argument
   parentOfDescriptor _ = Nothing
 
@@ -75,6 +96,8 @@ class ReflectEnum e where
   reflectEnumInfo :: e -> EnumInfo            -- Must not inspect argument
   parentOfEnum :: e -> Maybe DescriptorInfo   -- Must not inspect argument
   parentOfEnum _ = Nothing
+
+--- From here down is code used to parse the format of the default values in the .proto files
 
 {-# INLINE mayRead #-}
 mayRead :: ReadS a -> String -> Maybe a

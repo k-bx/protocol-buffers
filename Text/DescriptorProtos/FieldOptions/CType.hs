@@ -2,13 +2,16 @@ module Text.DescriptorProtos.FieldOptions.CType
   (CType(..))
  where
 
-import Text.ProtocolBuffers.Header
+import qualified Prelude as P'
+import qualified Text.ProtocolBuffers.Header as P'
 
 data CType = CORD | STRING_PIECE
-  deriving (Show,Read,Eq,Ord,Data,Typeable)
+  deriving (P'.Show,P'.Read,P'.Eq,P'.Ord,P'.Data,P'.Typeable)
 
-$( makeMergeableEnum ''CType )
+-- $( P'.makeMergeableEnum ''CType )
 
-instance Default CType
+instance P'.Mergeable CType
 
+instance P'.Default CType
 
+instance P'.Wire CType

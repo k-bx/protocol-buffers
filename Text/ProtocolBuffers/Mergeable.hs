@@ -1,6 +1,6 @@
+module Text.ProtocolBuffers.Mergeable(Mergeable(..),mayMerge) where
 -- This is isomorphic to Monoid(mappend), but allows the derired instances without overlapping.
 -- It also gives a default implementation to mergeAppend to take the second entry.
-module Text.ProtocolBuffers.Mergeable(Mergeable(..),mayMerge) where
 
 import Text.ProtocolBuffers.Basic
 import Data.Monoid(mempty,mappend)

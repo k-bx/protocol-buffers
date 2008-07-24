@@ -54,9 +54,9 @@ import qualified Text.DescriptorProtos.FieldDescriptorProto.Label     as D.Field
 import           Text.DescriptorProtos.FieldDescriptorProto.Label     as D.FieldDescriptorProto.Label(Label(..))
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto(Type)
 import           Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto.Type(Type(..))
-{- -- unused or unusable
 import qualified Text.DescriptorProtos.FieldOptions                   as D(FieldOptions)
 import qualified Text.DescriptorProtos.FieldOptions                   as D.FieldOptions(FieldOptions(..))
+{- -- unused or unusable
 import qualified Text.DescriptorProtos.FieldOptions.CType             as D.FieldOptions(CType)
 import qualified Text.DescriptorProtos.FieldOptions.CType             as D.FieldOptions.CType(CType(..))
 import qualified Text.DescriptorProtos.FileOptions.OptimizeMode       as D.FileOptions(OptimizeMode)
@@ -89,16 +89,41 @@ import qualified Data.ByteString.Char8(spanEnd)
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.Char8 as BSC
 import qualified Data.ByteString.Lazy.UTF8 as U
-import qualified Data.Map as M
+import Data.Bits(Bits((.|.),shiftL))
 import Data.Maybe(fromMaybe,catMaybes)
-import Data.List(sort,group,foldl)
-import Data.Sequence(Seq,viewl,ViewL(..))
-import qualified Data.Sequence as S
-import Data.Foldable as F(foldr)
+import Data.List(sort,group,foldl',foldl1')
+import Data.Sequence(viewl,ViewL(..))
+import qualified Data.Sequence as Seq(length,fromList)
+import Data.Foldable as F(foldr,toList)
 import Language.Haskell.Exts.Syntax
 import Language.Haskell.Exts.Pretty
 
 -- -- -- -- Helper functions
+
+toWireTag :: FieldId -> FieldType -> WireTag
+toWireTag fieldId fieldType
+    = ((fromIntegral . getFieldID $ fieldId) `shiftL` 3) .|. (fromIntegral . getWireType . toWireType $ fieldType)
+
+toWireType :: FieldType -> WireType
+toWireType  1 =  1
+toWireType  2 =  5
+toWireType  3 =  0
+toWireType  4 =  0
+toWireType  5 =  0
+toWireType  6 =  1
+toWireType  7 =  5
+toWireType  8 =  0
+toWireType  9 =  2
+toWireType 10 =  error "TYPE_GROUP unsupported ..."
+toWireType 11 =  2
+toWireType 12 =  2
+toWireType 13 =  0
+toWireType 14 =  0
+toWireType 15 =  5
+toWireType 16 =  1
+toWireType 17 =  5
+toWireType 18 =  1
+toWireType _ = error "WireMessage.toWireType: Bad FieldType"
 
 dotPre :: String -> String -> String
 dotPre "" = id
@@ -137,6 +162,12 @@ qual bs = case splitMod bs of
             Right typeName -> UnQual (ident typeName)
             Left (modName,typeName) -> Qual (Module (U.toString modName)) (ident typeName)
 
+pvar :: String -> HsExp
+pvar t = HsVar (private t)
+
+lvar :: String -> HsExp
+lvar t = HsVar (UnQual (HsIdent t))
+
 private :: String -> HsQName
 private t = Qual (Module "P'") (HsIdent t)
 
@@ -144,20 +175,6 @@ private t = Qual (Module "P'") (HsIdent t)
 -- EnumDescriptorProto module creation
 --------------------------------------------
 
-testLabel = putStrLn . prettyPrint $ enumModule "Text" e
-
-e :: D.EnumDescriptorProto.EnumDescriptorProto
-e = defaultValue
-    { D.EnumDescriptorProto.name = Just (BSC.pack "DescriptorProtos.FieldDescriptorProto.Label")
-    , D.EnumDescriptorProto.value = S.fromList
-      [ defaultValue { D.EnumValueDescriptorProto.name = Just (BSC.pack "LABEL_OPTIONAL")
-                     , D.EnumValueDescriptorProto.number = Just 1 }
-      , defaultValue { D.EnumValueDescriptorProto.name = Just (BSC.pack "LABEL_REQUIRED")
-                     , D.EnumValueDescriptorProto.number = Just 2 }
-      , defaultValue { D.EnumValueDescriptorProto.name = Just (BSC.pack "LABEL_REPEATED")
-                     , D.EnumValueDescriptorProto.number = Just 3 }
-      ]
-    }
 
 fqName :: ProtoName -> String
 fqName (ProtoName a b c) = dotPre a (dotPre b c)
@@ -196,6 +213,7 @@ enumDecls p e = enumX e :  [ instanceMergeableEnum e
                            , instanceBounded e
                            , instanceDefaultEnum e
                            , instanceEnum e
+                           , instanceWireEnum e
                            , instanceReflectEnum p e ]
 
 instanceBounded :: D.EnumDescriptorProto -> HsDecl
@@ -224,15 +242,24 @@ instanceEnum e@(D.EnumDescriptorProto.EnumDescriptorProto
         equate f (_,n1) (_,n2) = HsMatch src (HsIdent f) [HsPApp (UnQual n1) []]
                                    (HsUnGuardedRhs (HsCon (UnQual n2))) noWhere
 
-hsZero :: HsExp
-hsZero = HsLit (HsInt 0)
-
-hsEmpty :: HsExp
-hsEmpty = HsVar (private "emptyBS")
+-- fromEnum TYPE_ENUM == 14 :: Int
+instanceWireEnum :: D.EnumDescriptorProto -> HsDecl
+instanceWireEnum (D.EnumDescriptorProto.EnumDescriptorProto
+                  { D.EnumDescriptorProto.name = Just name })
+    = HsInstDecl src [] (private "Wire") [HsTyCon (unqual name)]
+      [ withName "wireSize", withName "wirePut", withGet ]
+  where withName foo = HsInsDecl (HsFunBind [HsMatch src (HsIdent foo) [HsPLit (HsInt 14),HsPVar (HsIdent "enum")]
+                                          (HsUnGuardedRhs rhs) noWhere])
+          where rhs = HsApp (HsApp (pvar foo) (HsLit (HsInt 14)))
+                            (HsParen $ HsApp (pvar "fromEnum") (lvar "enum"))
+        withGet = HsInsDecl (HsFunBind [HsMatch src (HsIdent "wireGet") [HsPLit (HsInt 14)]
+                                          (HsUnGuardedRhs rhs) noWhere])
+          where rhs = HsApp (HsApp (pvar "fmap") (pvar "toEnum"))
+                            (HsParen $ HsApp (pvar "wireGet") (HsLit (HsInt 14)))
 
 instanceMergeableEnum :: D.EnumDescriptorProto -> HsDecl
 instanceMergeableEnum (D.EnumDescriptorProto.EnumDescriptorProto
-              { D.EnumDescriptorProto.name = Just name }) =
+                       { D.EnumDescriptorProto.name = Just name }) =
     HsInstDecl src [] (private "Mergeable") [HsTyCon (unqual name)] []
 
 {- from google's descriptor.h, about line 346:
@@ -261,8 +288,8 @@ instanceDefaultEnum (D.EnumDescriptorProto.EnumDescriptorProto
 
 instanceReflectEnum :: ProtoName -> D.EnumDescriptorProto -> HsDecl
 instanceReflectEnum protoName@(ProtoName a b c)
-                    (D.EnumDescriptorProto.EnumDescriptorProto
-                     { D.EnumDescriptorProto.name = Just rawName })
+                    e@(D.EnumDescriptorProto.EnumDescriptorProto
+                       { D.EnumDescriptorProto.name = Just rawName })
     = HsInstDecl src [] (private "ReflectEnum") [HsTyCon (unqual rawName)]
       [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "reflectEnum") [] 
                                           (HsUnGuardedRhs ascList) noWhere])
@@ -273,11 +300,11 @@ instanceReflectEnum protoName@(ProtoName a b c)
         ascList,ei,protoNameExp :: HsExp
         ascList = HsList (map one values)
           where one (v,n@(HsIdent ns)) = HsTuple [HsLit (HsInt v),HsLit (HsString ns),HsCon (UnQual n)]
-        ei = Prelude.foldl HsApp (HsCon (private "EnumInfo")) [protoNameExp,HsList (map two values)]
+        ei = foldl' HsApp (HsCon (private "EnumInfo")) [protoNameExp,HsList (map two values)]
           where two (v,n@(HsIdent ns)) = HsTuple [HsLit (HsInt v),HsLit (HsString ns)]
-        protoNameExp = HsParen $ Prelude.foldl HsApp (HsCon (private "ProtoName")) [HsLit (HsString a)
-                                                                                   ,HsLit (HsString b)
-                                                                                   ,HsLit (HsString c)]
+        protoNameExp = HsParen $ foldl' HsApp (HsCon (private "ProtoName")) [HsLit (HsString a)
+                                                                            ,HsLit (HsString b)
+                                                                            ,HsLit (HsString c)]
 
 --------------------------------------------
 -- DescriptorProto module creation is unfinished
@@ -302,7 +329,9 @@ descriptorModule prefix
         formatImport (Right t)    = HsImportDecl src (Module (dotPre prefix t)) False
                                       Nothing (Just (False,[HsIAbs (HsIdent t)]))
 
-standardImports = [ HsImportDecl src (Module "Prelude") True (Just (Module "P'")) Nothing
+standardImports = [ HsImportDecl src (Module "Prelude") False Nothing
+                      (Just (False,[HsIVar (HsSymbol "+"),HsIVar (HsSymbol "++")]))
+                  , HsImportDecl src (Module "Prelude") True (Just (Module "P'")) Nothing
                   , HsImportDecl src (Module "Text.ProtocolBuffers.Header") True (Just (Module "P'")) Nothing ]
 
 -- Create a list of (Module,Name) to import
@@ -367,7 +396,7 @@ descriptorX (D.DescriptorProto.DescriptorProto
 
 -- | HsInstDecl     SrcLoc HsContext HsQName [HsType] [HsInstDecl]
 instancesDescriptor :: ProtoName -> D.DescriptorProto -> ([HsDecl],DescriptorInfo)
-instancesDescriptor protoName d = ([ instanceMergeable d, def, instanceReflectDescriptor di ],di)
+instancesDescriptor protoName d = ([ instanceMergeable d, def, instanceWireDescriptor di, instanceReflectDescriptor di ],di)
   where (def,di) = instanceDefault protoName d
 
 instanceReflectDescriptor :: DescriptorInfo -> HsDecl
@@ -377,7 +406,7 @@ instanceReflectDescriptor di
                                             (HsUnGuardedRhs rdi) noWhere]) ]
   where -- massive shortcut through show and read
         rdi :: HsExp
-        rdi = HsApp (HsVar (private "read")) (HsLit (HsString (show di)))
+        rdi = HsApp (pvar "read") (HsLit (HsString (show di)))
 
 instanceDefault :: ProtoName -> D.DescriptorProto -> (HsDecl,DescriptorInfo)
 instanceDefault protoName (D.DescriptorProto.DescriptorProto
@@ -385,14 +414,14 @@ instanceDefault protoName (D.DescriptorProto.DescriptorProto
                            , D.DescriptorProto.field = field })
     = ( HsInstDecl src [] (private "Default") [HsTyCon (unqual name)]
           [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "defaultValue") [] 
-                                          (HsUnGuardedRhs (Prelude.foldl HsApp (HsCon (unqual name)) deflist)) noWhere])]
+                                          (HsUnGuardedRhs (foldl' HsApp (HsCon (unqual name)) deflist))
+                                  noWhere])]
       , descriptorInfo )
-  where len = S.length field
+  where len = Seq.length field
         old =  (replicate len (HsCon (private "defaultValue")))
         fieldInfos :: [FieldInfo]
         (deflist,fieldInfos) = unzip (F.foldr ((:) . defX) [] field)
-        descriptorInfo = DescriptorInfo protoName
-                           (M.fromAscList . sort . map (\f -> (fieldNumber f,f)) $ fieldInfos)
+        descriptorInfo = DescriptorInfo protoName (Seq.fromList fieldInfos)
 
 defaultValueExp :: D.FieldDescriptorProto -> (HsExp,FieldInfo)
 defaultValueExp  d@(D.FieldDescriptorProto.FieldDescriptorProto
@@ -407,13 +436,18 @@ defaultValueExp  d@(D.FieldDescriptorProto.FieldDescriptorProto
   where toSyntax :: HsDefault -> HsExp
         toSyntax x = case x of
                        HsDef'Bool b -> HsCon (private (show b))
-                       HsDef'ByteString bs -> HsApp (HsVar (private "pack"))
+                       HsDef'ByteString bs -> HsApp (pvar "pack")
                                                     (HsLit (HsString (BSC.unpack bs)))
                        HsDef'Rational r -> HsLit (HsFrac r)
                        HsDef'Integer i -> HsLit (HsInt i)
         mayDef = parseDefaultValue d
-        fieldInfo = FieldInfo (U.toString rawName) number (label == LABEL_REQUIRED) (label == LABEL_REPEATED) (fromEnum type')
-                              (fmap U.toString mayTypeName) mayRawDef mayDef 
+        fieldInfo = let fieldId = (FieldId (fromIntegral number))
+                        fieldType = (FieldType (fromEnum type'))
+                        fieldTag = toWireTag fieldId fieldType
+                    in FieldInfo (U.toString rawName) fieldId fieldTag
+                                 (label == LABEL_REQUIRED) (label == LABEL_REPEATED)
+                                 fieldType
+                                 (fmap U.toString mayTypeName) mayRawDef mayDef
 
 -- "Nothing" means no value specified
 -- A failure to parse a provided value will result in an error at the moment
@@ -454,14 +488,16 @@ instanceMergeable (D.DescriptorProto.DescriptorProto
               , D.DescriptorProto.field = field })
     = HsInstDecl src [] (private "Mergeable") [HsTyCon (unqual name)]
         [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeEmpty") [] 
-                                (HsUnGuardedRhs (Prelude.foldl1 HsApp (HsCon (unqual name) : replicate len (HsCon (private "mergeEmpty")))))
+                                (HsUnGuardedRhs (foldl' HsApp (HsCon (unqual name)) 
+                                                            (replicate len (HsCon (private "mergeEmpty")))))
                                 noWhere])
         , HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeAppend") [ HsPApp (unqual name) patternVars1
                                                                     , HsPApp (unqual name) patternVars2]
-                                (HsUnGuardedRhs (Prelude.foldl1 HsApp (HsCon (unqual name) : 
-                                                                       (zipWith append vars1 vars2)
-                                              ))) noWhere])]
-  where len = S.length field
+                                (HsUnGuardedRhs (foldl' HsApp (HsCon (unqual name)) 
+                                                            (zipWith append vars1 vars2)))
+                                 noWhere])
+        ]
+  where len = Seq.length field
         con = HsCon (qual name)
         patternVars1 :: [HsPat]
         patternVars1 = take len inf
@@ -471,12 +507,48 @@ instanceMergeable (D.DescriptorProto.DescriptorProto
             where inf = map (\n -> HsPVar (HsIdent ("y'" ++ show n))) [1..]
         vars1 :: [HsExp]
         vars1 = take len inf
-            where inf = map (\n -> HsVar (UnQual (HsIdent ("x'" ++ show n)))) [1..]
+            where inf = map (\n -> lvar ("x'" ++ show n)) [1..]
         vars2 :: [HsExp]
         vars2 = take len inf
-            where inf = map (\n -> HsVar (UnQual (HsIdent ("y'" ++ show n)))) [1..]
-        append x y = HsParen $ HsApp (HsApp (HsVar (private "mergeAppend")) x) y
+            where inf = map (\n -> lvar ("y'" ++ show n)) [1..]
+        append x y = HsParen $ HsApp (HsApp (pvar "mergeAppend") x) y
 
+instanceWireDescriptor :: DescriptorInfo -> HsDecl
+instanceWireDescriptor (DescriptorInfo { descName = protoName
+                                       , fields = fieldInfos })
+  = let myP11 = HsPLit (HsInt 11)
+        my11 = HsLit (HsInt 11)
+        me = UnQual (HsIdent (baseName protoName))
+        mine = HsPApp me . take (Seq.length fieldInfos) . map (\n -> HsPVar (HsIdent ("x'" ++ show n))) $ [1..]
+        vars = take (Seq.length fieldInfos) . map (\n -> lvar ("x'" ++ show n)) $ [1..]
+        add a b = HsInfixApp a (HsQVarOp (UnQual (HsSymbol "+"))) b
+        sizes =  zipWith toSize vars . F.toList $ fieldInfos
+        toSize var fi = let f = if isRequired fi then "wireSizeReq"
+                                  else if canRepeat fi then "wireSizeRep"
+                                      else "wireSizeOpt"
+                        in foldl' HsApp (pvar f) [ HsLit (HsInt (toInteger (getFieldType (typeCode fi))))
+                                                 , var]
+        putStmts = zipWith toPut vars . F.toList $ fieldInfos
+        toPut var fi = let f = if isRequired fi then "wirePutReq"
+                                 else if canRepeat fi then "wirePutRep"
+                                     else "wirePutOpt"
+                       in HsQualifier $
+                          foldl' HsApp (pvar f) [ HsLit (HsInt (toInteger (getWireTag (wireTag fi))))
+                                                , HsLit (HsInt (toInteger (getFieldType (typeCode fi))))
+                                                , var]
+    in HsInstDecl src [] (private "Wire") [HsTyCon me]
+        [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "wireSize") [myP11,mine]
+                                 (HsUnGuardedRhs (HsApp (pvar "lenSize")
+                                                        (HsParen (foldl1' add sizes)))) noWhere])
+        , HsInsDecl (HsFunBind [HsMatch src (HsIdent "wirePut") [myP11,HsPAsPat (HsIdent "self'") (HsPParen mine)]
+                                (HsUnGuardedRhs (HsDo ((:) (HsQualifier $
+                                                            HsApp (pvar "putSize")
+                                                                  (HsParen $
+                                                                   foldl' HsApp (pvar "wireSize") [ my11
+                                                                                                  , lvar "self'"]))
+                                                           putStmts)))
+                                    noWhere])
+        ]
 
 ------------------------------------------------------------------
 
@@ -509,17 +581,20 @@ test = putStrLn . prettyPrint . descriptorModule "Text" $ d
 
 testDesc =  putStrLn . prettyPrint . descriptorModule "Text" $ genFieldOptions
 
+testLabel = putStrLn . prettyPrint $ enumModule "Text" labelTest
+testType = putStrLn . prettyPrint $ enumModule "Text" t
+
 -- try and generate a small replacement for my manual file
 genFieldOptions :: D.DescriptorProto.DescriptorProto
 genFieldOptions =
   defaultValue
   { D.DescriptorProto.name = Just (BSC.pack "DescriptorProtos.FieldOptions") 
-  , D.DescriptorProto.field = S.fromList
+  , D.DescriptorProto.field = Seq.fromList
     [ defaultValue
       { D.FieldDescriptorProto.name = Just (BSC.pack "ctype")
       , D.FieldDescriptorProto.number = Just 1
       , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
-      , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
+      , D.FieldDescriptorProto.type' = Just TYPE_ENUM
       , D.FieldDescriptorProto.type_name = Just (BSC.pack "DescriptorProtos.FieldOptions.CType")
       , D.FieldDescriptorProto.default_value = Nothing
       }
@@ -537,7 +612,7 @@ genFieldOptions =
 d :: D.DescriptorProto.DescriptorProto
 d = defaultValue
     { D.DescriptorProto.name = Just (BSC.pack "SomeMod.ServiceOptions") 
-    , D.DescriptorProto.field = S.fromList
+    , D.DescriptorProto.field = Seq.fromList
        [ defaultValue
          { D.FieldDescriptorProto.name = Just (BSC.pack "fieldString")
          , D.FieldDescriptorProto.number = Just 1
@@ -597,6 +672,30 @@ d = defaultValue
        ]
     }
 
+labelTest :: D.EnumDescriptorProto.EnumDescriptorProto
+labelTest = defaultValue
+    { D.EnumDescriptorProto.name = Just (BSC.pack "DescriptorProtos.FieldDescriptorProto.Label")
+    , D.EnumDescriptorProto.value = Seq.fromList
+      [ defaultValue { D.EnumValueDescriptorProto.name = Just (BSC.pack "LABEL_OPTIONAL")
+                     , D.EnumValueDescriptorProto.number = Just 1 }
+      , defaultValue { D.EnumValueDescriptorProto.name = Just (BSC.pack "LABEL_REQUIRED")
+                     , D.EnumValueDescriptorProto.number = Just 2 }
+      , defaultValue { D.EnumValueDescriptorProto.name = Just (BSC.pack "LABEL_REPEATED")
+                     , D.EnumValueDescriptorProto.number = Just 3 }
+      ]
+    }
+
+t :: D.EnumDescriptorProto.EnumDescriptorProto
+t = defaultValue { D.EnumDescriptorProto.name = Just (BSC.pack "DescriptorProtos.FieldDescriptorProto.Type")
+                 , D.EnumDescriptorProto.value = Seq.fromList . zipWith make [1..] $ names }
+  where make :: Int32 -> String -> D.EnumValueDescriptorProto
+        make i s = defaultValue { D.EnumValueDescriptorProto.name = Just (BSC.pack s)
+                                , D.EnumValueDescriptorProto.number = Just i }
+        names = ["TYPE_DOUBLE","TYPE_FLOAT","TYPE_INT64","TYPE_UINT64","TYPE_INT32"
+                ,"TYPE_FIXED64","TYPE_FIXED32","TYPE_BOOL","TYPE_STRING","TYPE_GROUP"
+                ,"TYPE_MESSAGE","TYPE_BYTES","TYPE_UINT32","TYPE_ENUM","TYPE_SFIXED32"
+                ,"TYPE_SFIXED64","TYPE_SINT32","TYPE_SINT64"]
+
 
  {-
 -- http://haskell.org/onlinereport/lexemes.html#sect2.4
@@ -608,3 +707,4 @@ mangle s = fromMaybe s (M.lookup s m)
                    ,"if","import","in","infix","infixl","infixr","instance"
                    ,"let","module","newtype","of","then","type","where"]
 -}
+

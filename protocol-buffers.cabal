@@ -72,4 +72,6 @@ Library
                    DeriveDataTypeable,
                    FlexibleInstances,
                    PatternGuards,
-                   MagicHash
+                   MagicHash,
+                   GeneralizedNewtypeDeriving,
+                   ScopedTypeVariables
