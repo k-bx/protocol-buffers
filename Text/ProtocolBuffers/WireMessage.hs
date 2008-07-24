@@ -1,27 +1,20 @@
 -- http://code.google.com/apis/protocolbuffers/docs/encoding.html
+{- | This module cooperates with the generated code to implement the
+  Wire instances.  
+
+ -}
 module Text.ProtocolBuffers.WireMessage
-    ( Wire(..),LazyResult(..),runGetOnLazy,runPut
+    ( LazyResult(..),runGetOnLazy,runPut,size'Varint
+    , Wire(..)
     , size,lenSize,putSize
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep
     , getMessage,getBareMessage) where
 
-{- The point of this module:
-
-There needs to be a way to represent the bytes in a form that is
-in-between the type specific messages and the single string of bytes.
-
-Encoding and Deconding WireMessage does not respect ordering between
-different FieldId but must respect ordering of repeated FieldId
-values.
-
-Converting a WireData to a message type will require code generation
-of instance Wire.
-
--}
 import Text.ProtocolBuffers.Basic
-import Text.ProtocolBuffers.Reflections
-import Text.ProtocolBuffers.Mergeable
+import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
+                                       ,DescriptorInfo(..),GetMessageInfo(..))
+import Text.ProtocolBuffers.Mergeable(Mergeable(mergeEmpty))
 
 import Data.Bits (Bits(..))
 import Data.Generics (Data(..),Typeable(..))
@@ -72,6 +65,7 @@ data WireSize = WireSize { childSize, internalSize :: !Int64 }
 -- internally and as a child of a message
 size :: Int64 -> WireSize
 size n = WireSize {childSize = n, internalSize = n}
+
 -- | 'lenSize' takes the length of a bare message and adds its encoded
 -- size as a header to get the 'childSize'.
 lenSize :: Int64 -> WireSize
@@ -91,26 +85,28 @@ class Wire b where
 
 {-# INLINE wirePutReq #-}
 wirePutReq :: Wire b => WireTag -> FieldType -> b -> Put
-wirePutReq wireTag fieldType b = putWord32be (getWireTag wireTag) >> wirePut fieldType b
+wirePutReq wireTag fieldType b = putVarUInt (getWireTag wireTag) >> wirePut fieldType b
 
 {-# INLINE wirePutOpt #-}
 wirePutOpt :: Wire b => WireTag -> FieldType -> Maybe b -> Put
 wirePutOpt wireTag fieldType Nothing = return ()
-wirePutOpt wireTag fieldType (Just b) = putWord32be (getWireTag wireTag) >> wirePut fieldType b 
+wirePutOpt wireTag fieldType (Just b) = putVarUInt (getWireTag wireTag) >> wirePut fieldType b 
 
 {-# INLINE wirePutRep #-}
 wirePutRep :: Wire b => WireTag -> FieldType -> Seq b -> Put
-wirePutRep wireTag fieldType bs = F.forM_ bs (\b -> putWord32be (getWireTag wireTag) >> wirePut fieldType b)
+wirePutRep wireTag fieldType bs = F.forM_ bs (\b -> putVarUInt (getWireTag wireTag) >> wirePut fieldType b)
 
-wireSizeReq :: Wire b => FieldType -> b -> Int64
-wireSizeReq i v = 4 + childSize (wireSize i v)
+{-# INLINE wireSizeReq #-}
+wireSizeReq :: Wire b => Int64 -> FieldType -> b -> Int64
+wireSizeReq tagSize i v = tagSize + childSize (wireSize i v)
 
-wireSizeOpt :: Wire b => FieldType -> Maybe b -> Int64
-wireSizeOpt _ Nothing = 0
-wireSizeOpt i (Just v) = 4 + childSize (wireSize i v)
+{-# INLINE wireSizeOpt #-}
+wireSizeOpt :: Wire b => Int64 -> FieldType -> Maybe b -> Int64
+wireSizeOpt tagSize i = maybe 0 (wireSizeReq tagSize i)
 
-wireSizeRep :: Wire b => FieldType -> Seq b -> Int64
-wireSizeRep i s = 4*(fromIntegral (Seq.length s)) + F.foldl' (\n v -> n+childSize(wireSize i v)) 0 s
+{-# INLINE wireSizeRep #-}
+wireSizeRep :: Wire b => Int64 -> FieldType -> Seq b -> Int64
+wireSizeRep tagSize i s = tagSize*(fromIntegral (Seq.length s)) + F.foldl' (\n v -> n+childSize(wireSize i v)) 0 s
 
 putSize :: WireSize -> Put
 putSize (WireSize {internalSize = x}) = putVarUInt x
@@ -128,7 +124,7 @@ getMessage updater = do
         done <- fmap (stop<=) bytesRead
         if done then notEnoughData
           else do
-            wireTag <- fmap WireTag getWord32be -- get tag off wire
+            wireTag <- fmap WireTag getVarInt -- get tag off wire
             let (fieldId,wireType) = splitWireTag wireTag
             if Set.notMember wireTag allowed then unknown fieldId wireTag
               else do message' <- updater fieldId message
@@ -138,7 +134,7 @@ getMessage updater = do
         done <- fmap (stop<=) bytesRead
         if done then return message
           else do
-            wireTag <- fmap WireTag getWord32be -- get tag off wire
+            wireTag <- fmap WireTag getVarInt -- get tag off wire
             let (fieldId,wireType) = splitWireTag wireTag
             if Set.notMember wireTag allowed then unknown fieldId wireType
               else updater fieldId message >>= go'
@@ -462,6 +458,7 @@ gle s = let pairs = Data.List.unfoldr (\a -> if Prelude.null a then Nothing
 -}
 
 
+{-
 -- Some to-be-reviewed-for-sanity prototypes for the bytestream reader
 
 data WireData = VarInt ByteString -- the 128 bit variable encoding (least significant first)
@@ -487,28 +484,6 @@ wireId  StartGroup    = WireType 3
 wireId  StopGroup     = WireType 4
 wireId (Fix4 {})      = WireType 5
 
-checkWireType :: FieldType -> WireType -> Bool
-checkWireType  1 1 = True -- DOUBLE
-checkWireType  2 5 = True -- FLOAT
-checkWireType  3 0 = True -- INT64
-checkWireType  4 0 = True -- UNT64
-checkWireType  5 0 = True -- INT32
-checkWireType  6 1 = True -- FIXED64
-checkWireType  7 5 = True -- FIXED32
-checkWireType  8 0 = True -- BOOL
-checkWireType  9 2 = True -- STRING
-checkWireType 10 3 = True -- StartGroup
-checkWireType 10 4 = True -- EndGroup
-checkWireType 11 2 = True -- MESSAGE
-checkWireType 12 2 = True -- BYTES
-checkWireType 13 0 = True -- UINT32
-checkWireType 14 0 = True -- ENUM
-checkWireType 15 5 = True -- SFIXED32
-checkWireType 16 1 = True -- SFIXED64
-checkWireType 17 5 = True -- SINT32
-checkWireType 18 1 = True -- SINT64
-checkWireType  x y = False -- fail ("WireMessage.checkWireType: Mismatch of type Id "++show x ++ " and wire type " ++ show y ++ ".")
-
 composeFieldWire :: FieldId -> WireType -> Word32
 composeFieldWire (FieldId f) (WireType w) = ((fromIntegral f) `shiftL` 3) .|. w
 
@@ -521,3 +496,4 @@ encodeWireMessage = undefined
 decodeWireMessage :: ByteString -> WireMessage
 decodeWireMessage = undefined
 
+-}

@@ -82,7 +82,8 @@ import qualified Text.DescriptorProtos.ServiceOptions                 as D.Servi
 --import Text.ProtocolBuffers.Header
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Default
-import Text.ProtocolBuffers.Reflections as R
+import Text.ProtocolBuffers.Reflections
+import Text.ProtocolBuffers.WireMessage(size'Varint)
 
 import qualified Data.ByteString(concat)
 import qualified Data.ByteString.Char8(spanEnd)
@@ -100,9 +101,14 @@ import Language.Haskell.Exts.Pretty
 
 -- -- -- -- Helper functions
 
+($$) :: HsExp -> HsExp -> HsExp
+($$) = HsApp
+
+infixl 1 $$
+
 toWireTag :: FieldId -> FieldType -> WireTag
 toWireTag fieldId fieldType
-    = ((fromIntegral . getFieldID $ fieldId) `shiftL` 3) .|. (fromIntegral . getWireType . toWireType $ fieldType)
+    = ((fromIntegral . getFieldId $ fieldId) `shiftL` 3) .|. (fromIntegral . getWireType . toWireType $ fieldType)
 
 toWireType :: FieldType -> WireType
 toWireType  1 =  1
@@ -250,12 +256,12 @@ instanceWireEnum (D.EnumDescriptorProto.EnumDescriptorProto
       [ withName "wireSize", withName "wirePut", withGet ]
   where withName foo = HsInsDecl (HsFunBind [HsMatch src (HsIdent foo) [HsPLit (HsInt 14),HsPVar (HsIdent "enum")]
                                           (HsUnGuardedRhs rhs) noWhere])
-          where rhs = HsApp (HsApp (pvar foo) (HsLit (HsInt 14)))
-                            (HsParen $ HsApp (pvar "fromEnum") (lvar "enum"))
+          where rhs = (pvar foo $$ HsLit (HsInt 14)) $$
+                      (HsParen $ pvar "fromEnum" $$ lvar "enum")
         withGet = HsInsDecl (HsFunBind [HsMatch src (HsIdent "wireGet") [HsPLit (HsInt 14)]
                                           (HsUnGuardedRhs rhs) noWhere])
-          where rhs = HsApp (HsApp (pvar "fmap") (pvar "toEnum"))
-                            (HsParen $ HsApp (pvar "wireGet") (HsLit (HsInt 14)))
+          where rhs = (pvar "fmap" $$ pvar "toEnum") $$
+                      (HsParen $ pvar "wireGet" $$ HsLit (HsInt 14))
 
 instanceMergeableEnum :: D.EnumDescriptorProto -> HsDecl
 instanceMergeableEnum (D.EnumDescriptorProto.EnumDescriptorProto
@@ -406,7 +412,7 @@ instanceReflectDescriptor di
                                             (HsUnGuardedRhs rdi) noWhere]) ]
   where -- massive shortcut through show and read
         rdi :: HsExp
-        rdi = HsApp (pvar "read") (HsLit (HsString (show di)))
+        rdi = pvar "read" $$ HsLit (HsString (show di))
 
 instanceDefault :: ProtoName -> D.DescriptorProto -> (HsDecl,DescriptorInfo)
 instanceDefault protoName (D.DescriptorProto.DescriptorProto
@@ -436,15 +442,15 @@ defaultValueExp  d@(D.FieldDescriptorProto.FieldDescriptorProto
   where toSyntax :: HsDefault -> HsExp
         toSyntax x = case x of
                        HsDef'Bool b -> HsCon (private (show b))
-                       HsDef'ByteString bs -> HsApp (pvar "pack")
-                                                    (HsLit (HsString (BSC.unpack bs)))
+                       HsDef'ByteString bs -> pvar "pack" $$ HsLit (HsString (BSC.unpack bs))
                        HsDef'Rational r -> HsLit (HsFrac r)
                        HsDef'Integer i -> HsLit (HsInt i)
         mayDef = parseDefaultValue d
         fieldInfo = let fieldId = (FieldId (fromIntegral number))
                         fieldType = (FieldType (fromEnum type'))
-                        fieldTag = toWireTag fieldId fieldType
-                    in FieldInfo (U.toString rawName) fieldId fieldTag
+                        wireTag = toWireTag fieldId fieldType
+                        wireTagLength = size'Varint (getWireTag wireTag)
+                    in FieldInfo (U.toString rawName) fieldId wireTag wireTagLength
                                  (label == LABEL_REQUIRED) (label == LABEL_REPEATED)
                                  fieldType
                                  (fmap U.toString mayTypeName) mayRawDef mayDef
@@ -477,7 +483,7 @@ defX d@(D.FieldDescriptorProto.FieldDescriptorProto
          , D.FieldDescriptorProto.label = Just labelEnum
          , D.FieldDescriptorProto.type' = type'
          , D.FieldDescriptorProto.type_name = type_name })
-    =  ( HsParen $ case labelEnum of LABEL_OPTIONAL -> HsApp (HsCon (private "Just")) dv
+    =  ( HsParen $ case labelEnum of LABEL_OPTIONAL -> HsCon (private "Just") $$ dv
                                      _ -> dv
        , fi )
   where (dv,fi) = defaultValueExp d
@@ -489,12 +495,12 @@ instanceMergeable (D.DescriptorProto.DescriptorProto
     = HsInstDecl src [] (private "Mergeable") [HsTyCon (unqual name)]
         [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeEmpty") [] 
                                 (HsUnGuardedRhs (foldl' HsApp (HsCon (unqual name)) 
-                                                            (replicate len (HsCon (private "mergeEmpty")))))
+                                                              (replicate len (HsCon (private "mergeEmpty")))))
                                 noWhere])
         , HsInsDecl (HsFunBind [HsMatch src (HsIdent "mergeAppend") [ HsPApp (unqual name) patternVars1
                                                                     , HsPApp (unqual name) patternVars2]
                                 (HsUnGuardedRhs (foldl' HsApp (HsCon (unqual name)) 
-                                                            (zipWith append vars1 vars2)))
+                                                              (zipWith append vars1 vars2)))
                                  noWhere])
         ]
   where len = Seq.length field
@@ -511,7 +517,7 @@ instanceMergeable (D.DescriptorProto.DescriptorProto
         vars2 :: [HsExp]
         vars2 = take len inf
             where inf = map (\n -> lvar ("y'" ++ show n)) [1..]
-        append x y = HsParen $ HsApp (HsApp (pvar "mergeAppend") x) y
+        append x y = HsParen $ pvar "mergeAppend" $$ x $$ y
 
 instanceWireDescriptor :: DescriptorInfo -> HsDecl
 instanceWireDescriptor (DescriptorInfo { descName = protoName
@@ -526,7 +532,8 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
         toSize var fi = let f = if isRequired fi then "wireSizeReq"
                                   else if canRepeat fi then "wireSizeRep"
                                       else "wireSizeOpt"
-                        in foldl' HsApp (pvar f) [ HsLit (HsInt (toInteger (getFieldType (typeCode fi))))
+                        in foldl' HsApp (pvar f) [ HsLit (HsInt (toInteger (wireTagLength fi)))
+                                                 , HsLit (HsInt (toInteger (getFieldType (typeCode fi))))
                                                  , var]
         putStmts = zipWith toPut vars . F.toList $ fieldInfos
         toPut var fi = let f = if isRequired fi then "wirePutReq"
@@ -536,18 +543,33 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
                           foldl' HsApp (pvar f) [ HsLit (HsInt (toInteger (getWireTag (wireTag fi))))
                                                 , HsLit (HsInt (toInteger (getFieldType (typeCode fi))))
                                                 , var]
+        whereUpdateSelf = HsBDecls [HsFunBind [HsMatch src (HsIdent "update'Self")
+                            [HsPVar (HsIdent "field'Number") ,HsPVar (HsIdent "old'Self")]
+                            (HsUnGuardedRhs (HsCase (lvar "field'Number") updateAlts)) noWhere]]
+        updateAlts = map toUpdate (F.toList fieldInfos) ++ [HsAlt src HsPWildCard (HsUnGuardedAlt (pvar "undefined")) noWhere]
+        toUpdate fi = HsAlt src (HsPLit . HsInt . toInteger . getFieldId . fieldNumber $ fi) (HsUnGuardedAlt $ 
+                        pvar "fmap" $$ (HsParen $ HsLambda src [HsPVar (HsIdent "new'Field")] $
+                                          HsRecUpdate (lvar "old'Self") [HsFieldUpdate (UnQual . HsIdent . fieldName $ fi)
+                                                                                       (labelUpdate fi)])
+                                    $$ (HsParen (pvar "wireGet" $$ (HsLit . HsInt . toInteger . getFieldType . typeCode $ fi)))) noWhere
+        labelUpdate fi | isRequired fi = lvar "new'Field"
+                       | canRepeat fi = pvar "append" $$ HsParen ((lvar . fieldName $ fi) $$ lvar "old'Self")
+                                                      $$ lvar "new'Field"
+                       | otherwise = HsCon (private "Just") $$ lvar "new'Field"
+
     in HsInstDecl src [] (private "Wire") [HsTyCon me]
-        [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "wireSize") [myP11,mine]
-                                 (HsUnGuardedRhs (HsApp (pvar "lenSize")
-                                                        (HsParen (foldl1' add sizes)))) noWhere])
-        , HsInsDecl (HsFunBind [HsMatch src (HsIdent "wirePut") [myP11,HsPAsPat (HsIdent "self'") (HsPParen mine)]
-                                (HsUnGuardedRhs (HsDo ((:) (HsQualifier $
-                                                            HsApp (pvar "putSize")
-                                                                  (HsParen $
-                                                                   foldl' HsApp (pvar "wireSize") [ my11
-                                                                                                  , lvar "self'"]))
-                                                           putStmts)))
-                                    noWhere])
+        [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "wireSize") [myP11,mine] (HsUnGuardedRhs $
+                                  (pvar "lenSize" $$ HsParen (foldl1' add sizes))) noWhere])
+        , HsInsDecl (HsFunBind [HsMatch src (HsIdent "wirePut") [myP11,HsPAsPat (HsIdent "self'") (HsPParen mine)] (HsUnGuardedRhs $
+                                  (HsDo ((:) (HsQualifier $
+                                              pvar "putSize" $$
+                                                (HsParen $ foldl' HsApp (pvar "wireSize") [ my11
+                                                                                          , lvar "self'"]))
+                                             putStmts))) noWhere])
+        , HsInsDecl (HsFunBind [HsMatch src (HsIdent "wireGet") [myP11] (HsUnGuardedRhs $
+                                  (pvar "getMessage" $$ lvar "update'Self")
+                                  ) whereUpdateSelf])
+                                        
         ]
 
 ------------------------------------------------------------------
@@ -619,6 +641,13 @@ d = defaultValue
          , D.FieldDescriptorProto.label = Just LABEL_REQUIRED
          , D.FieldDescriptorProto.type' = Just TYPE_STRING
          , D.FieldDescriptorProto.default_value = Just (BSC.pack "Hello World")
+         }
+       , defaultValue
+         { D.FieldDescriptorProto.name = Just (BSC.pack "fieldDouble")
+         , D.FieldDescriptorProto.number = Just 4
+         , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
+         , D.FieldDescriptorProto.type' = Just TYPE_DOUBLE
+         , D.FieldDescriptorProto.default_value = Just (BSC.pack "+5.5e-10")
         }
        , defaultValue
          { D.FieldDescriptorProto.name = Just (BSC.pack "fieldBytes")
@@ -633,13 +662,6 @@ d = defaultValue
          , D.FieldDescriptorProto.label = Just LABEL_REQUIRED
          , D.FieldDescriptorProto.type' = Just TYPE_INT64
          , D.FieldDescriptorProto.default_value = Just (BSC.pack "-0x40")
-        }
-       , defaultValue
-         { D.FieldDescriptorProto.name = Just (BSC.pack "fieldDouble")
-         , D.FieldDescriptorProto.number = Just 4
-         , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
-         , D.FieldDescriptorProto.type' = Just TYPE_DOUBLE
-         , D.FieldDescriptorProto.default_value = Just (BSC.pack "+5.5e-10")
         }
        , defaultValue
          { D.FieldDescriptorProto.name = Just (BSC.pack "fieldBool")
@@ -658,14 +680,14 @@ d = defaultValue
        , defaultValue
          { D.FieldDescriptorProto.name = Just (BSC.pack "field3TestQualified")
          , D.FieldDescriptorProto.number = Just 7
-         , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
+         , D.FieldDescriptorProto.label = Just LABEL_REPEATED
          , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
          , D.FieldDescriptorProto.type_name = Just (BSC.pack "A.B.C.Label")
          }
        , defaultValue
          { D.FieldDescriptorProto.name = Just (BSC.pack "field4TestUnqualified")
          , D.FieldDescriptorProto.number = Just 8
-         , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
+         , D.FieldDescriptorProto.label = Just LABEL_REPEATED
          , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
          , D.FieldDescriptorProto.type_name = Just (BSC.pack "Maybe")
          }

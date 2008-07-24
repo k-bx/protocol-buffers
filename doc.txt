@@ -16,11 +16,11 @@ From there the Gen.hs can generate the module text, only an output routine is mi
 
 At that point the basic system will be bootstrapped.  
 
+DONE
+(*) Create the wire format and generate Wire instances
+
 Then TODO is still quite long
-(*) Create the wire format
-   (**) Class API
-   (**) Gen.hs instances for writing
-   (**) Gen.hs instances for reading
+(*) Test Wire instances
 (*) Add more support to .proto loading
    (**) extension support
    (**) groups

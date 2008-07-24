@@ -49,16 +49,10 @@ data GetMessageInfo = GetMessageInfo { requiredTags :: Set WireTag
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
-makeMessageInfo :: DescriptorInfo -> GetMessageInfo
-makeMessageInfo di = GetMessageInfo { requiredTags = Set.fromDistinctAscList . sort $
-                                        [ wireTag f | f <- F.toList (fields di), isRequired f]
-                                    , allowedTags = Set.fromDistinctAscList . sort $
-                                        [ wireTag f | f <- F.toList (fields di)]
-                                    }
-
 data FieldInfo = FieldInfo { fieldName :: String
                            , fieldNumber :: FieldId
                            , wireTag :: WireTag
+                           , wireTagLength :: Int64           -- ^ Bytes required in the Varint formatted wireTag
                            , isRequired :: Bool
                            , canRepeat :: Bool
                            , typeCode :: FieldType            -- ^ fromEnum of Text.DescriptorProtos.FieldDescriptorProto.Type
@@ -96,6 +90,13 @@ class ReflectEnum e where
   reflectEnumInfo :: e -> EnumInfo            -- Must not inspect argument
   parentOfEnum :: e -> Maybe DescriptorInfo   -- Must not inspect argument
   parentOfEnum _ = Nothing
+
+makeMessageInfo :: DescriptorInfo -> GetMessageInfo
+makeMessageInfo di = GetMessageInfo { requiredTags = Set.fromDistinctAscList . sort $
+                                        [ wireTag f | f <- F.toList (fields di), isRequired f]
+                                    , allowedTags = Set.fromDistinctAscList . sort $
+                                        [ wireTag f | f <- F.toList (fields di)]
+                                    }
 
 --- From here down is code used to parse the format of the default values in the .proto files
 

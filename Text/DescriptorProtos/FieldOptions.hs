@@ -22,7 +22,7 @@ instance P'.Default FieldOptions where
  
 instance P'.Wire FieldOptions where
         wireSize 11 (FieldOptions x'1 x'2)
-          = P'.lenSize (P'.wireSizeOpt 14 x'1 + P'.wireSizeOpt 9 x'2)
+          = P'.lenSize (P'.wireSizeOpt 1 14 x'1 + P'.wireSizeOpt 1 9 x'2)
         wirePut 11 self'@(FieldOptions x'1 x'2)
           = do P'.putSize (P'.wireSize 11 self')
                P'.wirePutOpt 8 14 x'1
@@ -31,14 +31,15 @@ instance P'.Wire FieldOptions where
          where
           update'Self field'Number old'Self =
             case field'Number of
-              1 -> P'.fmap (\new'Field -> old'Self { ctype = P'.Just new'Field }) (P'.wireGet 11)
+              1 -> P'.fmap (\new'Field -> old'Self { ctype = P'.Just new'Field }) (P'.wireGet 14)
               9 -> P'.fmap (\new'Field -> old'Self { experimental_map_key = P'.Just new'Field }) (P'.wireGet 9)
               _ -> P'.fail ("Impossible? Message asked to parse an unknown field number on wire: "++P'.show field'Number)
  
 instance P'.ReflectDescriptor FieldOptions where
         reflectDescriptorInfo _
           = P'.read
-              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"FieldOptions\"}, fields = fromList [FieldInfo {fieldName = \"ctype\", fieldNumber = FieldId {getFieldID = 1}, wireTag = WireTag {getWireTag = 8}, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just \"DescriptorProtos.FieldOptions.CType\", hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = \"experimental_map_key\", fieldNumber = FieldId {getFieldID = 9}, wireTag = WireTag {getWireTag = 74}, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}]}"
+              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"FieldOptions\"}, fields = fromList [FieldInfo {fieldName = \"ctype\", fieldNumber = FieldId {getFieldID = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just \"DescriptorProtos.FieldOptions.CType\", hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = \"experimental_map_key\", fieldNumber = FieldId {getFieldID = 9}, wireTag = WireTag {getWireTag = 74}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}]}"
+
 
 {-
 module Text.DescriptorProtos.FieldOptions (FieldOptions(..)) where
