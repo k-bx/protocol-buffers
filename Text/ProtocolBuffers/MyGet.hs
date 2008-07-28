@@ -1,5 +1,8 @@
 module Text.ProtocolBuffers.MyGet(CERWS(CERWS,unCERWS),runCERWS,getCC,getCC1) where
 
+import qualified Prelude as P(print)
+import Prelude hiding (print)
+
 import Data.Monoid(Monoid(mempty,mappend))
 import Control.Monad.Fix(fix)
 import Control.Monad(MonadPlus(mzero,mplus))
@@ -18,6 +21,10 @@ import qualified Data.ByteString.Lazy.Internal as L(ByteString(Empty,Chunk),chun
 
 import Text.Show.Functions
 
+print :: (MonadIO m, Show a) => a -> m ()
+print s = liftIO (P.print s)
+
+
 strictToLazy :: S.ByteString -> L.ByteString
 strictToLazy x
   | S.null x = L.Empty
@@ -26,17 +33,23 @@ strictToLazy x
 lazyToStrict :: L.ByteString -> S.ByteString
 lazyToStrict = S.concat . L.toChunks
 
-part1 = L.pack [1..9]
-part2 = L.pack [10]
-part3 = L.pack [11..19]
+part1 = L.pack [48..56]
+part2 = L.pack [57]
+part3 = L.pack [58..66]
 
-thing1 = getBytes 10 >> throwError "WTF"
-thing2 = getBytes 9
+diag :: String -> Get b ()
+diag msg = do print ("diag: "++msg)
+              get >>= print
+              getPC >>= print
 
-testG = runGet (catchError thing1 (\e -> liftIO (putStrLn $ "caught " ++ show e) >> getBytes 10 ))
 
+thing1 = diag "enter thing1" >> getBytes 10 >> diag "after getBytes 10 in thing1"  >> throwError "WTF" >> print "PAST throwError!!!!"
+thing2 = diag "enter thing2" >> getBytes 9 >> diag "after getBytes 9 in thing2"
+
+testG = runGet (catchError (thing1) (\e -> liftIO (putStrLn $ "caught " ++ show e) >> diag "Enter error handler" >> getBytes 10 >> diag "After getbytes 10 in error handler" ))
+
+feed :: forall t. L.ByteString -> IResult t -> IO (IResult t)
 feed bs (IPartial f) = f bs
-
 
 data IResult a = IFailed String
                | IFinished S a
@@ -49,7 +62,7 @@ data S = S { current :: L.ByteString
            }
   deriving Show
 
-type Get b a = CERWS (IResult b) String () () S IO a
+type Get b = CERWS (IResult b) String () () S IO
 
 -- | Pull @n@ bytes from the input, as a strict ByteString.
 getBytes :: Int -> Get r S.ByteString
@@ -61,13 +74,14 @@ getBytes n = do
                      a = lazyToStrict consume
                  put s
                  return a
-     else suspend $ getBytes n
+     else suspend >> getBytes n
 --   else return $ IPartial (undefined {- \s' -> unGet (getBytes n) (S (L.append s $ strictToLazy s') offset (s' : adds) ) cont-})
 
 runGet :: Get a a -> L.ByteString -> IO (IResult a)
-runGet g bs = let s = S bs 0 mempty
-              in unGet g s (\a _ _ s' -> return (IFinished s' a))
-  where unGet (CERWS f) = \s sc -> f sc ec PartialEmpty () () s
+runGet g bs = unGet g sIn scIn
+  where sIn = S bs 0 mempty
+        scIn = (\a _ _ sOut _ -> return (IFinished sOut a)) 
+        unGet (CERWS f) = \s sc -> f sc () () s (PartialEmpty ec)
             where ec e = return (IFailed e)
 {-
         pc (S bs n future) go = let f bs' = let s = S (mappend bs bs') n (future |> bs')
@@ -75,56 +89,60 @@ runGet g bs = let s = S bs 0 mempty
                                 in return (IPartial f)
 -}
 
+class MonadSuspend m where
+  suspend :: m ()
+
 appendBS (S bs n future) bs' = S (mappend bs bs') n (future |> bs')
+addFuture bs (PartialFrame catcher s pc) = PartialFrame catcher 1(appendBS s bs) (addFuture bs pc)
+addFuture bs x@(PartialEmpty _) = x
 
-suspend :: Get b a -> Get b a
-suspend todo = CERWS $ (\ sc _ec pcIn r w s0 ->
-  let go ecOut pcOut PartialEmpty =
-          let f bs' = let s0' = appendBS s0 bs'
-                      in unCERWS todo sc ecOut pcOut () () s0'
-          in return (IPartial f)
-{-
-      go ec (PartialFrame s1 make_ec with_ec) =
-          let f bs' = let s1' = appendBS s1 s1'
-                          ec' = make_ec s1'
-                          pc' = with_ec ec'
-                      in unCERWS sc ec' pc' r w s0'
-          in return undefined
--}
-  in go (return . IFailed) PartialEmpty pcIn)
+instance MonadSuspend (Get b) where
+    suspend = CERWS $ (\ sc r w sIn pcIn ->
+      let f bs = let sOut = appendBS sIn bs
+                     pcOut = addFuture bs pcIn
+                 in sc () r w sOut pcOut
+      in return (IPartial f))
+    
+getPC :: CERWS b e r w s m (PartialContinuation b e s m)
+getPC = CERWS $ \sc r w s pc -> sc pc r w s pc
 
-data PartialContinuation b = PartialEmpty 
-                           | PartialFrame S (S -> String -> IO b)
-                                            ((String -> IO b) -> PartialContinuation b)
+type PC b = PartialContinuation b String S IO
+
+data PartialContinuation b e s m = PartialEmpty (e -> m b)
+                                 | PartialFrame (s -> PartialContinuation b e s m -> e -> m b)
+                                                s
+                                                (PartialContinuation b e s m)
+  deriving Show
+
+type SuccessContinuation b e r w s m a = (a -> r -> w -> s -> PartialContinuation b e s m -> m b)
 
 newtype CERWS b e r w s m a = CERWS {
-      unCERWS :: (a -> r -> w -> s -> m b) -- success continuation
-              -> (e -> m b)                -- error continuation
-              -> PartialContinuation b     -- partial continuation (simple for now)
+      unCERWS :: SuccessContinuation b e r w s m a
               -> r                         -- reader
               -> w                         -- log so far
               -> s                         -- state
+              -> PartialContinuation b e s m -- error stack state
               -> m b                       -- operation
     }
 
-runCERWS :: (Monad m,Monoid w) =>
-            r -> s -> CERWS (Either e (a,w,s)) e r w s m a
+runCERWS :: (Monad m,Monoid w)
+         => r -> s -> CERWS (Either e (a,w,s)) e r w s m a
          -> m (Either e (a,w,s))
-runCERWS r s1 m = unCERWS m sc ec undefined r mempty s1
-  where sc a _ w s2 = return (Right (a,w,s2))
-        ec e = return (Left e)
+runCERWS r sIn m = unCERWS m sc r mempty sIn pc
+  where sc a _ wOut sOut _ = return (Right (a,wOut,sOut))
+        pc = PartialEmpty (\e -> return (Left e))
 
 instance (Monad m,Error e) => Functor (CERWS b e r w s m) where
 --fmap f m = m >>= return . f
   fmap f m = CERWS (\sc -> unCERWS m (sc . f))
 
 instance (Monad m,Error e) => Monad (CERWS b e r w s m) where
-  return a = CERWS (\sc _ _ -> sc a)
-  m >>= k  = CERWS (\sc ec pc -> unCERWS m (\a -> unCERWS (k a) sc ec pc) ec pc)
-  fail msg = CERWS (\_ ec _ _ _ _ -> ec (strMsg msg))
+  return a = CERWS (\sc -> sc a)
+  m >>= k  = CERWS (\sc -> unCERWS m (\a -> unCERWS (k a) sc))
+  fail msg = throwError (strMsg msg)
 
 instance MonadTrans (CERWS b e r w s) where
-  lift m = CERWS (\sc ec pc r w s -> m >>= \a -> sc a r w s)
+  lift m = CERWS (\sc r w s pc -> m >>= \a -> sc a r w s pc)
 
 instance (MonadIO m,Error e) => MonadIO (CERWS b e r w s m) where
   liftIO = lift . liftIO
@@ -132,39 +150,42 @@ instance (MonadIO m,Error e) => MonadIO (CERWS b e r w s m) where
 instance (Monad m, Error e) => MonadCont (CERWS b e r w s m) where
   callCC = callCC_CERWS
 
-callCC_CERWS :: ((a -> CERWS b e1 r w s m a1) -> CERWS b e r w s m a)
-             -> CERWS b e r w s m a
-callCC_CERWS f = CERWS $ \sc -> let k a = CERWS (\_ _ _ -> sc a)
+--callCC_CERWS :: ((a -> CERWS b e1 r w s m a1) -> CERWS b e r w s m a)
+--             -> CERWS b e r w s m a
+callCC_CERWS f = CERWS $ \sc -> let k a = CERWS (\_ -> sc a)
                                 in unCERWS (f k) sc
 
 instance (Monad m,Error e) => MonadError e (CERWS b e r w s m) where
-  throwError msg = CERWS (\_ ec _ _ _ _ -> ec msg)
+  throwError = throwError_CERWS
   catchError = catchError_CERWS
+
+-- throwError_CERWS :: e -> CERWS b e r w s m a
+throwError_CERWS msg = CERWS $ \sc r w s pc ->
+  case pc of
+    PartialEmpty ec -> ec msg
+    PartialFrame catcher s1 pc1 -> catcher s1 pc1 msg
 
 catchError_CERWS :: CERWS b e {-e1-} r w s m a
                  -> (e {-e1-} -> CERWS b e r w s m a)
                  -> CERWS b e r w s m a
-catchError_CERWS m handler = CERWS $ \sc ec pc r w s ->
-  let ec' e' = unCERWS (handler e') sc ec pc r w s
-{-
-      pc' sIn goIn = let goIn' goEC goS = undefined
-                     in pc goIn'
--}
-  in unCERWS m sc ec' pc r w s
+catchError_CERWS mayFail handler = CERWS $ \sc r w s pc ->
+  let pcWithHandler = let catcher s1 pc1 e1 = unCERWS (handler e1) sc r w s1 pc1
+                      in PartialFrame catcher s pc
+  in unCERWS mayFail sc r w s pcWithHandler
 
 instance (Monad m, Error e, Monoid w) => MonadWriter w (CERWS b e r w s m) where
-  tell w'  = CERWS (\sc _ _ r w -> sc () r (mappend w w'))
+  tell w'  = CERWS (\sc r w -> sc () r (mappend w w'))
   listen m = CERWS (\sc -> unCERWS m (\ a    r' w'-> sc (a,w') r'    w' ))
   pass m   = CERWS (\sc -> unCERWS m (\(a,f) r' w'-> sc  a     r' (f w')))
 
 instance (Monad m, Error e) => MonadReader r (CERWS b e r w s m) where
-  ask = CERWS (\sc _ _ r -> sc r r)
-  local f m = CERWS (\sc ec pc r -> let sc' a _ = sc' a r
-                                    in unCERWS m sc' ec pc (f r))
+  ask = CERWS (\sc r -> sc r r)
+  local f m = CERWS (\sc r -> let sc' a _ = sc' a r
+                              in unCERWS m sc' (f r))
               
 instance (Monad m,Error e) => MonadState s (CERWS b e r w s m) where
-  get   = CERWS (\sc _ _ r w s -> sc s  r w s)
-  put s = CERWS (\sc _ _ r w _ -> sc () r w s)
+  get   = CERWS (\sc r w s -> sc s  r w s)
+  put s = CERWS (\sc r w _ -> sc () r w s)
 
 instance (Monad m, Error e) => MonadPlus (CERWS b e r w s m) where
   mzero = throwError noMsg
@@ -186,8 +207,6 @@ testGet = runCERWS () (10::Int) $ do
   if val > 0 then print val >> jump (pred val) 
              else get >>= put . (`div` 2) >> again
   return ()
- where print :: (MonadIO m, Show a) => a -> m ()
-       print = liftIO . Prelude.print
 
 baz :: IO (Either String (String,String,String))
 baz = runCERWS () "start" $ do
@@ -204,8 +223,6 @@ baz = runCERWS () "start" $ do
          return 1
   print ("r  is "++show (r))
   return "EOF"
- where print :: (MonadIO m, Show a) => a -> m ()
-       print = liftIO . Prelude.print
 
 test :: IO Bool
 test = do x <- runCERWS () "Hello" bar
@@ -226,5 +243,4 @@ bar = do
   tell "c"
   print "gamma"
   return (a++" was gotten")
- where print = liftIO . Prelude.print
 

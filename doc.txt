@@ -21,6 +21,8 @@ DONE
 
 Then TODO is still quite long
 (*) Test Wire instances
+(*) continuation based Get
+(*) save decomposed reals instead of rationals
 (*) Add more support to .proto loading
    (**) extension support
    (**) groups
