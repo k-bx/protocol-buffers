@@ -1,6 +1,8 @@
 {-# LANGUAGE CPP,MagicHash,ScopedTypeVariables,FlexibleInstances,MultiParamTypeClasses,TypeSynonymInstances #-}
--- By Chris Kuklewicz, drawing heavily from binary and binary-strict.
--- With the usual BSD3 licence, copyright 2008.
+-- By Chris Kuklewicz, drawing heavily from binary and binary-strict,
+-- but all the bugs are my own.
+--
+-- This file is under the usual BSD3 licence, copyright 2008.
 --
 -- This started out as an improvement to
 -- Data.Binary.Stric.IncrementalGet with slightly better internals.
@@ -55,14 +57,15 @@ module Text.ProtocolBuffers.MyGet
 
 -- The InternalGet monad is an instance of binary-strict's BinaryParser:
 import qualified Data.Binary.Strict.Class as P(BinaryParser(..))
--- The InternalGet monad is an instance of all of these...
-import Control.Applicative(Alternative(..),Applicative(..))
+-- The InternalGet monad is an instance of all of these library classes:
+import Control.Applicative(Applicative(pure,(<*>)),Alternative(empty,(<|>)))
+import Control.Monad(MonadPlus(mzero,mplus))
 import Control.Monad.Error.Class(MonadError(throwError,catchError),Error(strMsg))
 import Control.Monad.Reader.Class(MonadReader(ask,local))
-import Control.Monad.Writer.Class(MonadWriter(tell,listen,pass))
 import Control.Monad.State.Class(MonadState(get,put))
 import Control.Monad.Trans(MonadTrans(lift),MonadIO(liftIO))
-import Control.Monad(MonadPlus(mzero,mplus))
+import Control.Monad.Writer.Class(MonadWriter(tell,listen,pass))
+-- It can be a MonadCont, but the semantics are too broken without a ton of work.
 
 -- implementation imports
 import Control.Monad(liftM,ap)                       -- instead of Functor.fmap; ap for Applicative
@@ -104,6 +107,46 @@ data IResult w user m a = IFailed {-# UNPACK #-} !Int64 String
                         | IFinished w {-# UNPACK #-} !(S user) a
                         | IPartial (Maybe L.ByteString -> m (IResult w user m a))
 
+-- Internal state type, not exposed to the user.
+data S user = S { top :: {-# UNPACK #-} !S.ByteString
+                , current :: {-# UNPACK #-} !L.ByteString
+                , consumed :: {-# UNPACK #-} !Int64
+                , userField :: user
+                }
+  deriving Show
+
+-- Private Internal error handling stack type
+-- This must NOT be exposed by this module
+data FrameStack b e w user m = ErrorFrame (e -> (S user) -> m (IResult w user m b)) -- top level handler
+                                          Bool -- True at start, False if Nothing passed to suspend continuation
+                             | HandlerFrame ( (S user) -> FrameStack b e w user m
+                                              -> e -> m (IResult w user m b) )  -- encapsulated handler
+                                       (S user)  -- stored state to pass to handler
+                                       (Seq L.ByteString)  -- additional input to hass to handler
+                                       (FrameStack b e w user m)  -- earlier/deeper/outer handlers
+
+type Success b e r w user m a =
+       (a -> r -> w -> (S user) -> FrameStack b e w user m -> m (IResult w user m b))
+
+-- Internal monad type
+newtype InternalGet e r w user m a = InternalGet {
+  unInternalGet :: forall b.                 -- the forall hides the CPS style (and prevents use of MonadCont)
+                   Success b e r w user m a  -- main continuation
+                -> r                         -- reader
+                -> w                         -- log so far
+                -> (S user)                  -- state
+                -> FrameStack b e w user m   -- error handler stack
+                -> m (IResult w user m b)    -- operation
+    }
+
+-- Complex external monad type
+type CompGet r w user m = InternalGet String r w user m
+
+-- Simple external monad type
+type Get = CompGet () () () Identity
+
+-- Put the Show instances here
+
 instance (Show a) => Show (Result a) where
   showsPrec _ (Failed n msg) = ("(Failed "++) . shows n . (' ':) . shows msg . (")"++)
   showsPrec _ (Finished bs n a) =
@@ -133,17 +176,15 @@ instance (Show user, Show a, Show w) => Show (IResult w user m a) where
     . shows a . ("))"++)
   showsPrec _ (IPartial {}) = ("(IPartial <MaybeData.ByteString.Lazy.ByteString->IO (IResult w user m a))"++)
 
--- Internal state type, not exposed to the user.
-data S user = S { top :: {-# UNPACK #-} !S.ByteString
-                , current :: {-# UNPACK #-} !L.ByteString
-                , consumed :: {-# UNPACK #-} !Int64
-                , userField :: user
-                }
-  deriving Show
+instance Show user => Show (FrameStack b e w user m) where
+  showsPrec _ (ErrorFrame _ p) =(++) "(ErrorFrame <e->s->m b> " . shows p . (")"++)
+  showsPrec _ (HandlerFrame _ s future pc) = ("(HandlerFrame <s->FrameStack b e s m->e->m b> ("++)
+                                     . shows s . (") ("++) . shows future . (") ("++)
+                                     . shows pc . (")"++)
 
--- | 'runGet' is the simple executor
+-- | 'runCompGet' is the complex executor
 runCompGet :: (Monad m,Monoid w)
-            => CompGet a r w user m a
+            => CompGet r w user m a
             -> r -> user -> L.ByteString
             -> m (CompResult w user m a)
 runCompGet g rIn userIn bsIn = liftM convert (unGet g sIn scIn)
@@ -157,42 +198,8 @@ runCompGet g rIn userIn bsIn = liftM convert (unGet g sIn scIn)
         convert (IFinished w (S ss bs n user) a) = CFinished (L.chunk ss bs) n w user a
         convert (IPartial f) = CPartial (\bs -> liftM convert (f bs))
 
--- easier name
-type SuccessContinuation b e r w s m a = (a -> r -> w -> s -> FrameStack b e s m -> m b)
-
--- Private Internal error handling stack type
--- This must NOT be exposed by this module
-data FrameStack b e s m = ErrorFrame (e -> s -> m b) -- top level handler
-                                     Bool -- True at start, False if Nothing passed to suspend continuation
-                        | HandlerFrame (s -> FrameStack b e s m -> e -> m b)  -- encapsulated handler
-                                       s  -- stored state to pass to handler
-                                       (Seq L.ByteString)  -- additiona input to hass to handler
-                                       (FrameStack b e s m)  -- deeped/outer handlers
-
-instance Show s => Show (FrameStack b e s m) where
-  showsPrec _ (ErrorFrame _ p) =(++) "(ErrorFrame <e->s->m b> " . shows p . (")"++)
-  showsPrec _ (HandlerFrame _ s future pc) = ("(HandlerFrame <s->FrameStack b e s m->e->m b> ("++)
-                                     . shows s . (") ("++) . shows future . (") ("++)
-                                     . shows pc . (")"++)
-
--- Internal monad type
-newtype InternalGet b e r w s m a = InternalGet {
-      unInternalGet :: SuccessContinuation b e r w s m a
-              -> r                         -- reader
-              -> w                         -- log so far
-              -> s                         -- state
-              -> FrameStack b e s m        -- error handler stack
-              -> m b                       -- operation
-      }
-
--- Complex external monad type
-type CompGet b r w user m = InternalGet (IResult w user m b) String r w (S user) m
-
--- Simple external monad type
-type Get b = CompGet b () () () Identity
-
 -- | 'runGet' is the simple executor
-runGet :: Get a a -> L.ByteString -> Result a
+runGet :: Get a -> L.ByteString -> Result a
 runGet g bsIn = convert (runIdentity (unGet g sIn scIn))
   where sIn = case bsIn of L.Empty -> S mempty mempty 0 ()
                            L.Chunk ss bs -> S ss bs 0 ()
@@ -206,7 +213,7 @@ runGet g bsIn = convert (runIdentity (unGet g sIn scIn))
         convert (IPartial f) = Partial (\bs -> convert (runIdentity (f bs)))
 
 -- | Get the input currently available to the parser.
-getAvailable :: InternalGet b e r w (S user) m L.ByteString
+getAvailable :: InternalGet e r w user m L.ByteString
 getAvailable = InternalGet $ \ sc r w s@(S ss bs _ _) pc -> sc (L.chunk ss bs) r w s pc
 
 -- | 'putAvailable' replaces the bytestream past the current # of read
@@ -214,7 +221,7 @@ getAvailable = InternalGet $ \ sc r w s@(S ss bs _ _) pc -> sc (L.chunk ss bs) r
 -- MonadPlus branches.  I think all pending branches have to have
 -- fewer bytesRead than the current one.  If this is wrong then an
 -- error will be thrown.
-putAvailable :: L.ByteString -> InternalGet b e r w (S user) m ()
+putAvailable :: L.ByteString -> InternalGet e r w user m ()
 putAvailable bsNew = InternalGet $ \ sc r w (S _ss _bs n user) pc ->
   let s' = case bsNew of
              L.Empty -> S mempty mempty n user
@@ -232,15 +239,15 @@ putAvailable bsNew = InternalGet $ \ sc r w (S _ss _bs n user) pc ->
   in sc () r w s' (rebuild pc)
 
 -- Internal access to full internal state, as helepr functions
-getFull :: InternalGet b e r w s m s
+getFull :: InternalGet e r w user m (S user)
 getFull = InternalGet $ \ sc r w s pc -> sc s r w s pc
-putFull :: s -> InternalGet b e r w s m ()
+putFull :: (S user) -> InternalGet e r w user m ()
 putFull s = InternalGet $ \ sc r w _s pc -> sc () r w s pc
 
 -- | Keep calling 'suspend' until Nothing is passed to the 'Partial'
 -- continuation.  This ensures all the data has been loaded into the
 -- state of the parser.
-suspendUntilComplete :: ({-Show user,-} Monad m) => CompGet b r w user m ()
+suspendUntilComplete :: ({-Show user,-} Monad m) => CompGet r w user m ()
 suspendUntilComplete = do
   continue <- suspend
   if continue then suspendUntilComplete
@@ -249,14 +256,14 @@ suspendUntilComplete = do
 -- | Call suspend and throw and error with the provided @msg@ if
 -- Nothing has been passed to the 'Partial' continuation.  Otherwise
 -- return ().
-suspendMsg :: ({-Show user,-} Monad m) => String -> CompGet b r w user m ()
+suspendMsg :: ({-Show user,-} Monad m) => String -> CompGet r w user m ()
 suspendMsg msg = do continue <- suspend
                     if continue then return ()
                       else throwError msg
 
 -- | check that there are at least @n@ bytes available in the input.
 -- This will suspend if there is to little data.
-ensureBytes :: ({-Show user,-} Monad m) => Int64 -> CompGet b r w user m ()
+ensureBytes :: ({-Show user,-} Monad m) => Int64 -> CompGet r w user m ()
 ensureBytes n = do
   (S ss bs _read _user) <- getFull
   if n < fromIntegral (S.length ss)
@@ -268,7 +275,7 @@ ensureBytes n = do
 
 -- | Pull @n@ bytes from the unput, as a lazy ByteString.  This will
 -- suspend if there is too little data.
-getLazyByteString :: ({-Show user,-} Monad m)=> Int64 -> CompGet b r w user m L.ByteString
+getLazyByteString :: ({-Show user,-} Monad m)=> Int64 -> CompGet r w user m L.ByteString
 getLazyByteString n = do
   (S ss bs offset user) <- getFull
   let (consume,rest) = L.splitAt n (L.chunk ss bs)
@@ -294,7 +301,7 @@ class MonadSuspend m where
 -- The instance here is fairly specific to the stack manipluation done
 -- by 'addFuture' to ('S' user) and to the packaging of the resumption
 -- function in 'IResult'('IPartial').
-instance (({-Show user,-} Monad m)) => MonadSuspend (InternalGet (IResult w user m a) e r w (S user) m) where
+instance (({-Show user,-} Monad m)) => MonadSuspend (InternalGet e r w user m) where
     suspend = InternalGet $ \ sc r w sIn pcIn ->
       if checkBool pcIn -- Has Nothing ever been given to a partial continuation?
         then let f Nothing = let pcOut = rememberFalse pcIn
@@ -324,7 +331,7 @@ instance (({-Show user,-} Monad m)) => MonadSuspend (InternalGet (IResult w user
 -- MonadPlus(mplus) use.  This is useful to commit to the current branch and let
 -- the garbage collector release the suspended handler and its hold on
 -- the earlier input.
-discardInnerHandler :: ({-Show user,-} Monad m) => InternalGet b e r w s m ()
+discardInnerHandler :: ({-Show user,-} Monad m) => InternalGet e r w s m ()
 discardInnerHandler = InternalGet $ \ sc r w s pcIn ->
   let pcOut = case pcIn of ErrorFrame {} -> pcIn
                            HandlerFrame _ _ _ pc' -> pc'
@@ -337,7 +344,7 @@ discardInnerHandler = InternalGet $ \ sc r w s pcIn ->
 -- and MonadPlus(mplus) use.  This is useful to commit to the current
 -- branch and let the garbage collector release the suspended handlers
 -- and their hold on the earlier input.
-discardAllHandlers :: ({-Show user,-} Monad m) => InternalGet b e r w s m ()
+discardAllHandlers :: ({-Show user,-} Monad m) => InternalGet e r w s m ()
 discardAllHandlers = InternalGet $ \ sc r w s pcIn ->
   let base pc@(ErrorFrame {}) = pc
       base (HandlerFrame _ _ _ pc) = base pc
@@ -347,7 +354,7 @@ discardAllHandlers = InternalGet $ \ sc r w s pcIn ->
 -- The BinaryParser instance:
 
 -- | Discard the next @m@ bytes
-skip :: ({-Show user,-} Monad m) => Int64 -> CompGet b r w user m ()
+skip :: ({-Show user,-} Monad m) => Int64 -> CompGet r w user m ()
 skip m | m <=0 = return ()
        | otherwise = do
   ensureBytes m
@@ -357,22 +364,22 @@ skip m | m <=0 = return ()
     L.Chunk ss' bs' -> putFull (S ss' bs' (n+m) user)
 
 -- | Return the number of 'bytesRead' so far.  Initially 0, never negative.
-bytesRead :: ({-Show user,-} Monad m) => CompGet b r w user m Int64
+bytesRead :: ({-Show user,-} Monad m) => CompGet r w user m Int64
 bytesRead = fmap consumed getFull
 
 -- | Return the number of bytes 'remaining' before the current input
 -- runs out and 'suspend' might be called.
-remaining :: ({-Show user,-} Monad m) => CompGet b r w user m Int64
+remaining :: ({-Show user,-} Monad m) => CompGet r w user m Int64
 remaining = do (S ss bs _ _) <- getFull
                return $ fromIntegral (S.length ss) + (L.length bs)
 
 -- | Return True if the number of bytes 'remaining' is 0.  Any futher
 -- attempts to read an empty parser will cal 'suspend'.
-isEmpty :: ({-Show user,-} Monad m) => CompGet b r w user m Bool
+isEmpty :: ({-Show user,-} Monad m) => CompGet r w user m Bool
 isEmpty = do (S ss bs _n _user) <- getFull
              return $ (S.null ss) && (L.null bs)
 
-spanOf :: ({-Show user,-} Monad m) => (Word8 -> Bool) ->  CompGet b r w user m (L.ByteString)
+spanOf :: ({-Show user,-} Monad m) => (Word8 -> Bool) ->  CompGet r w user m (L.ByteString)
 spanOf f = do let loop = do (S ss bs n user) <- getFull
                             let (pre,post) = L.span f (L.chunk ss bs)
                             case post of
@@ -392,7 +399,7 @@ spanOf f = do let loop = do (S ss bs n user) <- getFull
 -- lazy chunks then the result occupies a freshly allocated strict
 -- bytestring, otherwise it fits in a single chunk and refers to the
 -- same immutable memory block as the whole chunk.
-getByteString :: ({-Show user,-} Monad m) => Int -> CompGet b r w user m S.ByteString
+getByteString :: ({-Show user,-} Monad m) => Int -> CompGet r w user m S.ByteString
 getByteString nIn = do
   (S ss bs n user) <- getFull
   if nIn < S.length ss
@@ -404,15 +411,15 @@ getByteString nIn = do
     else fmap (S.concat . L.toChunks) (getLazyByteString (fromIntegral nIn))
 {-# INLINE getByteString #-} -- important
 
-getWordhost :: ({-Show user,-} Monad m) => CompGet b r w user m Word
+getWordhost :: ({-Show user,-} Monad m) => CompGet r w user m Word
 getWordhost = getStorable
 {-# INLINE getWordhost #-}
 
-getWord8 :: ({-Show user,-} Monad m) => CompGet b r w user m Word8
+getWord8 :: ({-Show user,-} Monad m) => CompGet r w user m Word8
 getWord8 = getPtr 1
 {-# INLINE getWord8 #-}
 
-getWord16be,getWord16le,getWord16host :: ({-Show user,-} Monad m) => CompGet b r w user m Word16
+getWord16be,getWord16le,getWord16host :: ({-Show user,-} Monad m) => CompGet r w user m Word16
 getWord16be = do
     s <- getByteString 2
     return $! (fromIntegral (s `S.unsafeIndex` 0) `shiftl_w16` 8) .|.
@@ -426,7 +433,7 @@ getWord16le = do
 getWord16host = getStorable
 {-# INLINE getWord16host #-}
 
-getWord32be,getWord32le,getWord32host :: ({-Show user,-} Monad m) => CompGet b r w user m Word32
+getWord32be,getWord32le,getWord32host :: ({-Show user,-} Monad m) => CompGet r w user m Word32
 getWord32be = do
     s <- getByteString 4
     return $! (fromIntegral (s `S.unsafeIndex` 0) `shiftl_w32` 24) .|.
@@ -445,7 +452,7 @@ getWord32host = getStorable
 {-# INLINE getWord32host #-}
 
 
-getWord64be,getWord64le,getWord64host :: ({-Show user,-} Monad m) => CompGet b r w user m Word64
+getWord64be,getWord64le,getWord64host :: ({-Show user,-} Monad m) => CompGet r w user m Word64
 getWord64be = do
     s <- getByteString 8
     return $! (fromIntegral (s `S.unsafeIndex` 0) `shiftl_w64` 56) .|.
@@ -471,7 +478,7 @@ getWord64le = do
 getWord64host = getStorable
 {-# INLINE getWord64host #-}
 
-instance ({-Show user,-} Monad m) => P.BinaryParser (CompGet b r w user m) where
+instance ({-Show user,-} Monad m) => P.BinaryParser (CompGet r w user m) where
   skip = skip . fromIntegral
   bytesRead = fmap fromIntegral bytesRead
   remaining = fmap fromIntegral remaining
@@ -496,22 +503,22 @@ instance ({-Show user,-} Monad m) => P.BinaryParser (CompGet b r w user m) where
 
 -- Below here are the class instances
     
-instance ({-Show user,-} Monad m,Error e) => Functor (InternalGet b e r w (S user) m) where
+instance ({-Show user,-} Monad m,Error e) => Functor (InternalGet e r w user m) where
 --fmap f m = m >>= return . f
   fmap f m = InternalGet (\sc -> unInternalGet m (sc . f))
 
-instance ({-Show user,-} Monad m,Error e) => Monad (InternalGet b e r w (S user) m) where
+instance ({-Show user,-} Monad m,Error e) => Monad (InternalGet e r w user m) where
   return a = InternalGet (\sc -> sc a)
   m >>= k  = InternalGet (\sc -> unInternalGet m (\a -> unInternalGet (k a) sc))
   fail msg = throwError (strMsg msg)
 
-instance MonadTrans (InternalGet b e r w s) where
+instance MonadTrans (InternalGet e r w s) where
   lift m = InternalGet (\sc r w s pc -> m >>= \a -> sc a r w s pc)
 
-instance ({-Show user,-} MonadIO m,Error e) => MonadIO (InternalGet b e r w (S user) m) where
+instance ({-Show user,-} MonadIO m,Error e) => MonadIO (InternalGet e r w user m) where
   liftIO = lift . liftIO
 
-instance ({-Show user,-} Monad m,Error e) => MonadError e (InternalGet b e r w (S user) m) where
+instance ({-Show user,-} Monad m,Error e) => MonadError e (InternalGet e r w user m) where
   throwError msg = InternalGet $ \_sc _r _w s pc ->
     case pc of ErrorFrame ec _ -> ec msg s
                HandlerFrame catcher s1 future pc1 -> catcher (collect s1 future) pc1 msg
@@ -526,32 +533,32 @@ instance ({-Show user,-} Monad m,Error e) => MonadError e (InternalGet b e r w (
         actionWithCleanup = mayFail >>= \a -> discardInnerHandler >> return a
     in unInternalGet actionWithCleanup sc r w s pcWithHandler
 
-instance ({-Show user,-} Monad m, Error e, Monoid w) => MonadWriter w (InternalGet b e r w (S user) m) where
+instance ({-Show user,-} Monad m, Error e, Monoid w) => MonadWriter w (InternalGet e r w user m) where
   tell w'  = InternalGet (\sc r w -> sc () r (mappend w w'))
   listen m = InternalGet (\sc r w -> let sc' a r' w'= sc (a,w') r' (mappend w w')
                                      in unInternalGet m sc' r mempty)
   pass m   = InternalGet (\sc r w s pc -> let sc' (a,f) r' w' s' pc' = sc a r' (mappend w (f w')) s' pc'
                                           in unInternalGet m sc' r mempty s pc)
 
-instance ({-Show user,-} Monad m, Error e) => MonadReader r (InternalGet b e r w (S user) m) where
+instance ({-Show user,-} Monad m, Error e) => MonadReader r (InternalGet e r w user m) where
   ask = InternalGet (\sc r -> sc r r)
   local f m = InternalGet (\sc r -> let scReplaceReader a _ = sc a r
                                     in unInternalGet m scReplaceReader (f r))
               
-instance ({-Show user,-} Monad m,Error e) => MonadState user (InternalGet b e r w (S user) m) where
+instance ({-Show user,-} Monad m,Error e) => MonadState user (InternalGet e r w user m) where
   get   = InternalGet (\sc r w s -> sc (userField s) r w s)
   put u = InternalGet (\sc r w s -> let s' = s {userField=u}
                               in sc () r w s')
 
-instance ({-Show user,-} Monad m, Error e) => MonadPlus (InternalGet b e r w (S user) m) where
+instance ({-Show user,-} Monad m, Error e) => MonadPlus (InternalGet e r w user m) where
   mzero = throwError (strMsg "[mzero:no message]")
   mplus m1 m2 = catchError m1 (const m2)
 
-instance ({-Show user,-} Monad m,Error e) => Applicative (InternalGet b e r w (S user) m) where
+instance ({-Show user,-} Monad m,Error e) => Applicative (InternalGet e r w user m) where
   pure = return
   (<*>) = ap
 
-instance ({-Show user,-} Monad m,Error e) => Alternative (InternalGet b e r w (S user) m) where
+instance ({-Show user,-} Monad m,Error e) => Alternative (InternalGet e r w user m) where
   empty = mzero
   (<|>) = mplus
 
@@ -563,13 +570,13 @@ instance ({-Show user,-} Monad m,Error e) => Alternative (InternalGet b e r w (S
 -- underlying lazy byteString. So many indirections from the raw parser
 -- state that my head hurts...
 
-getPtr :: ({-Show user,-} Monad m,Storable a) => Int -> CompGet b r w user m a
+getPtr :: ({-Show user,-} Monad m,Storable a) => Int -> CompGet r w user m a
 getPtr n = do
     (fp,o,_) <- fmap S.toForeignPtr (getByteString n)
     return . S.inlinePerformIO $ withForeignPtr fp $ \p -> peek (castPtr $ p `plusPtr` o)
 {-# INLINE getPtr #-}
 
-getStorable :: forall b r w user m a. ({-Show user,-} Monad m,Storable a) => CompGet b r w user m a
+getStorable :: forall r w user m a. ({-Show user,-} Monad m,Storable a) => CompGet r w user m a
 getStorable = do
     (fp,o,_) <- fmap S.toForeignPtr (getByteString (sizeOf (undefined :: a)))
     return . S.inlinePerformIO $ withForeignPtr fp $ \p -> peek (castPtr $ p `plusPtr` o)
@@ -609,30 +616,27 @@ shiftl_w64 = shiftL
 
 {- TESTING -}
 
-chomp :: CompGet b () String () IO ()
+chomp :: CompGet () String () IO ()
 chomp = getByteString 1 >>= \w -> tell (map (toEnum . fromEnum) (S.unpack w))
 
 feed :: (Monad t) => Word8 -> CompResult t1 t2 t t3 -> t (CompResult t1 t2 t t3)
 feed x (CPartial q) = q (Just (L.pack [x]))
 feed _x y = return y
 
-test :: (Monoid w, Monad m) => CompGet a () w () m a -> [Word8] -> m (CompResult w () m a)
+test :: (Monoid w, Monad m) => CompGet () w () m a -> [Word8] -> m (CompResult w () m a)
 test g bs = runCompGet g () () (L.pack bs)
 
 test10 :: IO (CompResult String () IO [()])
 test10 = test (mplus (pr "go" >> replicateM 5 chomp >> pr "die" >> mzero) (pr "reborn" >> replicateM 10 chomp)) [1] >>= feed 2 >>= feed 3 >>= feed 4 >>= feed 5 >>= feed 6 >>= feed 7 >>=feed 8 >>= feed 9 >>= feed 10
 
-pr :: (Show a) => a -> CompGet b () String () IO ()
+pr :: (Show a) => a -> CompGet () String () IO ()
 pr = liftIO . Prelude.print
 
-getPC :: InternalGet b e r w s m (FrameStack b e s m)
-getPC = InternalGet $ \ sc r w s pc -> sc pc r w s pc
-
-countPC :: ({-Show user,-} Monad m) => CompGet b r w user m Int
-countPC = do
+countPC :: ({-Show user,-} Monad m) => CompGet r w user m Int
+countPC = InternalGet $ \ sc r w s pc ->
   let go (ErrorFrame {}) i = i
-      go (HandlerFrame _ _ _ pc) i = go pc $! succ i
-  liftM (`go` 0) getPC
+      go (HandlerFrame _ _ _ pc') i = go pc' $! succ i
+  in sc (go pc 0) r w s pc
 
 {- testDepth result on my machine:
 
@@ -660,7 +664,8 @@ countPC = do
 -- Ensure the stack fixing in getCC and catchError play well together:
 testDepth :: IO (CompResult String () IO S.ByteString)
 testDepth = test depth [] >>= feed12 >>= feedNothing where
-  p s = countPC >>= \d -> bytesRead >>= \ b -> remaining >>= \r -> pr ("stack depth",d,"bytes read",b,"bytes remaining",r,s)
+  p s = countPC >>= \d -> bytesRead >>= \ b -> remaining >>= \r ->
+         pr ("stack depth",d,"bytes read",b,"bytes remaining",r,s)
   depth = do
     p "begin"
     chomp
