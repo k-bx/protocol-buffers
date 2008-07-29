@@ -1,0 +1,204 @@
+-- Annotated run of MyGetW.testDepth
+
+[1 of 1] Compiling Text.ProtocolBuffers.MyGetW ( /Users/chrisk/Documents/projects/haskell/develop/protocol-buffers/Text/ProtocolBuffers/MyGetW.hs, interpreted )
+Ok, modules loaded: Text.ProtocolBuffers.MyGetW.
+*Text.ProtocolBuffers.MyGetW> testDepth
+("stack depth",0,"bytes read",0,"bytes remaining",0,"begin")
+TopFrame 1 (ErrorFrame <> True)
+("stack depth",1,"bytes read",0,"bytes remaining",0,"mayFail")
+TopFrame 2 (HandlerFrame 1 (S {top = "", current = Empty, consumed = 0, userField = ()}) (fromList [])
+  (ErrorFrame <> True))
+
+("stack depth",0,"bytes read",0,"bytes remaining",0,"handler")
+TopFrame 2 (ErrorFrame <> True)
+("stack depth",0,"bytes read",0,"bytes remaining",0,"middle")
+TopFrame 2 (ErrorFrame <> True)
+("feed1",[48,49])
+"chomp [48] <0>"
+"after jump and with 0"
+("stack depth",1,"bytes read",1,"bytes remaining",1,"after getCC1, inside 1 handler")
+TopFrame 3 (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [])
+  (ErrorFrame <> True))
+
+("stack depth",2,"bytes read",1,"bytes remaining",1,"after getCC1, inside 2 handlers, before chomp")
+TopFrame 4 (HandlerFrame 3 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [])
+  (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [])
+    (ErrorFrame <> True)))
+
+"chomp [49] <1>"
+("stack depth",2,"bytes read",2,"bytes remaining",0,"after getCC1, inside 2 handlers, after chomp")
+TopFrame 4 (HandlerFrame 3 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [])
+  (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [])
+    (ErrorFrame <> True)))
+
+("stack depth",3,"bytes read",2,"bytes remaining",0,"in mplus left")
+TopFrame 5 (HandlerFrame 4 (S {top = "", current = Empty, consumed = 2, userField = ()}) (fromList [])
+  (HandlerFrame 3 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [])
+    (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [])
+      (ErrorFrame <> True))))
+
+-- The use of 'jump' here resets the writer to the chomp '1' is not in the writer output
+
+"after jump and with 1"
+("stack depth",1,"bytes read",2,"bytes remaining",0,"after getCC1, inside 1 handler")
+TopFrame 5 (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [])
+  (ErrorFrame <> True))
+
+("stack depth",2,"bytes read",2,"bytes remaining",0,"after getCC1, inside 2 handlers, before chomp")
+TopFrame 6 (HandlerFrame 5 (S {top = "", current = Empty, consumed = 2, userField = ()}) (fromList [])
+  (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [])
+    (ErrorFrame <> True)))
+
+("feed1",[50,51]) -- adds "23" to future of HandlerFrame 5 and HandlerFrame 2
+"chomp [50] <2>"
+("stack depth",2,"bytes read",3,"bytes remaining",1,"after getCC1, inside 2 handlers, after chomp")
+TopFrame 6 (HandlerFrame 5 (S {top = "", current = Empty, consumed = 2, userField = ()}) (fromList [Chunk "23" Empty])
+  (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [Chunk "23" Empty])
+    (ErrorFrame <> True)))
+
+("stack depth",3,"bytes read",3,"bytes remaining",1,"in mplus left")
+TopFrame 7 (HandlerFrame 6 (S {top = "3", current = Empty, consumed = 3, userField = ()}) (fromList [])
+  (HandlerFrame 5 (S {top = "", current = Empty, consumed = 2, userField = ()}) (fromList [Chunk "23" Empty])
+    (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [Chunk "23" Empty])
+      (ErrorFrame <> True))))
+
+-- this use of 'jump' resets the writer again and the '2' is removed.
+
+"after jump and with 2"
+("stack depth",1,"bytes read",3,"bytes remaining",1,"after getCC1, inside 1 handler")
+TopFrame 7 (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [Chunk "23" Empty])
+  (ErrorFrame <> True))
+
+("stack depth",2,"bytes read",3,"bytes remaining",1,"after getCC1, inside 2 handlers, before chomp")
+TopFrame 8 (HandlerFrame 7 (S {top = "3", current = Empty, consumed = 3, userField = ()}) (fromList [])
+  (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [Chunk "23" Empty])
+    (ErrorFrame <> True)))
+
+"chomp [51] <3>"
+("stack depth",2,"bytes read",4,"bytes remaining",0,"after getCC1, inside 2 handlers, after chomp")
+TopFrame 8 (HandlerFrame 7 (S {top = "3", current = Empty, consumed = 3, userField = ()}) (fromList [])
+  (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [Chunk "23" Empty])
+    (ErrorFrame <> True)))
+
+("stack depth",3,"bytes read",4,"bytes remaining",0,"in mplus left")
+TopFrame 9 (HandlerFrame 8 (S {top = "", current = Empty, consumed = 4, userField = ()}) (fromList [])
+  (HandlerFrame 7 (S {top = "3", current = Empty, consumed = 3, userField = ()}) (fromList [])
+    (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [Chunk "23" Empty])
+      (ErrorFrame <> True))))
+
+"after jump and with 3"
+
+-- The use of 'jump' takes the chomp '3' out of the writer log
+
+("stack depth",1,"bytes read",4,"bytes remaining",0,"after getCC1, inside 1 handler")
+TopFrame 9 (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [Chunk "23" Empty])
+  (ErrorFrame <> True))
+
+("stack depth",2,"bytes read",4,"bytes remaining",0,"after getCC1, inside 2 handlers, before chomp")
+TopFrame 10 (HandlerFrame 9 (S {top = "", current = Empty, consumed = 4, userField = ()}) (fromList [])
+  (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [Chunk "23" Empty])
+    (ErrorFrame <> True)))
+
+("feed1",[52,53]) -- add "45" to future of HandlerFrame 9 and HandlerFrame 2
+"chomp [52] <4>"
+("stack depth",2,"bytes read",5,"bytes remaining",1,"after getCC1, inside 2 handlers, after chomp")
+TopFrame 10 (HandlerFrame 9 (S {top = "", current = Empty, consumed = 4, userField = ()}) (fromList [Chunk "45" Empty])
+  (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [Chunk "23" Empty,Chunk "45" Empty])
+    (ErrorFrame <> True)))
+
+("stack depth",3,"bytes read",5,"bytes remaining",1,"in mplus left")
+TopFrame 11 (HandlerFrame 10 (S {top = "5", current = Empty, consumed = 5, userField = ()}) (fromList [])
+  (HandlerFrame 9 (S {top = "", current = Empty, consumed = 4, userField = ()}) (fromList [Chunk "45" Empty])
+    (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [Chunk "23" Empty,Chunk "45" Empty])
+      (ErrorFrame <> True))))
+
+-- At this point 'mzero' goes to state in HandlerFrame 10
+-- bytes read is still 5
+
+("stack depth",2,"bytes read",5,"bytes remaining",1,"in mplus right")
+TopFrame 11 (HandlerFrame 9 (S {top = "", current = Empty, consumed = 4, userField = ()}) (fromList [Chunk "45" Empty])
+  (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [Chunk "23" Empty,Chunk "45" Empty])
+    (ErrorFrame <> True)))
+
+-- At this point the next 'mzero' goes to state in HandlerFrame 9
+-- This loses chomp '4' from the writer log
+-- bytes read is reduced to 4
+
+("stack depth",1,"bytes read",4,"bytes remaining",2,"handler after getCC1")
+TopFrame 11 (HandlerFrame 2 (S {top = "1", current = Empty, consumed = 1, userField = ()}) (fromList [Chunk "23" Empty,Chunk "45" Empty])
+  (ErrorFrame <> True))
+
+-- At this point the third 'mzero' goes to state in HandlerFrame 2
+-- bytes read is reduced to 1
+-- The last 3 mzeros have reset the input so that now all but chomp "0" have been undone
+
+("stack depth",0,"bytes read",1,"bytes remaining",5,"handler before getCC1")
+TopFrame 11 (ErrorFrame <> True)
+("listen","0")
+("stack depth",0,"bytes read",1,"bytes remaining",5,"another middle")
+TopFrame 11 (ErrorFrame <> True)
+"chomp [49] <1>"
+("stack depth",1,"bytes read",2,"bytes remaining",4,"before inner jump2")
+TopFrame 12 (HandlerFrame 11 (S {top = "1", current = Chunk "23" (Chunk "45" Empty), consumed = 1, userField = ()}) (fromList [])
+  (ErrorFrame <> True))
+
+("stack depth",1,"bytes read",2,"bytes remaining",4,"after inner jump2 with 0")
+TopFrame 12 (HandlerFrame 11 (S {top = "1", current = Chunk "23" (Chunk "45" Empty), consumed = 1, userField = ()}) (fromList [])
+  (ErrorFrame <> True))
+
+"chomp [50] <2>"
+"chomp [51] <3>"
+("stack depth",0,"bytes read",4,"bytes remaining",2,"after catchError scope of jump2")
+TopFrame 12 (ErrorFrame <> True)
+"chomp [52] <4>"
+"jump2"
+
+-- This use of 'jump2' resets the writer, so the chomp '1' '2' '3' and '4' are not in the writer output
+
+("stack depth",1,"bytes read",5,"bytes remaining",1,"after inner jump2 with 1")
+TopFrame 12 (HandlerFrame 11 (S {top = "5", current = Empty, consumed = 5, userField = ()}) (fromList [])
+  (ErrorFrame <> True))
+
+"chomp [53] <5>"
+
+-- At this point (throwError "Ouch") goes to HandlerFrame 11, so the last chomp "1" to "5" are out of the writer log
+-- the bytes read is reduced from 6 to 5
+
+("stack depth",0,"bytes read",5,"bytes remaining",1,"last handler")
+TopFrame 12 (ErrorFrame <> True)
+"chomp [53] <5>"
+("stack depth",0,"bytes read",6,"bytes remaining",0,"after catchError scope of jump2")
+TopFrame 12 (ErrorFrame <> True)
+("feed1",[54,55])
+"chomp [54] <6>"
+"Nothing"
+("stack depth",0,"bytes read",7,"bytes remaining",1,"end")
+TopFrame 12 (ErrorFrame <> True)
+
+ -- getByteString 6 is called
+
+("feed1",[56,57])
+("feed1",[58,59])
+("feed1",[60,61])
+
+-- getByteString 6 finishes, receiving [55..60] aka "789:;<"
+
+("stack depth",0,"bytes read",13,"bytes remaining",1,"got 6, now suspendUntilComplete")
+TopFrame 12 (ErrorFrame <> True)
+("feed1",[62,63])
+("feed1",[64,65])
+("feed1",[66,67])
+("feed1",[68,69])
+("feed1",[70,71])
+("feed1",[72,73])
+("feed1",[74,75])
+("feed1",[76,77])
+("feed1",[78,79])
+("feed1",[80,81])
+("feed1",[82,83])
+("feed1",[84,85])
+("feed1",[86,87])
+("feed1",[88,89])
+("feed1",[90,91])
+(CFinished (Chunk "=" (Chunk ">?" (Chunk "@A" (Chunk "BC" (Chunk "DE" (Chunk "FG" (Chunk "HI" (Chunk "JK" (Chunk "LM" (Chunk "NO" (Chunk "PQ" (Chunk "RS" (Chunk "TU" (Chunk "VW" (Chunk "XY" (Chunk "Z[" Empty)))))))))))))))) (13) ("056") (()) ("789:;<"))
+*Text.ProtocolBuffers.MyGetW> 
