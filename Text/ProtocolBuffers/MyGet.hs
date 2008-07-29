@@ -6,21 +6,21 @@
 --
 -- This started out as an improvement to
 -- Data.Binary.Stric.IncrementalGet with slightly better internals.
--- The simplified 'get', 'runGet', 'Result' trio with the
+-- The simplified 'Get', 'runGet', 'Result' trio with the
 -- 'Data.Binary.Strict.Class.BinaryParser' instance are an _untested_
 -- upgrade from IncrementalGet.  Especially untested are the
 -- strictness properties.
 --
--- 'Get' implement usefully Applicative and Monad, MonadError,
--- Alternative and MonadPlus.
--- 
--- The 'CompGet' monad transformer (with 'runCompGet' and 'CompResult')
--- has those and also useful MonadRead, MonadWriter, and MonadState
--- implementations.  Output to the writer and changes to the user
--- State are thrown away when fail/throwError/mzero is called.
--- Effects of 'suspend' and 'putAvailable' are visible after
--- fail/throwError/mzero.  Top level errors are reported along with
+-- 'Get' usefully implements Applicative and Monad, MonadError,
+-- Alternative and MonadPlus.  Unhandled errors are reported along with
 -- the number of bytes successfully consumed.
+-- 
+-- The 'CompGet' monad transformer (with 'runCompGet' and
+-- 'CompResult') has those and also useful MonadReader, MonadWriter,
+-- and MonadState implementations.  Output to the writer and changes
+-- to the user State are thrown away when fail/throwError/mzero is
+-- called.  Effects of 'suspend' and 'putAvailable' are visible after
+-- fail/throwError/mzero.
 --
 -- Each time the parser reaches the end of the input it will return a
 -- Partial or CPartial wrapped continuation which requests a (Maybe
@@ -39,6 +39,13 @@
 -- replaces this input and is a bit fancy: it also replaces the input
 -- at the current offset for all the potential catchError/mplus
 -- handlers.  This change is _not_ reverted by fail/throwError/mzero.
+--
+-- A useful upgrade would be to "reverse the order" of the MonadWriter
+-- and MonadSuspend and allow IPartial to carry the monoid-so-far to
+-- the caller.  This would allow for reporting of results-to-date when
+-- suspending.  Making this work with MonadWriter's 'pass' semantics
+-- is hard -- perhaps a simpler Monad should be used in place of
+-- MonadWriter to yield a stream of results.
 module Text.ProtocolBuffers.MyGet
     (Get,runGet,Result(..)
     ,CompGet,runCompGet,CompResult(..)
@@ -53,7 +60,6 @@ module Text.ProtocolBuffers.MyGet
     ,getWord16le,getWord32le,getWord64le
     ,getWordhost,getWord16host,getWord32host,getWord64host
     ) where
-
 
 -- The InternalGet monad is an instance of binary-strict's BinaryParser:
 import qualified Data.Binary.Strict.Class as P(BinaryParser(..))
@@ -562,9 +568,8 @@ instance ({-Show user,-} Monad m,Error e) => Alternative (InternalGet e r w user
   empty = mzero
   (<|>) = mplus
 
--- getPtr copied from binary's Get.hs
 ------------------------------------------------------------------------
--- Primtives
+-- getPtr copied from binary's Get.hs
 
 -- helper, get a raw Ptr onto a strict ByteString copied out of the
 -- underlying lazy byteString. So many indirections from the raw parser
@@ -576,16 +581,16 @@ getPtr n = do
     return . S.inlinePerformIO $ withForeignPtr fp $ \p -> peek (castPtr $ p `plusPtr` o)
 {-# INLINE getPtr #-}
 
+-- I pushed the sizeOf into here (uses ScopedTypeVariables)
 getStorable :: forall r w user m a. ({-Show user,-} Monad m,Storable a) => CompGet r w user m a
 getStorable = do
     (fp,o,_) <- fmap S.toForeignPtr (getByteString (sizeOf (undefined :: a)))
     return . S.inlinePerformIO $ withForeignPtr fp $ \p -> peek (castPtr $ p `plusPtr` o)
 {-# INLINE getStorable #-}
 
+------------------------------------------------------------------------
+------------------------------------------------------------------------
 -- Unchecked shifts copied from binary's Get.hs
-------------------------------------------------------------------------
-------------------------------------------------------------------------
--- Unchecked shifts
 
 shiftl_w16 :: Word16 -> Int -> Word16
 shiftl_w32 :: Word32 -> Int -> Word32
@@ -614,7 +619,9 @@ shiftl_w32 = shiftL
 shiftl_w64 = shiftL
 #endif
 
+------------------------------------------------------------------------
 {- TESTING -}
+------------------------------------------------------------------------
 
 chomp :: CompGet () String () IO ()
 chomp = getByteString 1 >>= \w -> tell (map (toEnum . fromEnum) (S.unpack w))
@@ -645,11 +652,11 @@ countPC = InternalGet $ \ sc r w s pc ->
 ("feed1",[48,49])
 ("stack depth",1,"bytes read",1,"bytes remaining",1,"mayFail")
 ("stack depth",2,"bytes read",1,"bytes remaining",1,"depth2")
-("stack depth",2,"bytes read",2,"bytes remaining",0,"about to mzero")
-("stack depth",1,"bytes read",1,"bytes remaining",1,"middle")
-("stack depth",1,"bytes read",2,"bytes remaining",0,"about to mzero again")
-("stack depth",0,"bytes read",1,"bytes remaining",1,"handler")
 ("feed1",[50,51])
+("stack depth",2,"bytes read",4,"bytes remaining",0,"about to mzero")
+("stack depth",1,"bytes read",1,"bytes remaining",3,"middle")
+("stack depth",1,"bytes read",2,"bytes remaining",2,"about to mzero again")
+("stack depth",0,"bytes read",1,"bytes remaining",3,"handler")
 ("feed1",[52,53])
 ("feed1",[54,55])
 ("stack depth",0,"bytes read",7,"bytes remaining",1,"got 6, now suspendUntilComplete")
@@ -659,9 +666,16 @@ countPC = InternalGet $ \ sc r w s pc ->
 ("stack depth",0,"bytes read",7,"bytes remaining",7,"end")
 (CFinished (Chunk "7" (Chunk "89" (Chunk ":;" (Chunk "<=" Empty)))) 7 ("0") (()) ("123456"))
 
+The first chomp tell's "0".
+All other tell's are thrown away by the error handling.
+The stack depth returns to 0 as it should.
+The "bytes read" is reset along with the input on each throwError/mzero/fail.
+The (getByteString 6) reads "123456", leaving the "7" chunk on the input.
+suspendUntilComplete loads the rest of the "89" ":;" and "<=" chunks.
+
 -}
 
--- Ensure the stack fixing in getCC and catchError play well together:
+-- Ensure the stack fixing in catchError play words well:
 testDepth :: IO (CompResult String () IO S.ByteString)
 testDepth = test depth [] >>= feed12 >>= feedNothing where
   p s = countPC >>= \d -> bytesRead >>= \ b -> remaining >>= \r ->
@@ -670,7 +684,7 @@ testDepth = test depth [] >>= feed12 >>= feedNothing where
     p "begin"
     chomp
     catchError ( p "mayFail" >>
-                 ((p "depth2" >> chomp >> p "about to mzero" >> mzero) <|> return ()) >>
+                 ((p "depth2" >> replicateM 3 chomp >> p "about to mzero" >> mzero) <|> return ()) >>
                  p "middle" >>
                  chomp >> p "about to mzero again" >> mzero)
                (\_ -> p "handler")
