@@ -1,8 +1,13 @@
-{-# LANGUAGE CPP,MagicHash,ScopedTypeVariables,FlexibleInstances,MultiParamTypeClasses,TypeSynonymInstances #-}
+{-# LANGUAGE CPP,MagicHash,ScopedTypeVariables,FlexibleInstances,MultiParamTypeClasses,TypeSynonymInstances,RankNTypes #-}
+--
 -- By Chris Kuklewicz, drawing heavily from binary and binary-strict,
 -- but all the bugs are my own.
 --
 -- This file is under the usual BSD3 licence, copyright 2008.
+--
+-- There is a sibling to this module (once called "MyGetW") that does have
+-- MonadCont instances and machinery, and therefore does not hide the
+-- "b" type variable with the forall.
 --
 -- This started out as an improvement to
 -- Data.Binary.Stric.IncrementalGet with slightly better internals.
