@@ -45,12 +45,16 @@
 -- at the current offset for all the potential catchError/mplus
 -- handlers.  This change is _not_ reverted by fail/throwError/mzero.
 --
+-- The three 'lookAhead' and 'lookAheadM' and 'lookAheadE' functions are
+-- the same as the ones in binary's Data.Binary.Get.
+--
 -- A useful upgrade would be to "reverse the order" of the MonadWriter
 -- and MonadSuspend and allow IPartial to carry the monoid-so-far to
 -- the caller.  This would allow for reporting of results-to-date when
 -- suspending.  Making this work with MonadWriter's 'pass' semantics
 -- is hard -- perhaps a simpler Monad should be used in place of
 -- MonadWriter to yield a stream of results.
+--
 module Text.ProtocolBuffers.MyGet
     (Get,runGet,Result(..)
     ,CompGet,runCompGet,CompResult(..)
@@ -58,6 +62,8 @@ module Text.ProtocolBuffers.MyGet
     ,ensureBytes,getStorable,getLazyByteString,suspendUntilComplete
      -- parser state manipulation
     ,getAvailable,putAvailable
+     -- lookAhead capabilities
+    ,lookAhead,lookAheadM,lookAheadE
      -- below is for implementation of BinaryParser (for Int64 and Lazy bytestrings)
     ,skip,bytesRead,isEmpty,remaining,spanOf
     ,getWord8,getByteString
@@ -87,7 +93,7 @@ import qualified Data.ByteString as S(concat,length,null,splitAt)
 import qualified Data.ByteString as S(unpack) -- XXX testing
 import qualified Data.ByteString.Internal as S(ByteString,toForeignPtr,inlinePerformIO)
 import qualified Data.ByteString.Unsafe as S(unsafeIndex)
-import qualified Data.ByteString.Lazy as L(take,drop,length,span,splitAt,toChunks,fromChunks,null)
+import qualified Data.ByteString.Lazy as L(take,drop,length,span,toChunks,fromChunks,null)
 import qualified Data.ByteString.Lazy as L(pack) -- XXX testing
 import qualified Data.ByteString.Lazy.Internal as L(ByteString(..),chunk)
 import qualified Data.Foldable as F(foldr,foldr1)    -- used with Seq
@@ -128,6 +134,12 @@ data S user = S { top :: {-# UNPACK #-} !S.ByteString
 
 -- Private Internal error handling stack type
 -- This must NOT be exposed by this module
+--
+-- The ErrorFrame is the top-level error handler setup when execution begins.
+-- It starts with the Bool set to True: meaning suspend can ask for more input.
+-- Once suspend get 'Nothing' in reply the Bool is set to False, which means
+-- that 'suspend' should no longer ask for input -- the input is finished.
+-- Why store the Bool there?  It was handy when I needed to add it.
 data FrameStack b e w user m = ErrorFrame (e -> (S user) -> m (IResult w user m b)) -- top level handler
                                           Bool -- True at start, False if Nothing passed to suspend continuation
                              | HandlerFrame ( (S user) -> FrameStack b e w user m
@@ -135,6 +147,7 @@ data FrameStack b e w user m = ErrorFrame (e -> (S user) -> m (IResult w user m 
                                        (S user)  -- stored state to pass to handler
                                        (Seq L.ByteString)  -- additional input to hass to handler
                                        (FrameStack b e w user m)  -- earlier/deeper/outer handlers
+                             | FutureFrame (S user) (Seq L.ByteString) (FrameStack b e w user m) -- for look ahead
 
 type Success b e r w user m a =
        (a -> r -> w -> (S user) -> FrameStack b e w user m -> m (IResult w user m b))
@@ -155,6 +168,67 @@ type CompGet r w user m = InternalGet String r w user m
 
 -- Simple external monad type
 type Get = CompGet () () () Identity
+
+
+-- These implement the checkponting needed to store and revive the
+-- state for lookAhead.  They are fragile because the setCheckpoint
+-- must preceed either useCheckpoint or clearCheckpoint but not both.
+-- The FutureFrame must be the most recent handler, so the commands
+-- must be in the same scope depth.  Because of these constraints, the reader
+-- value 'r' does not need to be stored and can be taken from the InternalGet
+-- parameter.
+--
+-- IMPORTANT: Any FutureFrame at the top level(s) is discarded by throwError.
+setCheckpoint = InternalGet $ \ sc r w s pc -> sc () r w s (FutureFrame s mempty pc)
+useCheckpoint = InternalGet $ \ sc r w (S _ _ _ user) (FutureFrame s future pc) ->
+  let (S ss bs n _) = collect s future
+  in sc () r w (S ss bs n user) pc
+clearCheckpoint = InternalGet $ \ sc r w s (FutureFrame _s _future pc) -> sc () r w s pc
+
+-- | 'lookAhead' runs the @todo@ action and then rewinds only the
+-- BinaryParser state.  Any new input from 'suspend' or changes from
+-- 'putAvailable' are kept.  Changes to the user state (MonadState)
+-- are kept.  The MonadWriter output is retained.
+--
+-- If an error is thrown then the entire monad state is reset to last
+-- catchError as usual.
+lookAhead :: (Monad m, Error e) => InternalGet e r w user m a -> InternalGet e r w user m a
+lookAhead todo = do
+  setCheckpoint
+  a <- todo
+  useCheckpoint
+  return a
+
+-- | 'lookAheadM' runs the @todo@ action. If the action returns 'Nothing' then the 
+-- BinaryParser state is rewound (as in 'lookAhead').  If the action return 'Just' then
+-- the BinaryParser is not rewound, and lookAheadM acts as an identity.
+--
+-- If an error is thrown then the entire monad state is reset to last
+-- catchError as usual.
+lookAheadM :: (Monad m, Error e) => InternalGet e r w user m (Maybe a) -> InternalGet e r w user m (Maybe a)
+lookAheadM todo = do
+  checkpoint <- setCheckpoint
+  a <- todo
+  maybe useCheckpoint (\_ -> clearCheckpoint) a
+  return a
+
+-- | 'lookAheadE' runs the @todo@ action. If the action returns 'Left' then the 
+-- BinaryParser state is rewound (as in 'lookAhead').  If the action return 'Right' then
+-- the BinaryParser is not rewound, and lookAheadE acts as an identity.
+--
+-- If an error is thrown then the entire monad state is reset to last
+-- catchError as usual.
+lookAheadE :: (Monad m, Error e) => InternalGet e r w user m (Either a b) -> InternalGet e r w user m (Either a b)
+lookAheadE todo = do
+  checkpoint <- setCheckpoint
+  a <- todo
+  either (\_ -> useCheckpoint) (\_ -> clearCheckpoint) a
+  return a
+
+-- 'collect' is used by 'putCheckpoint' and 'throwError'
+collect :: (S user) -> Seq L.ByteString -> (S user)
+collect s@(S ss bs n user) future | Data.Sequence.null future = s
+                                  | otherwise = S ss (mappend bs (F.foldr1 mappend future)) n user
 
 -- Put the Show instances here
 
@@ -189,7 +263,10 @@ instance (Show user, Show a, Show w) => Show (IResult w user m a) where
 
 instance Show user => Show (FrameStack b e w user m) where
   showsPrec _ (ErrorFrame _ p) =(++) "(ErrorFrame <e->s->m b> " . shows p . (")"++)
-  showsPrec _ (HandlerFrame _ s future pc) = ("(HandlerFrame <s->FrameStack b e s m->e->m b> ("++)
+  showsPrec _ (HandlerFrame _ s future pc) = ("(HandlerFrame <> ("++)
+                                     . shows s . (") ("++) . shows future . (") ("++)
+                                     . shows pc . (")"++)
+  showsPrec _ (FutureFrame s future pc) =  ("(FutureFrame <s->FrameStack b e s m->e->m b> ("++)
                                      . shows s . (") ("++) . shows future . (") ("++)
                                      . shows pc . (")"++)
 
@@ -232,6 +309,8 @@ getAvailable = InternalGet $ \ sc r w s@(S ss bs _ _) pc -> sc (L.chunk ss bs) r
 -- MonadPlus branches.  I think all pending branches have to have
 -- fewer bytesRead than the current one.  If this is wrong then an
 -- error will be thrown.
+--
+-- WARNING : 'putAvailable' is still untested.
 putAvailable :: L.ByteString -> InternalGet e r w user m ()
 putAvailable bsNew = InternalGet $ \ sc r w (S _ss _bs n user) pc ->
   let s' = case bsNew of
@@ -240,13 +319,22 @@ putAvailable bsNew = InternalGet $ \ sc r w (S _ss _bs n user) pc ->
       rebuild (HandlerFrame catcher (S ss1 bs1 n1 user1) future pc') =
                HandlerFrame catcher sNew mempty (rebuild pc')
         where balance = n - n1
-              whole | balance < 0 = error "Impossible? Cannot rebuild stack in MyGet.putAvailable: balance is negative!"
+              whole | balance < 0 = error "Impossible? Cannot rebuild HandlerFrame in MyGet.putAvailable: balance is negative!"
                     | otherwise = L.take balance $ L.chunk ss1 bs1 `mappend` F.foldr mappend mempty future
-              sNew | balance /= L.length whole = error "Impossible? MyGet.putAvailable.rebuild.sNew assertion failed."
+              sNew | balance /= L.length whole = error "Impossible? MyGet.putAvailable.rebuild.sNew HandlerFrame assertion failed."
                    | otherwise = case mappend whole bsNew of
                                    L.Empty -> S mempty mempty n1 user1
                                    L.Chunk ss2 bs2 -> S ss2 bs2 n1 user1
-      rebuild x = x
+      rebuild (FutureFrame (S ss1 bs1 n1 user1) future pc') =
+               FutureFrame sNew mempty (rebuild pc')
+        where balance = n - n1
+              whole | balance < 0 = error "Impossible? Cannot rebuild FutureFrame in MyGet.putAvailable: balance is negative!"
+                    | otherwise = L.take balance $ L.chunk ss1 bs1 `mappend` F.foldr mappend mempty future
+              sNew | balance /= L.length whole = error "Impossible? MyGet.putAvailable.rebuild.sNew FutureFrame assertion failed."
+                   | otherwise = case mappend whole bsNew of
+                                   L.Empty -> S mempty mempty n1 user1
+                                   L.Chunk ss2 bs2 -> S ss2 bs2 n1 user1
+      rebuild x@(ErrorFrame {}) = x
   in sc () r w s' (rebuild pc)
 
 -- Internal access to full internal state, as helepr functions
@@ -287,15 +375,16 @@ ensureBytes n = do
 -- | Pull @n@ bytes from the unput, as a lazy ByteString.  This will
 -- suspend if there is too little data.
 getLazyByteString :: ({-Show user,-} Monad m)=> Int64 -> CompGet r w user m L.ByteString
-getLazyByteString n = do
+getLazyByteString n | n<=0 = return mempty
+                    | otherwise = do
   (S ss bs offset user) <- getFull
-  let (consume,rest) = L.splitAt n (L.chunk ss bs)
-  if n == L.length consume
-    then do case rest of
-              L.Empty -> putFull (S mempty mempty (offset + n) user)
-              L.Chunk ss' bs' -> putFull (S ss' bs' (offset + n) user)
-            return consume
-    else suspendMsg "getLazyByteString failed" >> getLazyByteString n
+  case splitAtOrDie n (L.chunk ss bs) of
+    Just (consume,rest) ->do
+       case rest of
+         L.Empty -> putFull (S mempty mempty (offset + n) user)
+         L.Chunk ss' bs' -> putFull (S ss' bs' (offset + n) user)
+       return consume
+    Nothing -> suspendMsg "getLazyByteString failed" >> getLazyByteString n
 {-# INLINE getLazyByteString #-} -- important
 
 -- | 'suspend' is supposed to allow the execution of the monad to be
@@ -326,13 +415,18 @@ instance (({-Show user,-} Monad m)) => MonadSuspend (InternalGet e r w user m) w
            -- addFuture puts the new data in 'future' where throwError's collect can find and use it
            addFuture bs (HandlerFrame catcher s future pc) =
                          HandlerFrame catcher s (future |> bs) (addFuture bs pc)
-           addFuture _bs x = x
+           addFuture bs (FutureFrame s future pc) =
+                         FutureFrame s (future |> bs) (addFuture bs pc)
+           addFuture _bs x@(ErrorFrame {}) = x
            -- Once suspend is given Nothing, it remembers this and always returns False
            checkBool (ErrorFrame _ b) = b
            checkBool (HandlerFrame _ _ _ pc) = checkBool pc
+           checkBool (FutureFrame _ _ pc) = checkBool pc
            rememberFalse (ErrorFrame ec _) = ErrorFrame ec False
            rememberFalse (HandlerFrame catcher s future pc) =
                           HandlerFrame catcher s future (rememberFalse pc)
+           rememberFalse (FutureFrame s future pc) =
+                          FutureFrame s future (rememberFalse pc)
           
 -- A unique sort of command...
 
@@ -346,6 +440,7 @@ discardInnerHandler :: ({-Show user,-} Monad m) => InternalGet e r w s m ()
 discardInnerHandler = InternalGet $ \ sc r w s pcIn ->
   let pcOut = case pcIn of ErrorFrame {} -> pcIn
                            HandlerFrame _ _ _ pc' -> pc'
+                           FutureFrame _ _ pc' -> pc'
   in sc () r w s pcOut
 {-# INLINE discardInnerHandler #-}
 
@@ -359,6 +454,7 @@ discardAllHandlers :: ({-Show user,-} Monad m) => InternalGet e r w s m ()
 discardAllHandlers = InternalGet $ \ sc r w s pcIn ->
   let base pc@(ErrorFrame {}) = pc
       base (HandlerFrame _ _ _ pc) = base pc
+      base (FutureFrame _ _ pc) = base pc
   in sc () r w s (base pcIn)
 {-# INLINE discardAllHandlers #-}
 
@@ -411,7 +507,8 @@ spanOf f = do let loop = do (S ss bs n user) <- getFull
 -- bytestring, otherwise it fits in a single chunk and refers to the
 -- same immutable memory block as the whole chunk.
 getByteString :: ({-Show user,-} Monad m) => Int -> CompGet r w user m S.ByteString
-getByteString nIn = do
+getByteString nIn | nIn <= 0 = return mempty
+                  | otherwise = do
   (S ss bs n user) <- getFull
   if nIn < S.length ss
     then do let (pre,post) = S.splitAt nIn ss
@@ -515,12 +612,14 @@ instance ({-Show user,-} Monad m) => P.BinaryParser (CompGet r w user m) where
 -- Below here are the class instances
     
 instance ({-Show user,-} Monad m,Error e) => Functor (InternalGet e r w user m) where
---fmap f m = m >>= return . f
   fmap f m = InternalGet (\sc -> unInternalGet m (sc . f))
+  {-# INLINE fmap #-}
 
 instance ({-Show user,-} Monad m,Error e) => Monad (InternalGet e r w user m) where
   return a = InternalGet (\sc -> sc a)
+  {-# INLINE return #-}
   m >>= k  = InternalGet (\sc -> unInternalGet m (\a -> unInternalGet (k a) sc))
+  {-# INLINE (>>=) #-}
   fail msg = throwError (strMsg msg)
 
 instance MonadTrans (InternalGet e r w s) where
@@ -530,13 +629,11 @@ instance ({-Show user,-} MonadIO m,Error e) => MonadIO (InternalGet e r w user m
   liftIO = lift . liftIO
 
 instance ({-Show user,-} Monad m,Error e) => MonadError e (InternalGet e r w user m) where
-  throwError msg = InternalGet $ \_sc _r _w s pc ->
-    case pc of ErrorFrame ec _ -> ec msg s
-               HandlerFrame catcher s1 future pc1 -> catcher (collect s1 future) pc1 msg
-   where {- suspend might have been adding to the future field, collect it all now -}
-         collect :: (S user) -> Seq L.ByteString -> (S user)
-         collect s@(S ss bs n user) future | Data.Sequence.null future = s
-                                           | otherwise = S ss (mappend bs (F.foldr1 mappend future)) n user
+  throwError msg = InternalGet $ \_sc _r _w s pcIn ->
+    let go (ErrorFrame ec _) = ec msg s
+        go (HandlerFrame catcher s1 future pc1) = catcher (collect s1 future) pc1 msg
+        go (FutureFrame _ _ pc1) = go pc1 -- discard FutureFrame(s) between inner scope and a handler or error frame
+    in go pcIn
 
   catchError mayFail handler = InternalGet $ \sc r w s pc ->
     let pcWithHandler = let catcher s1 pc1 e1 = unInternalGet (handler e1) sc r w s1 pc1
@@ -572,6 +669,21 @@ instance ({-Show user,-} Monad m,Error e) => Applicative (InternalGet e r w user
 instance ({-Show user,-} Monad m,Error e) => Alternative (InternalGet e r w user m) where
   empty = mzero
   (<|>) = mplus
+
+-- | I use "splitAt" without tolerating too few bytes, so write a Maybe version.
+-- This is the only place I invoke L.Chunk as constructor instead of pattern matching.
+-- I claim that the first argument cannot be empty.
+splitAtOrDie :: Int64 -> L.ByteString -> Maybe (L.ByteString, L.ByteString)
+splitAtOrDie i ps | i <= 0 = Just (L.Empty, ps)
+splitAtOrDie i L.Empty = Nothing
+splitAtOrDie i (L.Chunk x xs) | i < len = let (pre,post) = S.splitAt (fromIntegral i) x
+                                          in Just (L.Chunk pre L.Empty
+                                                  ,L.Chunk post xs)
+                              | otherwise = case splitAtOrDie (i-len) xs of
+                                              Nothing -> Nothing
+                                              Just (y1,y2) -> Just (L.Chunk x y1,y2)
+  where len = fromIntegral (S.length x)
+{-# INLINE splitAtOrDie #-}
 
 ------------------------------------------------------------------------
 -- getPtr copied from binary's Get.hs
@@ -648,6 +760,7 @@ countPC :: ({-Show user,-} Monad m) => CompGet r w user m Int
 countPC = InternalGet $ \ sc r w s pc ->
   let go (ErrorFrame {}) i = i
       go (HandlerFrame _ _ _ pc') i = go pc' $! succ i
+      go (FutureFrame _ _ pc') i = go pc' $! succ i
   in sc (go pc 0) r w s pc
 
 {- testDepth result on my machine:
