@@ -88,6 +88,7 @@ module Text.ProtocolBuffers.MyGetW
     ,CompGet,runCompGet,CompResult(..)
      -- main primitives
     ,ensureBytes,getStorable,getLazyByteString,suspendUntilComplete
+    ,getAvailable,putAvailable
      -- lookAhead capabilities
     ,lookAhead,lookAheadM,lookAheadE
      -- too good not to include with this MonadCont
@@ -142,6 +143,8 @@ import Foreign.Storable(Storable(peek,sizeOf))
 import GHC.Base(Int(..),uncheckedShiftL#)
 import GHC.Word(Word16(..),Word32(..),Word64(..),uncheckedShiftL64#)
 #endif
+
+default()
 
 -- Simple external return type
 data Result a = Failed {-# UNPACK #-} !Int64 String
@@ -209,6 +212,7 @@ type Get b = CompGet b () () () Identity
 -- parameter.
 --
 -- IMPORTANT: Any FutureFrame at the top level(s) is discarded by throwError.
+setCheckpoint,useCheckpoint,clearCheckpoint :: InternalGet b e r w user m ()
 setCheckpoint = InternalGet $ \ sc r w s (TopFrame u pc) -> sc () r w s (TopFrame (succ u) (FutureFrame u s mempty pc))
 useCheckpoint = InternalGet $ \ sc r w (S _ _ _ user) (TopFrame u (FutureFrame _u s future pc)) ->
   let (S ss bs n _) = collect s future
@@ -237,7 +241,7 @@ lookAhead todo = do
 -- catchError as usual.
 lookAheadM :: (Monad m, Error e) => InternalGet b e r w user m (Maybe a) -> InternalGet b e r w user m (Maybe a)
 lookAheadM todo = do
-  checkpoint <- setCheckpoint
+  setCheckpoint
   a <- todo
   maybe useCheckpoint (\_ -> clearCheckpoint) a
   return a
@@ -250,7 +254,7 @@ lookAheadM todo = do
 -- catchError as usual.
 lookAheadE :: (Monad m, Error e) => InternalGet b e r w user m (Either a b) -> InternalGet b e r w user m (Either a b)
 lookAheadE todo = do
-  checkpoint <- setCheckpoint
+  setCheckpoint
   a <- todo
   either (\_ -> useCheckpoint) (\_ -> clearCheckpoint) a
   return a
@@ -317,7 +321,7 @@ runCompGet g rIn userIn bsIn = liftM convert (unGet g sIn scIn)
                            L.Chunk ss bs -> S ss bs 0 userIn
         scIn a _r w sOut _pc = return (IFinished w sOut a)
         unGet (InternalGet f) s sc = f sc rIn mempty s (TopFrame 1 (ErrorFrame returnError True))
-            where returnError msg s = return (IFailed (consumed s) msg)
+            where returnError msg sErr = return (IFailed (consumed sErr) msg)
         convert :: (Monad m) => IResult w user m a -> CompResult w user m a
         convert (IFailed n msg) = CFailed n msg
         convert (IFinished w (S ss bs n user) a) = CFinished (L.chunk ss bs) n w user a
@@ -330,7 +334,7 @@ runGet g bsIn = convert (runIdentity (unGet g sIn scIn))
                            L.Chunk ss bs -> S ss bs 0 ()
         scIn a _r w sOut _pc = return (IFinished w sOut a)
         unGet (InternalGet f) s sc = f sc mempty mempty s (TopFrame 1 (ErrorFrame ec True))
-            where ec msg s = return (IFailed (consumed s) msg)
+            where ec msg sErr = return (IFailed (consumed sErr) msg)
 
         convert :: IResult () () Identity a -> Result a
         convert (IFailed n msg) = Failed n msg
@@ -402,7 +406,7 @@ suspendMsg msg = do continue <- suspend
 -- This will suspend if there is to little data.
 ensureBytes :: ({-Show user,-} Monad m) => Int64 -> CompGet b r w user m ()
 ensureBytes n = do
-  (S ss bs offset user) <- getFull
+  (S ss bs offset _user) <- getFull
   if n < fromIntegral (S.length ss)
     then return ()
     else do if n == L.length (L.take n (L.chunk ss bs))
@@ -438,10 +442,11 @@ class MonadSuspend m where
 -- by 'addFuture' to ('S' user) and to the packaging of the resumption
 -- function in 'IResult'('IPartial').
 instance (({-Show user,-} Monad m)) => MonadSuspend (InternalGet b e r w user m) where
-    suspend = InternalGet $ \ sc r w sIn@(S ss bs n user) pcIn@(TopFrame u pcInside) ->
+    suspend = InternalGet $ \ sc r w sIn pcIn@(TopFrame u pcInside) ->
       if checkBool pcInside -- Has Nothing ever been given to a partial continuation?
         then let f Nothing = let pcOut = TopFrame u (rememberFalse pcInside)
                              in sc False r w sIn pcOut
+                 f (Just bs') | L.null bs' = undefined
                  f (Just bs') = let sOut = appendBS sIn bs'
                                     pcOut = TopFrame u (addFuture bs' pcInside)
                                 in sc True r w sOut pcOut
@@ -537,7 +542,7 @@ remaining = do (S ss bs _ _) <- getFull
 -- | Return True if the number of bytes 'remaining' is 0.  Any futher
 -- attempts to read an empty parser will cal 'suspend'.
 isEmpty :: ({-Show user,-} Monad m) => CompGet b r w user m Bool
-isEmpty = do (S ss bs n user) <- getFull
+isEmpty = do (S ss bs _ _) <- getFull
              return $ (S.null ss) && (L.null bs)
 
 spanOf :: ({-Show user,-} Monad m) => (Word8 -> Bool) ->  CompGet b r w user m (L.ByteString)
@@ -702,9 +707,9 @@ instance (Show user, Error e) => MonadCont (InternalGet b e r w user IO) where
     let kont a = InternalGet $ \_sc _r _w sDyn (TopFrame uDyn pcDyn) ->
           scCaptured a rCaptured wCaptured sDyn (TopFrame uDyn (rebuild sDyn pcDyn pcCaptured))
   -- Error vs any
-        rebuild sNew new@(ErrorFrame {}) (ErrorFrame {}) = new  -- adopt new version of shared dynamic root
-        rebuild sNew new@(HandlerFrame _ _ _ _ pcNew) old@(ErrorFrame {}) = rebuild sNew pcNew old
-        rebuild sNew new@(FutureFrame _ _ _ pcNew) old@(ErrorFrame {}) = rebuild sNew pcNew old
+        rebuild _sNew new@(ErrorFrame {}) (ErrorFrame {}) = new  -- adopt new version of shared dynamic root
+        rebuild sNew (HandlerFrame _ _ _ _ pcNew) old@(ErrorFrame {}) = rebuild sNew pcNew old
+        rebuild sNew (FutureFrame _ _ _ pcNew) old@(ErrorFrame {}) = rebuild sNew pcNew old
         rebuild sNew new@(ErrorFrame {}) (HandlerFrame uOld catcherOld _ _ pcOld)
             = HandlerFrame uOld catcherOld sNew mempty (rebuild sNew new pcOld)
         rebuild sNew new@(ErrorFrame {}) (FutureFrame uOld _ _ pcOld)
@@ -751,7 +756,7 @@ instance ({-Show user,-} Monad m, Error e, Monoid w) => MonadWriter w (InternalG
 
 instance ({-Show user,-} Monad m, Error e) => MonadReader r (InternalGet b e r w user m) where
   ask = InternalGet (\sc r -> sc r r)
-  local f m = InternalGet (\sc r -> let sc' a _ = sc' a r
+  local f m = InternalGet (\sc r -> let sc' a _ = sc a r
                               in unInternalGet m sc' (f r))
               
 instance ({-Show user,-} Monad m,Error e) => MonadState user (InternalGet b e r w user m) where
@@ -776,7 +781,7 @@ instance ({-Show user,-} Monad m,Error e) => Alternative (InternalGet b e r w us
 -- I claim that the first argument cannot be empty.
 splitAtOrDie :: Int64 -> L.ByteString -> Maybe (L.ByteString, L.ByteString)
 splitAtOrDie i ps | i <= 0 = Just (L.Empty, ps)
-splitAtOrDie i L.Empty = Nothing
+splitAtOrDie _i L.Empty = Nothing
 splitAtOrDie i (L.Chunk x xs) | i < len = let (pre,post) = S.splitAt (fromIntegral i) x
                                           in Just (L.Chunk pre L.Empty
                                                   ,L.Chunk post xs)
@@ -866,7 +871,7 @@ testDepth = test depth [] >>= feed12 >>= feedNothing where
     (_,w) <- listen $ do
       chomp
       flip catchError (\_ -> p "handler before getCC1") $ do
-        (jumpWith,i) <- getCC1 0                              -- jump into first handler from nested scope
+        (jumpWith,i) <- getCC1 (0 :: Int)                  -- jump into first handler from nested scope
         pr ("after jump and with "++show i)
         p "after getCC1, inside 1 handler"
         flip catchError (\_ -> p "handler after getCC1" >> mzero) $ do
@@ -880,7 +885,7 @@ testDepth = test depth [] >>= feed12 >>= feedNothing where
     j2 <- flip catchError (\_ -> p "last handler" >> return Nothing) $ do
             chomp
             p "before inner jump2"
-            (jump2,j) <- getCC1 0                        -- jump2 to inside this scope from afterwards
+            (jump2,j) <- getCC1 (0 :: Int)                -- jump2 to inside this scope from afterwards
             p ("after inner jump2 with "++ show j)
             chomp
             if odd j then throwError "Ouch"
@@ -934,7 +939,7 @@ wci = runWCI $ do
 
 wci2 = runWCI $ do
   tell "a"
-  (jump,i) <- getCC1 0
+  (jump,i) <- getCC1 (0 :: Int)
   pr ("I see ",i)
   if i < 3
     then do
@@ -966,7 +971,7 @@ wci2 = runWCI $ do
 -- Test jumping into and out of the 'lpl : listen . pass .listen scope:
 wci3 = runWCI $ do
   tell "a0"
-  (top,j) <- getCC1 0
+  (top,j) <- getCC1 (0 :: Int)
   pr ("top sees",j)
   x <- listen (tell ",b1")
   pr ("listen",x)
