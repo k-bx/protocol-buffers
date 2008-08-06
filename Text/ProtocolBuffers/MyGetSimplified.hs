@@ -110,7 +110,7 @@ data S = S { top :: {-# UNPACK #-} !S.ByteString
 -- Why store the Bool there?  It was handy when I needed to add it.
 data FrameStack b = ErrorFrame (String -> S -> Result b) -- top level handler
                                Bool -- True at start, False if Nothing passed to suspend continuation
-                  | HandlerFrame ( S -> FrameStack b -> String -> Result b )  -- encapsulated handler
+                  | HandlerFrame (Maybe ( S -> FrameStack b -> String -> Result b ))  -- encapsulated handler
                                  S  -- stored state to pass to handler
                                  (Seq L.ByteString)  -- additional input to hass to handler
                                  (FrameStack b)  -- earlier/deeper/outer handlers

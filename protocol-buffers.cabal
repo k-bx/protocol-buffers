@@ -74,4 +74,5 @@ Library
                    PatternGuards,
                    MagicHash,
                    GeneralizedNewtypeDeriving,
-                   ScopedTypeVariables
+                   ScopedTypeVariables,
+                   RankNTypes

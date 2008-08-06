@@ -9,13 +9,13 @@
 -- the MonadCont instances or machinery, and hides the "b" type variable with
 -- a forall.
 --
--- This started out as an improvement to Data.Binary.Stric.IncrementalGet with
+-- This started out as an improvement to Data.Binary.Strict.IncrementalGet with
 -- slightly better internals.  The simplified "get,runGet,Result" trio with the
 -- 'Data.Binary.Strict.Class.BinaryParser' instance are an _untested_
 -- upgrade from IncrementalGet.  Especially untested are the
 -- strictness properties.
 --
--- 'Get' implement usefully Applicative and Monad, MonadError,
+-- 'Get' implements usefully Applicative and Monad, MonadError,
 -- Alternative and MonadPlus, and MonadCont.
 -- 
 -- The 'CompGet' monad transformer has those and also useful MonadRead,
@@ -166,30 +166,39 @@ import GHC.Word(Word16(..),Word32(..),Word64(..),uncheckedShiftL64#)
 default()
 
 -- Simple external return type
-data Result y a = Failed (Seq y) {-# UNPACK #-} !Int64 String
-                | Finished (Seq y) {-# UNPACK #-} !L.ByteString {-# UNPACK #-} !Int64 a
-                | Partial (Seq y) (Either ( Result y a  )  -- use laziness
-                                          ( Maybe L.ByteString -> Result y a ))
+data Result y a = Failed !(Seq y) {-# UNPACK #-} !Int64 String
+                | Finished !(Seq y) {-# UNPACK #-} !L.ByteString {-# UNPACK #-} !Int64 a
+                | Partial !(Seq y) !(Either ( Result y a  )  -- use laziness
+                                            ( Maybe L.ByteString -> Result y a ))
 
 -- Complex external return type
 data CompResult y w user m a =
-    CFailed (Seq y) {-# UNPACK #-} !Int64 String
-  | CFinished  (Seq y) {-# UNPACK #-} !L.ByteString {-# UNPACK #-} !Int64 w user a
-  | CPartial (Seq y) (Either ( m (CompResult y w user m a) ) -- use laziness
-                                                        ( Maybe L.ByteString -> m (CompResult y w user m a) ))
+    CFailed !(Seq y) {-# UNPACK #-} !Int64 String
+  | CFinished  !(Seq y) {-# UNPACK #-} !L.ByteString {-# UNPACK #-} !Int64 w user a
+  | CPartial !(Seq y) !(Either ( m (CompResult y w user m a) ) -- use laziness
+                                   ( Maybe L.ByteString -> m (CompResult y w user m a) ))
 
 -- Internal type, converted to an external type before returning to caller.
 data IResult y e w user m a =
-    IFailed (Seq y) {-# UNPACK #-} !Int64 e
-  | IFinished (Seq y) w {-# UNPACK #-} !(S user) a
-  | IPartial (Seq y) (Either ( m (IResult y e w user m a) )
-                             ( Maybe L.ByteString -> m (IResult y e w user m a) ))
+    IFailed !(Seq y) {-# UNPACK #-} !Int64 e
+  | IFinished !(Seq y) w {-# UNPACK #-} !(S user) a
+  | IPartial !(Seq y) !(Either ( m (IResult y e w user m a) )
+                               ( Maybe L.ByteString -> m (IResult y e w user m a) ))
 
--- easier name
-type SuccessContinuation b y e r w user m a = (a -> r -> w -> (S user) -> TopFrame b y e w user m -> m (IResult y e w user m b))
+-- Internal state type, not exposed to the user.
+data S user = S { top :: {-# UNPACK #-} !S.ByteString
+                , current :: {-# UNPACK #-} !L.ByteString
+                , consumed :: {-# UNPACK #-} !Int64
+                , user_field :: user
+                }
+  deriving Show
 
-type ErrorHandler b y e w user m =  ( (S user) -> TopFrame b y e w user m
-                                               -> e -> m (IResult y e w user m b))
+-- easier names
+type SuccessContinuation b y e r w user m a =
+  (a -> r -> w -> (S user) -> TopFrame b y e w user m -> m (IResult y e w user m b))
+
+type ErrorHandler b y e w user m =
+  ( (S user) -> TopFrame b y e w user m -> e -> m (IResult y e w user m b))
 
 -- Private Internal error handling stack type
 -- This must NOT be exposed by this module
@@ -197,7 +206,7 @@ data FrameStack b y e w user m =
     ErrorFrame { top_error_handler :: ErrorHandler b y e w user m -- top level handler
                , input_continues :: {-# UNPACK #-} !Bool -- True at start, False if Nothing passed to suspend continuation
                }
-  | HandlerFrame { frame_id :: {-# UNPACK #-} !Word64
+  | HandlerFrame { frame_id :: {-# UNPACK #-} !Word64 -- needed for MonadCont(callCC)
                  , error_handler :: !(Maybe (ErrorHandler b y e w user m))  -- encapsulated handler
                  , stored_state :: {-# UNPACK #-} !(S user)  -- stored state to pass to handler
                  , future_input :: {-# UNPACK #-} !(Seq L.ByteString)  -- additiona input to hass to handler
@@ -215,14 +224,15 @@ data CallCCStack b y e w user m =
 -- TopFrame is used as storage for a unique counter (Word64) that is
 -- used to label the HanderFrames in increasing order as they are
 -- created.  This is only needed so that callCC can distinguish the age
--- of items in the FrameStack as being present at the user of 
+-- of items in the FrameStack as being present at the original use of 
 -- callCC or being newer.
 --
--- TopFrame's unique value is used and incremented when a new HandlerFrame is
--- allocated by catchError.
+-- TopFrame's unique value is used and incremented when a new
+-- HandlerFrame is allocated by catchError.  It will start at 1.
 --
--- The (Seq y) of of yielded values in the TopFrame are the yielded results
-data TopFrame b y e w user m  = TopFrame Word64 (Seq y) (FrameStack b y e w user m) -- next unique number for HandlerFrame, starts at 1
+-- The (Seq y) of of yielded values in the TopFrame are the yielded
+-- results which are waiting to be put in the next IReturn value.
+data TopFrame b y e w user m  = TopFrame Word64 (Seq y) (FrameStack b y e w user m)
   deriving Show
 
 -- Internal monad type
@@ -235,7 +245,7 @@ newtype InternalGet b y e r w user m a = InternalGet {
               -> m (IResult y e w user m b) -- operation
       }
 
--- Complex external monad type
+-- Complex external monad type, but errors are String
 type CompGet b y r w user m = InternalGet b y String r w user m
 
 -- Simple external monad type
@@ -270,7 +280,9 @@ clearCheckpoint = InternalGet $ \ sc r w s (TopFrame u ys (HandlerFrame _u catch
 --
 -- If an error is thrown then the entire monad state is reset to last
 -- catchError as usual.
-lookAhead :: (Monad m, Error e) => InternalGet b y e r w user m a -> InternalGet b y e r w user m a
+lookAhead :: (Monad m, Error e)
+          => InternalGet b y e r w user m a
+          -> InternalGet b y e r w user m a
 lookAhead todo = do
   setCheckpoint
   a <- todo
@@ -283,7 +295,9 @@ lookAhead todo = do
 --
 -- If an error is thrown then the entire monad state is reset to last
 -- catchError as usual.
-lookAheadM :: (Monad m, Error e) => InternalGet b y e r w user m (Maybe a) -> InternalGet b y e r w user m (Maybe a)
+lookAheadM :: (Monad m, Error e)
+           => InternalGet b y e r w user m (Maybe a)
+           -> InternalGet b y e r w user m (Maybe a)
 lookAheadM todo = do
   setCheckpoint
   a <- todo
@@ -296,7 +310,9 @@ lookAheadM todo = do
 --
 -- If an error is thrown then the entire monad state is reset to last
 -- catchError as usual.
-lookAheadE :: (Monad m, Error e) => InternalGet b y e r w user m (Either a b) -> InternalGet b y e r w user m (Either a b)
+lookAheadE :: (Monad m, Error e)
+           => InternalGet b y e r w user m (Either a b)
+           -> InternalGet b y e r w user m (Either a b)
 lookAheadE todo = do
   setCheckpoint
   a <- todo
@@ -339,15 +355,6 @@ showsEither :: Either a b -> ShowS
 showsEither (Left _) = shows " (Left <>)"
 showsEither (Right _) = shows " (Right <>)"
 
-
--- Internal state type, not exposed to the user.
-data S user = S { top :: {-# UNPACK #-} !S.ByteString
-                , current :: {-# UNPACK #-} !L.ByteString
-                , consumed :: {-# UNPACK #-} !Int64
-                , user_field :: user
-                }
-  deriving Show
-
 chunk :: S user -> L.ByteString
 chunk s = L.chunk (top s) (current s)
 
@@ -360,7 +367,7 @@ runCompGet g rIn userIn bsIn = liftM convert (unInternalGet g scIn rIn mempty sI
   where sIn = case bsIn of L.Empty -> S mempty mempty 0 userIn
                            L.Chunk ss bs -> S ss bs 0 userIn
         scIn a _r w sOut (TopFrame _u ys _pc) = return (IFinished ys w sOut a)
-        ecIn sOut (TopFrame _u ys _pc) msg = return (IFailed ys (consumed sOut) msg) -- undefined way to get ys out here
+        ecIn sOut (TopFrame _u ys _pc) msg = return (IFailed ys (consumed sOut) msg)
 
         convert :: (Monad m) => IResult y String w user m a -> CompResult y w user m a
         convert (IFailed ys n msg) = CFailed ys n msg
@@ -375,7 +382,7 @@ runGet g bsIn = convert (runIdentity (unInternalGet g scIn () mempty sIn (TopFra
   where sIn = case bsIn of L.Empty -> S mempty mempty 0 ()
                            L.Chunk ss bs -> S ss bs 0 ()
         scIn a _r w sOut (TopFrame _u ys _pc) = return (IFinished ys w sOut a)
-        ecIn sOut (TopFrame _u ys _pc) msg = return (IFailed ys (consumed sOut) msg) -- undefined way to get ys out here
+        ecIn sOut (TopFrame _u ys _pc) msg = return (IFailed ys (consumed sOut) msg)
 
         convert :: IResult y String () () Identity a -> Result y a
         convert (IFailed ys n msg) = Failed ys n msg
@@ -409,9 +416,9 @@ putAvailable bsNew = InternalGet $ \ sc r w (S _ss _bs n user) (TopFrame uIn ys 
       rebuild (HandlerFrame u catcher sOld@(S _ss1 _bs1 n1 user1) future pc') =
                HandlerFrame u catcher sNew mempty (rebuild pc')
         where balance = n - n1
-              whole | balance < 0 = error "Impossible? Cannot rebuild HandlerFrame in MyGet.putAvailable: balance is negative!"
+              whole | balance < 0 = error "Impossible? Cannot rebuild HandlerFrame in MyGetW.putAvailable: balance is negative!"
                     | otherwise = L.take balance . chunk $ collect sOld future
-              sNew | balance /= L.length whole = error "Impossible? MyGet.putAvailable.rebuild.sNew HandlerFrame assertion failed."
+              sNew | balance /= L.length whole = error "Impossible? MyGetW.putAvailable.rebuild.sNew HandlerFrame assertion failed."
                    | otherwise = case mappend whole bsNew of
                                    L.Empty -> S mempty mempty n1 user1
                                    L.Chunk ss2 bs2 -> S ss2 bs2 n1 user1
@@ -455,8 +462,8 @@ ensureBytes n = do
 {-# INLINE ensureBytes #-}
 
 -- | Pull @n@ bytes from the unput, as a lazy ByteString.  This will
--- suspend if there is too little data.
-getLazyByteString :: ({-Show user,-} Error e, Monad m)=> Int64 -> InternalGet b y e r w user m L.ByteString
+-- suspend if there is too little data.  
+getLazyByteString :: ({-Show user,-} Error e, Monad m) => Int64 -> InternalGet b y e r w user m L.ByteString
 getLazyByteString n = do
   (S ss bs offset user) <- getFull
   case splitAtOrDie n (L.chunk ss bs) of
@@ -489,32 +496,34 @@ instance ({-Show user,-} Error e, Monad m) => MonadSuspend y (InternalGet b y e 
     if checkBool pcInside -- Has Nothing ever been given to a partial continuation?
       then let f Nothing = let pcOut = TopFrame u mempty (rememberFalse pcInside)
                            in sc False r w sIn pcOut
-               f (Just bs') | L.null bs' = sc True r w sIn (TopFrame u mempty pcInside)
+               f (Just bs') | L.null bs' = let pcOut = TopFrame u mempty pcInside
+                                           in sc True r w sIn pcOut
                             | otherwise = let sOut = appendBS sIn bs'
                                               pcOut = TopFrame u mempty (addFuture bs' pcInside)
                                           in sc True r w sOut pcOut
            in return (IPartial ys (Right f))
       else sc False r w sIn pcIn  -- once Nothing has been given suspend is a no-op
-   where appendBS (S ss bs n user) bs' = S ss (mappend bs bs') n user
+   where appendBS s@(S {current=bs}) bs' = s { current=mappend bs bs' }
          -- addFuture puts the new data in 'future' where throwError's collect can find and use it
-         addFuture bs (HandlerFrame u catcher s future pc) =
-                       HandlerFrame u catcher s (future |> bs) (addFuture bs pc)
          addFuture _bs x@(ErrorFrame {}) = x
+         addFuture bs x@(HandlerFrame {future_input=future, older_frame=pc}) =
+           x { future_input=future |> bs, older_frame= addFuture bs pc }
          -- Once suspend is given Nothing, it remembers this and always returns False
-         checkBool (ErrorFrame _ b) = b
-         checkBool (HandlerFrame _ _ _ _ pc) = checkBool pc
-         rememberFalse (ErrorFrame ec _) = ErrorFrame ec False
-         rememberFalse (HandlerFrame u catcher s future pc) =
-                        HandlerFrame u catcher s future (rememberFalse pc)
+         checkBool (HandlerFrame {older_frame=pc}) = checkBool pc
+         checkBool (ErrorFrame {input_continues=b}) = b
+         rememberFalse x@(ErrorFrame {}) = x { input_continues=False }
+         rememberFalse x@(HandlerFrame {older_frame=pc}) = x { older_frame=rememberFalse pc }
 
   yieldItem y = InternalGet $ \sc r w s (TopFrame u ys pc) ->
                   let ys' = ys |> y
                   in sc () r w s (TopFrame u ys' pc)
 
+  -- This does nothing when there are no items pending, otherwise it
+  -- returns IPartial (Seq y) (Left ...)
   flushItems = InternalGet $ \sc r w s tf@(TopFrame u ys pc) ->
                  if Data.Sequence.null ys then sc () r w s tf
-                   else let f = sc () r w s (TopFrame u mempty pc)
-                        in return (IPartial ys (Left f))
+                   else let lazy'rest = sc () r w s (TopFrame u mempty pc)
+                        in return (IPartial ys (Left lazy'rest))
 
   pendingItems = InternalGet $ \sc r w s pc@(TopFrame _ ys _) -> sc (Data.Sequence.length ys) r w s pc
 
