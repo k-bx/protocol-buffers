@@ -1,7 +1,6 @@
 -- http://code.google.com/apis/protocolbuffers/docs/encoding.html
 {- | This module cooperates with the generated code to implement the
   Wire instances.  
-
  -}
 module Text.ProtocolBuffers.WireMessage
     ( LazyResult(..),runGetOnLazy,runPut,size'Varint
@@ -9,7 +8,8 @@ module Text.ProtocolBuffers.WireMessage
     , size,lenSize,putSize
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep
-    , getMessage,getBareMessage) where
+    , getMessage,getBareMessage
+    , unknownField) where
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
@@ -61,16 +61,6 @@ resolve BS.Empty (Get.Partial f)          = newPartial
 
 data WireSize = WireSize { childSize, internalSize :: !Int64 }
 
--- | 'size' takes the length of a primitive which is the same
--- internally and as a child of a message
-size :: Int64 -> WireSize
-size n = WireSize {childSize = n, internalSize = n}
-
--- | 'lenSize' takes the length of a bare message and adds its encoded
--- size as a header to get the 'childSize'.
-lenSize :: Int64 -> WireSize
-lenSize n = WireSize {childSize = n+size'Varint n, internalSize = n}
-
 -- The first Int argument is fromEnum on
 -- Text.DescriptorProtos.FieldDescriptorProto.Type.  The values of the
 -- Int parameters cannot change without breaking all serialized
@@ -118,38 +108,50 @@ getMessage :: forall get message. (BinaryParser get, Mergeable message, ReflectD
            -> get message
 getMessage updater = do
   messageLength <- getVarInt
-  stop <- fmap (messageLength+) bytesRead
-  let go message reqs | Set.null reqs = go' message
+  start <- bytesRead
+  let stop = messageLength+start
+      -- switch from go to go' once all the required fields have been found
+      go reqs message | Set.null reqs = go' message
                       | otherwise = do
-        done <- fmap (stop<=) bytesRead
-        if done then notEnoughData
-          else do
+        here <- bytesRead
+        case compare stop here of
+          EQ -> notEnoughData messageLength start
+          LT -> tooMuchData messageLength start here
+          GT -> do
             wireTag <- fmap WireTag getVarInt -- get tag off wire
             let (fieldId,wireType) = splitWireTag wireTag
-            if Set.notMember wireTag allowed then unknown fieldId wireTag
-              else do message' <- updater fieldId message
-                      let reqs' = Set.delete wireTag reqs
-                      go message' reqs'
+            if Set.notMember wireTag allowed then unknown fieldId wireType here
+              else let reqs' = Set.delete wireTag reqs
+                   in updater fieldId message >>= go reqs'
       go' message = do
-        done <- fmap (stop<=) bytesRead
-        if done then return message
-          else do
+        here <- bytesRead
+        case compare stop here of
+          EQ -> return message
+          LT -> tooMuchData messageLength start here
+          GT -> do
             wireTag <- fmap WireTag getVarInt -- get tag off wire
             let (fieldId,wireType) = splitWireTag wireTag
-            if Set.notMember wireTag allowed then unknown fieldId wireType
+            if Set.notMember wireTag allowed then unknown fieldId wireType here
               else updater fieldId message >>= go'
-  go initialMessage required
+  go required initialMessage
  where
   initialMessage = mergeEmpty
   (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
   splitWireTag :: WireTag -> (FieldId,WireType)
   splitWireTag (WireTag wireTag) = ( FieldId . fromIntegral $ wireTag `shiftR` 3
                                    , WireType . fromIntegral $ wireTag .&. 7 )
-  unknown fieldId wireType = fail ("WireMessage.getMessage: Unknown wire tag read: "
-                                   ++ show (fieldId,wireType) ++ " when processing "
-                                   ++ (show . descName . reflectDescriptorInfo $ initialMessage))
-  notEnoughData = fail ("WireMessage.getMessage: Required fields missing when processing "
-                        ++ (show . descName . reflectDescriptorInfo $ initialMessage))
+  unknown fieldId wireType here =
+      fail ("Text.ProtocolBuffers.WireMessage.getMessage: Unknown wire tag read (fieldId,wireType,here) == "
+            ++ show (fieldId,wireType,here) ++ " when processing "
+            ++ (show . descName . reflectDescriptorInfo $ initialMessage))
+  notEnoughData messageLength start =
+      fail ("Text.ProtocolBuffers.WireMessage.getMessage: Required fields missing when processing "
+            ++ (show . descName . reflectDescriptorInfo $ initialMessage)
+            ++ " at (messageLength,start) == " ++ show (messageLength,start))
+  tooMuchData messageLength start here =
+      fail ("Text.ProtocolBuffers.WireMessage.getMessage : overran expected length when processing"
+            ++ (show . descName . reflectDescriptorInfo $ initialMessage)
+            ++ " at  (messageLength,start,here) == " ++ show (messageLength,start,here))
 
 -- getBareMessage assumes the wireTag for the message, if it existed, has already been read.
 -- getBareMessage assumes that it does needs to read the Varint encoded length of the message.
@@ -157,9 +159,9 @@ getMessage updater = do
 getBareMessage :: forall get message. (BinaryParser get, Mergeable message, ReflectDescriptor message)
            => (FieldId -> message -> get message)
            -> get message
-getBareMessage updater = go initialMessage required
+getBareMessage updater = go required initialMessage
  where
-  go message reqs | Set.null reqs = go' message
+  go reqs message | Set.null reqs = go' message
                   | otherwise = do
     done <- isEmpty
     if done then notEnoughData
@@ -167,9 +169,8 @@ getBareMessage updater = go initialMessage required
         wireTag <- fmap WireTag getWord32be -- get tag off wire
         let (fieldId,wireType) = splitWireTag wireTag
         if Set.notMember wireTag allowed then unknown fieldId wireTag
-          else do message' <- updater fieldId message
-                  let reqs' = Set.delete wireTag reqs
-                  go message' reqs'
+          else let reqs' = Set.delete wireTag reqs
+               in updater fieldId message >>= go reqs'
   go' message = do
     done <- isEmpty
     if done then return message
@@ -183,14 +184,28 @@ getBareMessage updater = go initialMessage required
   splitWireTag :: WireTag -> (FieldId,WireType)
   splitWireTag (WireTag wireTag) = ( FieldId . fromIntegral $ wireTag `shiftR` 3
                                    , WireType . fromIntegral $ wireTag .&. 7 )
-  unknown fieldId wireType = fail ("WireMessage.getMessage: Unknown wire tag read: "
+  unknown fieldId wireType = fail ("Text.ProtocolBuffers.WireMessage.getBareMessage: Unknown wire tag read: "
                                    ++ show (fieldId,wireType) ++ " when processing "
                                    ++ (show . descName . reflectDescriptorInfo $ initialMessage))
-  notEnoughData = fail ("WireMessage.getMessage: Required fields missing when processing "
+  notEnoughData = fail ("Text.ProtocolBuffers.WireMessage.getBareMessage: Required fields missing when processing "
                         ++ (show . descName . reflectDescriptorInfo $ initialMessage))
 
 unknownField :: (BinaryParser get) => FieldId -> get a
-unknownField fieldId = fail ("Impossible? Message claims theris is unknown field id on wire: "++show fieldId)
+unknownField fieldId = do 
+  here <- bytesRead
+  fail ("Impossible? Text.ProtocolBuffers.WireMessage.unknownField "
+        ++" The Message's updater claims there is an unknown field id on wire: "++show fieldId
+        ++" at a position just before here == "++show here)
+
+-- | 'size' takes the length of a primitive which is the same
+-- internally and as a child of a message
+size :: Int64 -> WireSize
+size n = WireSize {childSize = n, internalSize = n}
+
+-- | 'lenSize' takes the length of a bare message and adds its encoded
+-- size as a header to get the 'childSize'.
+lenSize :: Int64 -> WireSize
+lenSize n = WireSize {childSize = n+size'Varint n, internalSize = n}
 
 instance Wire Double where
   wireSize {- TYPE_DOUBLE -} 1     _ = size $ 8
@@ -252,6 +267,8 @@ instance Wire Bool where
       _ -> fail ("TYPE_BOOL read failure : " ++ show x)
 
 instance Wire ByteString where
+-- items of TYPE_STRING is already in a UTF8 encoded Data.ByteString.Lazy
+-- items of TYPE_BYTES is an untyped binary Data.ByteString.Lazy
   wireSize {- TYPE_STRING -} 9     x = lenSize $ BS.length x
   wireSize {- TYPE_BYTES -} 12     x = lenSize $ BS.length x
   wirePut {- TYPE_STRING -} 9      x = putVarUInt (BS.length x) >> putLazyByteString x
