@@ -110,6 +110,25 @@ toWireTag :: FieldId -> FieldType -> WireTag
 toWireTag fieldId fieldType
     = ((fromIntegral . getFieldId $ fieldId) `shiftL` 3) .|. (fromIntegral . getWireType . toWireType $ fieldType)
 
+{-  TYPE_DOUBLE         = 1;
+    TYPE_FLOAT          = 2;
+    TYPE_INT64          = 3;
+    TYPE_UINT64         = 4;
+    TYPE_INT32          = 5;
+    TYPE_FIXED64        = 6;
+    TYPE_FIXED32        = 7;
+    TYPE_BOOL           = 8;
+    TYPE_STRING         = 9;
+    TYPE_GROUP          = 10;  // Tag-delimited aggregate.
+    TYPE_MESSAGE        = 11;
+    TYPE_BYTES          = 12;
+    TYPE_UINT32         = 13;
+    TYPE_ENUM           = 14;
+    TYPE_SFIXED32       = 15;
+    TYPE_SFIXED64       = 16;
+    TYPE_SINT32         = 17;
+    TYPE_SINT64         = 18; -}
+-- http://code.google.com/apis/protocolbuffers/docs/encoding.html
 toWireType :: FieldType -> WireType
 toWireType  1 =  1
 toWireType  2 =  5
@@ -546,7 +565,8 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
         whereUpdateSelf = HsBDecls [HsFunBind [HsMatch src (HsIdent "update'Self")
                             [HsPVar (HsIdent "field'Number") ,HsPVar (HsIdent "old'Self")]
                             (HsUnGuardedRhs (HsCase (lvar "field'Number") updateAlts)) noWhere]]
-        updateAlts = map toUpdate (F.toList fieldInfos) ++ [HsAlt src HsPWildCard (HsUnGuardedAlt (pvar "undefined")) noWhere]
+        updateAlts = map toUpdate (F.toList fieldInfos) ++ [HsAlt src HsPWildCard (HsUnGuardedAlt $
+                       pvar "unknownField" $$ (lvar "field'Number")) noWhere]
         toUpdate fi = HsAlt src (HsPLit . HsInt . toInteger . getFieldId . fieldNumber $ fi) (HsUnGuardedAlt $ 
                         pvar "fmap" $$ (HsParen $ HsLambda src [HsPVar (HsIdent "new'Field")] $
                                           HsRecUpdate (lvar "old'Self") [HsFieldUpdate (UnQual . HsIdent . fieldName $ fi)
