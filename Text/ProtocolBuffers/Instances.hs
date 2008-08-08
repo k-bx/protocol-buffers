@@ -1,7 +1,8 @@
-module Text.ProtocolBuffers.Instances(showsType,parseType) where
+module Text.ProtocolBuffers.Instances(showsType,parseType,showsLabel,parseLabel) where
 
 import Text.ParserCombinators.ReadP
 import Text.DescriptorProtos.FieldDescriptorProto.Type(Type(..))
+import Text.DescriptorProtos.FieldDescriptorProto.Label(Label(..))
 
 {-
 instance Show Type where
@@ -10,6 +11,11 @@ instance Show Type where
 instance Read Type where
   readsPrec _ = readP_to_S readType
 -}
+
+showsLabel :: Label -> ShowS
+showsLabel LABEL_OPTIONAL s = "optional" ++ s
+showsLabel LABEL_REQUIRED s = "required" ++ s
+showsLabel LABEL_REPEATED s = "repeated" ++ s
 
 showsType :: Type -> ShowS
 showsType TYPE_DOUBLE s = "double" ++ s
@@ -36,6 +42,17 @@ parseType s = case readP_to_S readType s of
                 [(val,[])] -> Just val
                 _ -> Nothing
 
+parseLabel :: String -> Maybe Label
+parseLabel s = case readP_to_S readLabel s of
+                [(val,[])] -> Just val
+                _ -> Nothing
+
+readLabel :: ReadP Label
+readLabel = choice [ return LABEL_OPTIONAL << string "optional"
+                   , return LABEL_REQUIRED << string "required"
+                   , return LABEL_REPEATED << string "repeated"
+                   ]
+
 readType :: ReadP Type
 readType = choice [ return TYPE_DOUBLE << string "double"
                   , return TYPE_FLOAT << string "float"
@@ -56,5 +73,7 @@ readType = choice [ return TYPE_DOUBLE << string "double"
                   , return TYPE_SINT32 << string "sint32"
                   , return TYPE_SINT64 << string "sint64"
                   ]
-  where (<<) = flip (>>)
+
+(<<) :: Monad m => m a -> m b -> m a
+(<<) = flip (>>)
 
