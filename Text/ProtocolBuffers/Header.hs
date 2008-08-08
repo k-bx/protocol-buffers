@@ -36,7 +36,8 @@ import Text.ProtocolBuffers.WireMessage(Wire(..)
                                        , size,lenSize,putSize
                                        , wireSizeReq,wireSizeOpt,wireSizeRep
                                        , wirePutReq,wirePutOpt,wirePutRep
-                                       , getMessage,getBareMessage)
+                                       , getMessage,getBareMessage
+                                       , unknownField)
 import Data.Sequence((|>))
 
 -- deprecated imports

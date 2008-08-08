@@ -6,7 +6,7 @@ import Data.Monoid
 import Text.ProtocolBuffers.Header
 
 data OptimizeMode = SPEED | CODE_SIZE
-  deriving (Show,Eq,Ord,Typeable)
+  deriving (Read,Show,Eq,Ord,Typeable)
 
 $( makeMergeableEnum ''OptimizeMode )
 
@@ -29,3 +29,5 @@ instance Enum OptimizeMode where
 
   pred SPEED = err' ("pred failed on value "++show SPEED)
   pred CODE_SIZE = SPEED
+
+instance ReflectEnum OptimizeMode where

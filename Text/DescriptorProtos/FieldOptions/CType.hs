@@ -15,3 +15,5 @@ instance P'.Mergeable CType
 instance P'.Default CType
 
 instance P'.Wire CType
+
+instance P'.ReflectEnum CType

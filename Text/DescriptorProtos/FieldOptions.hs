@@ -33,7 +33,8 @@ instance P'.Wire FieldOptions where
             case field'Number of
               1 -> P'.fmap (\new'Field -> old'Self { ctype = P'.Just new'Field }) (P'.wireGet 14)
               9 -> P'.fmap (\new'Field -> old'Self { experimental_map_key = P'.Just new'Field }) (P'.wireGet 9)
-              _ -> P'.fail ("Impossible? Message asked to parse an unknown field number on wire: "++P'.show field'Number)
+              _ -> P'.unknownField field'Number
+--P'.fail ("Impossible? Message asked to parse an unknown field number on wire: "++P'.show field'Number)
  
 instance P'.ReflectDescriptor FieldOptions where
         reflectDescriptorInfo _
