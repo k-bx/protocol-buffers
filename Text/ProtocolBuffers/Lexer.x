@@ -16,41 +16,40 @@ import Numeric(readHex,readOct,readDec,showOct,readSigned,readFloat)
 $d = [0-9]
 @decInt = [\-]?[1-9]$d*
 @hexInt = [\-]?0[xX]([A-Fa-f0-9])+
-@octInt = [\-]?0[0-7]+
+@octInt = [\-]?0[0-7]*
 @doubleLit = [\-]?$d+(\.$d+)?([Ee][\+\-]?$d+)?
 
 @ident1 = [A-Za-z_][A-Za-z0-9_]*
 @ident = [\.]?@ident1([\.]@ident1)*
-@notChar = [^A-Za-z_]
+@notChar = [^A-Za-z0-9_]
 
-@quote = [\"']
 @hexEscape = \\[Xx][A-Fa-f0-9]{1,2}
 @octEscape = \\0?[0-7]{1,3}
 @charEscape = \\[abfnrtv\\\?'\"]
-
-$special    = [=\(\)\,\;\[\]\{\}]
 @inStr = @hexEscape | @octEscape | @charEscape | [^'\"\0\n]
-
 @strLit = ['] (@inStr | [\"])* ['] | [\"] (@inStr | ['])* [\"]
 
+$special    = [=\(\)\,\;\[\]\{\}]
 
 :-
 
   $white+ ;
   "//".*  ;
   "#".*   ;
-  @decInt / @notChar { parseDec }
-  @octInt / @notChar { parseOct }
-  @hexInt / @notChar { parseHex }
+  "/*".*"*/" ;
+  @decInt / @notChar    { parseDec }
+  @octInt / @notChar    { parseOct }
+  @hexInt / @notChar    { parseHex }
   @doubleLit / @notChar { parseDouble }
-  @decInt { dieAt "decimal followed by invalid character" }
-  @octInt { dieAt "octal followed by invalid character" }
-  @hexInt { dieAt "hex followed by invalid character" }
-  @doubleLit { dieAt "floating followed by invalid character" }
-  @strLit { parseStr }
-  @ident { parseName }
-  $special { parseChar }
-  . { wtfAt }
+  @decInt               { dieAt "decimal followed by invalid character" }
+  @octInt               { dieAt "octal followed by invalid character" }
+  @hexInt               { dieAt "hex followed by invalid character" }
+  @doubleLit            { dieAt "floating followed by invalid character" }
+  @strLit               { parseStr }
+  @ident                { parseName }
+  $special              { parseChar }
+  .                     { wtfAt }
+
 {
 line :: AlexPosn -> Int
 line (AlexPn _byte line' _col) = line'
@@ -67,13 +66,13 @@ data Lexed = L_Integer !Int !Integer
 getLinePos :: Lexed -> Int
 getLinePos x = case x of
                  L_Integer i _ -> i
-                 L_Double i _ -> i
-                 L_Name i _ -> i
-                 L_String i _ -> i
-                 L i _ -> i
-                 L_Error i _ -> i
+                 L_Double  i _ -> i
+                 L_Name    i _ -> i
+                 L_String  i _ -> i
+                 L         i _ -> i
+                 L_Error   i _ -> i
 
--- These is the only access to L_Error, so I can see where it is created with pos
+-- 'errAt' is the only access to L_Error, so I can see where it is created with pos
 errAt pos msg =  L_Error (line pos) $ "Lexical error (in Text.ProtocolBuffers.Lexer): "++ msg ++ ", at "++see pos where
   see (AlexPn char line col) = "character "++show char++" line "++show line++" column "++show col++"."
 dieAt msg pos _s = errAt pos msg
@@ -93,7 +92,7 @@ parseStr pos s = either (errAt pos) (L_String (line pos) . L.pack) $ sDecode . B
 parseName pos s = L_Name (line pos) s
 parseChar pos s = L (line pos) (ByteString.head s)
 
--- Generalization of concat . unfoldr to monadic form:
+-- Generalization of concat . unfoldr to monadic-Either form:
 op :: ( [Char] -> Either String (Maybe ([Word8],[Char]))) -> [Char] -> Either String [Word8]
 op one = go id where
   go f cs = case one cs of
@@ -101,8 +100,13 @@ op one = go id where
               Right Nothing -> Right (f [])
               Right (Just (ws,cs)) -> go (f . (ws++)) cs
 
--- Put this mess in the lexer, so the rest of the code can assume everything is saner.
--- These error can quite likely be triggered
+-- Put this mess in the lexer, so the rest of the code can assume
+-- everything is saner.  The input is checked to really be "Char8"
+-- values in the range [0..255] and to be c-escaped (in order to
+-- render binary information printable).  This decodes the c-escaping
+-- and returns the binary data as Word8.
+-- 
+-- A decoding error causes (Left msg) to be returned.
 sDecode :: [Char] -> Either String [Word8]
 sDecode = op one where
   one :: [Char] -> Either String (Maybe ([Word8],[Char]))
@@ -110,6 +114,7 @@ sDecode = op one where
                               return $ Just (x',xs)  -- main case of unescaped value
   one [] = return Nothing
   one ('\\':[]) = Left "cannot understand a string that ends with a backslash"
+  one ('\\':'0':ys) = return $ Just ([0],ys)
   one ('\\':ys) | 1 <= len =
       case mayRead readOct oct of
         Just w -> do w' <- checkByte w
@@ -169,4 +174,5 @@ sDecode = op one where
                  | i <= maxChar = Right $ encode [ toEnum . fromInteger $ i ]
                  | otherwise = Left $ "found Unicode Char out of range 0..0x10FFFF, value="++show i
     where maxChar = toInteger (fromEnum (maxBound ::Char)) -- 0x10FFFF
+
 }

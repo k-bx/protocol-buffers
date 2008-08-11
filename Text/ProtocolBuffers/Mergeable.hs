@@ -1,17 +1,22 @@
 module Text.ProtocolBuffers.Mergeable(Mergeable(..),mayMerge) where
--- This is isomorphic to Monoid(mappend), but allows the derired instances without overlapping.
--- It also gives a default implementation to mergeAppend to take the second entry.
+-- This types are isomorphic to Monoid(mappend).  But the sematics are
+-- different, since mergeEmpty is likely only a left idenitity and not
+-- a right identity. The Mergeable class also has a default
+-- implementation to mergeAppend that take the second parameter.
 
 import Text.ProtocolBuffers.Basic
+import qualified Data.Foldable as F(Foldable(foldr))
 import Data.Monoid(mempty,mappend)
 
 class Mergeable a where
   mergeEmpty :: a
-  mergeEmpty = error "You did not define Mergeable.mergeEmpty!"
+-- mergeEmpty = error "You did not define Mergeable.mergeEmpty!"
+
   mergeAppend :: a -> a -> a
   mergeAppend a b = b
-  mergeConcat :: [a] -> a
-  mergeConcat = foldr mergeAppend mergeEmpty
+
+  mergeConcat :: F.Foldable t => t a -> a
+  mergeConcat = F.foldr mergeAppend mergeEmpty
 
 -- Base types are not very mergeable, but their Maybe type are:
 instance Mergeable a => Mergeable (Maybe a) where mergeEmpty = Nothing; mergeAppend = mayMerge

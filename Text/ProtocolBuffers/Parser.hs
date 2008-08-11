@@ -1,43 +1,25 @@
-module Text.ProtocolBuffers.Parser where
+module Text.ProtocolBuffers.Parser(pbParse,parseProto,filename1,filename2) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
-import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D.DescriptorProto(ExtensionRange)
-import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D.DescriptorProto.ExtensionRange(ExtensionRange(..))
-import qualified Text.DescriptorProtos.EnumDescriptorProto            as D(EnumDescriptorProto) 
+import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D(ExtensionRange(ExtensionRange))
+import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D.ExtensionRange(ExtensionRange(..))
+import qualified Text.DescriptorProtos.EnumDescriptorProto            as D(EnumDescriptorProto)
 import qualified Text.DescriptorProtos.EnumDescriptorProto            as D.EnumDescriptorProto(EnumDescriptorProto(..)) 
-import qualified Text.DescriptorProtos.EnumOptions                    as D(EnumOptions)
-import qualified Text.DescriptorProtos.EnumOptions                    as D.EnumOptions(EnumOptions(..))
-import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D(EnumValueDescriptorProto)
+import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D(EnumValueDescriptorProto(EnumValueDescriptorProto))
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D.EnumValueDescriptorProto(EnumValueDescriptorProto(..))
-import qualified Text.DescriptorProtos.EnumValueOptions               as D(EnumValueOptions) 
-import qualified Text.DescriptorProtos.EnumValueOptions               as D.EnumValueOptions(EnumValueOptions(..)) 
-import qualified Text.DescriptorProtos.FieldDescriptorProto           as D(FieldDescriptorProto) 
+import qualified Text.DescriptorProtos.FieldDescriptorProto           as D(FieldDescriptorProto(FieldDescriptorProto))
 import qualified Text.DescriptorProtos.FieldDescriptorProto           as D.FieldDescriptorProto(FieldDescriptorProto(..)) 
-import qualified Text.DescriptorProtos.FieldDescriptorProto.Label     as D.FieldDescriptorProto(Label)
-import qualified Text.DescriptorProtos.FieldDescriptorProto.Label     as D.FieldDescriptorProto.Label(Label(..))
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto(Type)
 import           Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto.Type(Type(..))
 import qualified Text.DescriptorProtos.FieldOptions                   as D(FieldOptions)
 import qualified Text.DescriptorProtos.FieldOptions                   as D.FieldOptions(FieldOptions(..))
-import qualified Text.DescriptorProtos.FieldOptions.CType             as D.FieldOptions(CType)
-import qualified Text.DescriptorProtos.FieldOptions.CType             as D.FieldOptions.CType(CType(..))
-import qualified Text.DescriptorProtos.FileOptions                    as D(FileOptions)
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D(FileDescriptorProto) 
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D.FileDescriptorProto(FileDescriptorProto(..)) 
 import qualified Text.DescriptorProtos.FileOptions                    as D.FileOptions(FileOptions(..))
-import qualified Text.DescriptorProtos.FileOptions.OptimizeMode       as D.FileOptions(OptimizeMode)
-import qualified Text.DescriptorProtos.FileOptions.OptimizeMode       as D.FileOptions.OptimizeMode(OptimizeMode(..))
-import qualified Text.DescriptorProtos.MethodDescriptorProto          as D(MethodDescriptorProto)
+import qualified Text.DescriptorProtos.MethodDescriptorProto          as D(MethodDescriptorProto(MethodDescriptorProto))
 import qualified Text.DescriptorProtos.MethodDescriptorProto          as D.MethodDescriptorProto(MethodDescriptorProto(..))
-import qualified Text.DescriptorProtos.MessageOptions                 as D(MessageOptions)
-import qualified Text.DescriptorProtos.MessageOptions                 as D.MessageOptions(MessageOptions(..))
-import qualified Text.DescriptorProtos.MethodOptions                  as D(MethodOptions)
-import qualified Text.DescriptorProtos.MethodOptions                  as D.MethodOptions(MethodOptions(..))
-import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D(ServiceDescriptorProto) 
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D.ServiceDescriptorProto(ServiceDescriptorProto(..)) 
-import qualified Text.DescriptorProtos.ServiceOptions                 as D(ServiceOptions)
-import qualified Text.DescriptorProtos.ServiceOptions                 as D.ServiceOptions(ServiceOptions(..))
 
 import Text.ProtocolBuffers.Lexer(Lexed(..),alexScanTokens,getLinePos)
 import Text.ProtocolBuffers.Header
@@ -51,9 +33,26 @@ import Data.Ix(inRange)
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.Char8 as LC
 import Control.Monad
-import Data.Monoid
 
 type P = GenParser Lexed
+
+pbParse :: String -> IO (Either ParseError D.FileDescriptorProto)
+pbParse filename = fmap (parseProto filename) (L.readFile filename)
+
+parseProto :: String -> ByteString -> Either ParseError D.FileDescriptorProto
+parseProto filename file = do
+  let lexed = alexScanTokens file
+      ipos = case lexed of
+               [] -> setPosition (newPos filename 0 0)
+               (l:_) -> setPosition (newPos filename (getLinePos l) 0)
+  runParser (ipos >> parser) (initState filename) filename lexed
+
+filename1,filename2 :: String
+filename1 = "/tmp/unittest.proto"
+filename2 = "/tmp/descriptor.proto"
+
+initState :: String -> D.FileDescriptorProto
+initState filename = mergeEmpty {D.FileDescriptorProto.name=Just (LC.pack filename)}
 
 indent :: String -> String
 indent = unlines . map (\s -> ' ':' ':s) . lines
@@ -62,22 +61,13 @@ indent = unlines . map (\s -> ' ':' ':s) . lines
 mayRead :: ReadS a -> String -> Maybe a
 mayRead f s = case f s of [(a,"")] -> Just a; _ -> Nothing
 
-filename = "/tmp/unittest.proto"
-filename2 = "/tmp/descriptor.proto"
-
 true,false :: ByteString
 true = LC.pack "true"
 false = LC.pack "false"
 
-initState :: D.FileDescriptorProto
-initState = mergeEmpty {D.FileDescriptorProto.name = Just (LC.pack filename)}
-
-pbParse = do file <- L.readFile filename
-             let lex = alexScanTokens file
-                 ipos = case lex of
-                          [] -> setPosition (newPos filename 0 0)
-                          (l:_) -> setPosition (newPos filename (getLinePos l) 0)
-             return $ runParser (ipos >> parser) initState filename lex
+type Update s = (s -> s) -> P s ()
+update' :: Update s
+update' f = getState >>= \s -> setState $! (f s)
 
 tok :: (Lexed -> Maybe a) -> P s a
 tok f = token show (\lexed -> newPos "" (getLinePos lexed) 0) f
@@ -100,42 +90,31 @@ intLit = tok (\ l-> case l of L_Integer _ x -> return (fromInteger x); _ -> Noth
 fieldInt :: (Num a) => P s a
 fieldInt = tok (\ l-> case l of L_Integer _ x | inRange validRange x && not (inRange reservedRange x) -> return (fromInteger x);
                                 _ -> Nothing) <?> "field number (from 0 to 2^29-1 and not in 19000 to 19999)"
-  where validRange = (0,(2^29)-1)
+  where validRange = (0,(2^(29::Int))-1)
         reservedRange = (19000,19999)
 
 enumInt :: (Num a) => P s a
 enumInt = tok (\ l-> case l of L_Integer _ x | inRange validRange x -> return (fromInteger x);
                                _ -> Nothing) <?> "enum value (from 0 to 2^31-1)"
-  where validRange = (0,(2^31)-1)
+  where validRange = (0,(2^(31::Int))-1)
 
 doubleLit :: P s Double
-doubleLit = tok (\ l-> case l of L_Double _ x -> return x; _ -> Nothing) <?> "double literal"
+doubleLit = tok (\ l-> case l of L_Double _ x -> return x;
+                                 L_Integer _ x -> return (fromInteger x);
+                                 _ -> Nothing) <?> "double literal"
 
+ident,ident1,ident_package :: P s ByteString
 ident = tok (\ l-> case l of L_Name _ x -> return x; _ -> Nothing) <?> "identifier (perhaps dotted)"
 
 ident1 = tok (\ l-> case l of L_Name _ x | LC.notElem '.' x -> return x; _ -> Nothing) <?> "identifier (not dotted)"
 
 ident_package = tok (\ l-> case l of L_Name _ x | LC.head x /= '.' -> return x; _ -> Nothing) <?> "package name (no leading dot)"
 
+boolLit :: P s Bool
 boolLit = tok (\ l-> case l of L_Name _ x | x == true -> return True
                                L_Name _ x | x == false -> return False
                                _ -> Nothing)
           <?> "boolean literal ('true' or 'false')"
-
-a `eq` b = do a' <- a
-              pChar '='
-              b' <- b
-              return (a',b')
-
-type Update s = (s -> s) -> P s ()
-updateState' :: Update s
-updateState' f = getState >>= \s -> setState $! (f s)
-updateFDP :: Update D.FileDescriptorProto
-updateFDP = updateState'
-updateMSG :: Update D.DescriptorProto
-updateMSG = updateState'
-updateENUM :: Update D.EnumDescriptorProto
-updateENUM = updateState'
 
 -- subParser changes the user state. It is a bit of a hack and is used
 -- to create an interesting style of parsing.
@@ -169,15 +148,19 @@ enumLit = do
     Nothing -> let self = enumName (reflectEnumInfo (undefined :: a))
                in unexpected $ "Enum value not recognized: "++show s++", wanted enum value of type "++show self
 
+parser :: P D.FileDescriptorProto D.FileDescriptorProto 
 parser = proto >> getState
 
-proto = eof <|> ((eol <|> importFile <|> package <|> fileOption <|> message upTopMsg <|> enum upTopEnum) >> proto)
+proto = eof <|> ((eol <|> importFile <|> package <|> fileOption <|> message upTopMsg <|> enum upTopEnum <|> extend upTopMsg upTopField <|> service) >> proto)
+  where upTopMsg msg = update' (\s -> s {D.FileDescriptorProto.message_type=D.FileDescriptorProto.message_type s |> msg})
+        upTopEnum e = update' (\s -> s {D.FileDescriptorProto.enum_type=D.FileDescriptorProto.enum_type s |> e})
+        upTopField f = update' (\s -> s {D.FileDescriptorProto.extension=D.FileDescriptorProto.extension s |> f})
 
-importFile = pName (LC.pack "import") >> strLit >>= \p -> eol >> updateFDP (\s -> s {D.FileDescriptorProto.dependency = (D.FileDescriptorProto.dependency s) |> p})
+importFile = pName (LC.pack "import") >> strLit >>= \p -> eol >> update' (\s -> s {D.FileDescriptorProto.dependency=(D.FileDescriptorProto.dependency s) |> p})
 
-package = pName (LC.pack "package") >> ident_package >>= \p -> eol >> updateFDP (\s -> s {D.FileDescriptorProto.package = Just p})
+package = pName (LC.pack "package") >> ident_package >>= \p -> eol >> update' (\s -> s {D.FileDescriptorProto.package=Just p})
 
-fileOption = pName (LC.pack "option") >> setOption >>= \p -> eol >> updateFDP (\s -> s {D.FileDescriptorProto.options = Just p})
+fileOption = pName (LC.pack "option") >> setOption >>= \p -> eol >> update' (\s -> s {D.FileDescriptorProto.options=Just p})
   where
     setOption = do
       optName <- ident1
@@ -194,55 +177,62 @@ message :: (D.DescriptorProto -> P s ()) -> P s ()
 message up = pName (LC.pack "message") >> do
   self <- ident1
   pChar '{'
-  up =<< subParser subMessage (mergeEmpty {D.DescriptorProto.name = Just self})
+  up =<< subParser subMessage (mergeEmpty {D.DescriptorProto.name=Just self})
 
-upTopMsg msg = updateFDP (\s -> s {D.FileDescriptorProto.message_type=D.FileDescriptorProto.message_type s |> msg})
-upNestedMsg msg = updateMSG (\s -> s {D.DescriptorProto.nested_type=D.DescriptorProto.nested_type s |> msg})
+subMessage = (pChar '}') <|> ((eol <|> (field upNestedMsg Nothing >>= upMsgField) <|> message upNestedMsg <|> enum upNestedEnum <|> extensions <|> extend upNestedMsg upMsgField) >> subMessage)
+  where upNestedMsg msg = update' (\s -> s {D.DescriptorProto.nested_type=D.DescriptorProto.nested_type s |> msg})
+        upNestedEnum e = update' (\s -> s {D.DescriptorProto.enum_type=D.DescriptorProto.enum_type s |> e})
+        upMsgField f = update' (\s -> s {D.DescriptorProto.field=D.DescriptorProto.field s |> f})
 
-subMessage :: P D.DescriptorProto ()
-subMessage = (pChar '}') <|> ((eol <|> field Nothing <|> message upNestedMsg <|> enum upNestedEnum) >> subMessage)
-
-field :: Maybe ByteString
-      -> P D.DescriptorProto.DescriptorProto ()
-field maybeExtendee = do 
+extend :: (D.DescriptorProto -> P s ()) -> (D.FieldDescriptorProto -> P s ())
+       -> P s ()
+extend upGroup upField = pName (LC.pack "extend") >> do
+  typeExtendee <- ident
+  pChar '{'
+  let first = (eol >> first) <|> ((field upGroup (Just typeExtendee) >>= upField) >> rest)
+      rest = pChar '}' <|> ((eol <|> (field upGroup (Just typeExtendee) >>= upField)) >> rest)
+  first
+  
+field :: (D.DescriptorProto -> P s ()) -> Maybe ByteString
+      -> P s D.FieldDescriptorProto
+field upGroup maybeExtendee = do 
   sLabel <- choice . map (pName . LC.pack) $ ["optional","repeated","required"]
-  label <- maybe (fail ("not a valid Label :"++show sLabel)) return (parseLabel (LC.unpack sLabel))
+  eLabel <- maybe (fail ("not a valid Label :"++show sLabel)) return (parseLabel (LC.unpack sLabel))
   sType <- ident
-  let (typeCode,typeName) = case parseType (LC.unpack sType) of
-                              Just t -> (Just t,Nothing)
-                              Nothing -> (Nothing, Just sType)
+  let (mayTypeCode,mayTypeName) = case parseType (LC.unpack sType) of
+                                    Just t -> (Just t,Nothing)
+                                    Nothing -> (Nothing, Just sType)
   name <- ident1
   pChar '='
   number <- fieldInt
   (maybeOptions,maybeDefault) <-
-    if typeCode == Just TYPE_GROUP
+    if mayTypeCode == Just TYPE_GROUP
       then do when (not (isUpper (LC.head name)))
                    (fail $ "Group names must start with an upper case letter: "++show name)
               pChar '{'
-              upNestedMsg =<< subParser subMessage (mergeEmpty {D.DescriptorProto.name = Just name})
+              upGroup =<< subParser subMessage (mergeEmpty {D.DescriptorProto.name=Just name})
               return (Nothing,Nothing)
       else do hasBracket <- option False (pChar '[' >> return True)
-              pair <- if hasBracket
-                        then subParser (subBracketOptions typeCode) (Nothing,Nothing)
-                        else return (Nothing,Nothing)
+              pair <- if not hasBracket then return (Nothing,Nothing)
+                        else subParser (subBracketOptions mayTypeCode) (Nothing,Nothing)
               eol
               return pair
-  let f = D.FieldDescriptorProto.FieldDescriptorProto
+  let f = D.FieldDescriptorProto
                { D.FieldDescriptorProto.name = Just name
                , D.FieldDescriptorProto.number = Just number
-               , D.FieldDescriptorProto.label = Just label
-               , D.FieldDescriptorProto.type' = typeCode
-               , D.FieldDescriptorProto.type_name = typeName
+               , D.FieldDescriptorProto.label = Just eLabel
+               , D.FieldDescriptorProto.type' = mayTypeCode
+               , D.FieldDescriptorProto.type_name = mayTypeName
                , D.FieldDescriptorProto.extendee = maybeExtendee
                , D.FieldDescriptorProto.default_value = maybeDefault
                , D.FieldDescriptorProto.options = maybeOptions
                }
-  updateMSG (\s -> s {D.DescriptorProto.field=D.DescriptorProto.field s |> f})
+  return f
 
 subBracketOptions :: Maybe Type
-                  -> P (Maybe D.FieldOptions.FieldOptions, Maybe L.ByteString) ()
-subBracketOptions mt = (defaultValue <|> fieldOptions) >> (pChar ']' <|> (pChar ',' >> subBracketOptions mt))
-  where defaultValue = do
+                  -> P (Maybe D.FieldOptions, Maybe L.ByteString) ()
+subBracketOptions mt = (defaultConstant <|> fieldOptions) >> (pChar ']' <|> (pChar ',' >> subBracketOptions mt))
+  where defaultConstant = do
           pName (LC.pack "default")
           pChar '='
           x <- constant mt
@@ -260,17 +250,27 @@ subBracketOptions mt = (defaultValue <|> fieldOptions) >> (pChar ']' <|> (pChar 
             "experimental_map_key" | Nothing == mt -> do
               strLit >>= \p -> let new = old {D.FieldOptions.experimental_map_key=Just p}
                                in seq new $ setState $! (Just new,def)
+            _ -> fail $ "unkown field option name: "++show optName
 
+-- This does a type and range safe parsing of the default value,
+-- except for enum constants which cannot be checked (the definition
+-- may not have been parsed yet).
+--
+-- Double and Float are checked to be not-Nan and not-Inf.  The
+-- int-like types are checked to be within the corresponding range.
 constant :: Maybe Type -> P s L.ByteString
-constant Nothing = ident1 -- hopefully a matching enum, there is no easy way to check
+constant Nothing = ident1 -- hopefully a matching enum
 constant (Just t) =
   case t of
-    TYPE_DOUBLE  -> fmap' (LC.pack . show) $ doubleLit
+    TYPE_DOUBLE  -> do d <- doubleLit
+                       when (isNaN d || isInfinite d)
+                            (fail $ "Floating point literal "++show d++" is out of range for type "++show t)
+                       return' (LC.pack . show $ d)
     TYPE_FLOAT   -> do d <- doubleLit
-                       let f :: Float
-                           f = uncurry encodeFloat (decodeFloat d)
-                       when (isNaN f || isInfinite f)
-                            (fail $ "Floating point literal "++show d++" is out of range for type "++show TYPE_FLOAT)
+                       let fl :: Float
+                           fl = read (show d)
+                       when (isNaN fl || isInfinite fl || (d==0) /= (fl==0))
+                            (fail $ "Floating point literal "++show d++" is out of range for type "++show t)
                        return' (LC.pack . show $ d)
     TYPE_BOOL    -> boolLit >>= \b -> return' $ if b then true else false
     TYPE_STRING  -> strLit
@@ -278,124 +278,74 @@ constant (Just t) =
     TYPE_GROUP   -> fail $ "cannot have a constant literal for type "++show t
     TYPE_MESSAGE -> fail $ "cannot have a constant literal for type "++show t
     TYPE_ENUM    -> ident1 -- SHOULD HAVE HAD Maybe Type PARAMETER match Nothing
-    _            -> do i <- intLit
-                       when (not (inRange getIntRange i))
-                            (fail $ "default value "++show i++" is out of range for type "++show t)
-                       return' (LC.pack . show $ i)
-  where getIntRange =
-          case t of
-            TYPE_INT64    -> f (minBound :: Int64,maxBound)
-            TYPE_UINT64   -> f (minBound :: Word64,maxBound)
-            TYPE_INT32    -> f (minBound :: Int32,maxBound)
-            TYPE_FIXED64  -> f (minBound :: Word64,maxBound)
-            TYPE_FIXED32  -> f (minBound :: Word32,maxBound)
-            TYPE_UINT32   -> f (minBound :: Word32,maxBound)
-            TYPE_SFIXED32 -> f (minBound :: Int32,maxBound)
-            TYPE_SFIXED64 -> f (minBound :: Int64,maxBound)
-            TYPE_SINT32   -> f (minBound :: Int32,maxBound)
-            TYPE_SINT64   -> f (minBound :: Int64,maxBound)
-          where f :: (Integral a) => (a,a) -> (Integer,Integer)
-                f (a,b) = (toInteger a, toInteger b)
+    TYPE_SFIXED32 -> f (undefined :: Int32)
+    TYPE_SINT32   -> f (undefined :: Int32)
+    TYPE_INT32    -> f (undefined :: Int32)
+    TYPE_SFIXED64 -> f (undefined :: Int64)
+    TYPE_SINT64   -> f (undefined :: Int64)
+    TYPE_INT64    -> f (undefined :: Int64)
+    TYPE_FIXED32  -> f (undefined :: Word32)
+    TYPE_UINT32   -> f (undefined :: Word32)
+    TYPE_FIXED64  -> f (undefined :: Word64)
+    TYPE_UINT64   -> f (undefined :: Word64)
+  where f :: (Bounded a,Integral a) => a -> P s L.ByteString
+        f u = do let range = (toInteger (minBound `asTypeOf` u),toInteger (maxBound `asTypeOf` u))
+                 i <- intLit
+                 when (not (inRange range i))
+                      (fail $ "default value "++show i++" is out of range for type "++show t)
+                 return' (LC.pack . show $ i)
 
 enum :: (D.EnumDescriptorProto -> P s ()) -> P s ()
 enum up = pName (LC.pack "enum") >> do
   self <- ident1
   pChar '{'
-  up =<< subParser subEnum (mergeEmpty {D.EnumDescriptorProto.name = Just self})
+  up =<< subParser subEnum (mergeEmpty {D.EnumDescriptorProto.name=Just self})
 
-upTopEnum e = updateFDP (\s -> s {D.FileDescriptorProto.enum_type=D.FileDescriptorProto.enum_type s |> e})
-upNestedEnum e = updateMSG (\s -> s {D.DescriptorProto.enum_type=D.DescriptorProto.enum_type s |> e})
-
-subEnum :: P D.EnumDescriptorProto ()
 subEnum = (pChar '}') <|> ((eol <|> enumVal <|> enumOption) >> subEnum)
-  where enumOption = fail "There are no options for enumerations (when this parser was written)"
-        enumVal :: P D.EnumDescriptorProto.EnumDescriptorProto ()
+  where enumOption = do pName (LC.pack "option")
+                        fail "There are no options for enumerations (when this parser was written)"
+        enumVal :: P D.EnumDescriptorProto ()
         enumVal = do
           name <- ident1
           pChar '='
           number <- enumInt
           eol
-          let v = D.EnumValueDescriptorProto.EnumValueDescriptorProto
+          let v = D.EnumValueDescriptorProto
                        { D.EnumValueDescriptorProto.name = Just name
                        , D.EnumValueDescriptorProto.number = Just number
                        , D.EnumValueDescriptorProto.options = Nothing
                        }
-          updateENUM (\s -> s {D.EnumDescriptorProto.value=D.EnumDescriptorProto.value s |> v})
+          update' (\s -> s {D.EnumDescriptorProto.value=D.EnumDescriptorProto.value s |> v})
 
-{-
+extensions = pName (LC.pack "extensions") >> do
+  start <- fmap Just fieldInt
+  pName (LC.pack "to")
+  end <- (fmap Just fieldInt <|> fmap (const Nothing) (pName (LC.pack "max")))
+  let e = D.ExtensionRange
+            { D.ExtensionRange.start = start
+            , D.ExtensionRange.end = end
+            }
+  update' (\s -> s {D.DescriptorProto.extension_range=D.DescriptorProto.extension_range s |> e})
 
-import ::= "import" strLit ";"
-
-package ::= "package" ident ( "." ident )* ";"
-
-option ::= "option" optionBody ";"
-
-optionBody ::= ident ( "." ident )* "=" constant
-
-message ::= "message" ident messageBody
-
-extend ::= "extend" userType "{" ( field | group | ";" )* "}"
-
-enum ::= "enum" ident "{" ( option | enumField | ";" )* "}"
-
-enumField ::= ident "=" intLit ";"
-
-service ::= "service" ident "{" ( option | rpc | ";" )* "}"
-
-rpc ::= "rpc" ident "(" userType ")" "returns" "(" userType ")" ";"
-
-messageBody ::= "{" ( field | enum | message | extend | extensions | group | option | ":" )* "}"
-
-group ::= label "group" camelIdent "=" intLit messageBody
-
-field ::= label type ident "=" intLit ( "[" fieldOption ( "," fieldOption )* "]" )? ";"
-# tag number must be 2^29-1 or lower, not 0, and not 19000-19999 (reserved)
-
-fieldOption ::= optionBody | "default" "=" constant
-
-# extension numbers must not overlap with field or other extension numbers
-extensions ::= "extensions" extension ( "," extension )* ";"
-
-extension ::= intLit ( "to" ( intLit | "max" ) )?
-
-label ::= "required" | "optional" | "repeated"
-
-type ::= "double" | "float" | "int32" | "int64" | "uint32" | "uint64"
-       | "sint32" | "sint64" | "fixed32" | "fixed64" | "sfixed32" | "sfixed64"
-       | "bool" | "string" | "bytes" | userType
-
-# leading dot for identifiers means they're fully qualified
-userType ::= "."? ident ( "." ident )*
-
-constant ::= ident | intLit | floatLit | strLit | boolLit
-
-ident ::= /[A-Za-z_][\w_]*/
-
-# according to parser.cc, group names must start with a capital letter as a
-# hack for backwards-compatibility
-camelIdent ::= /[A-Z][\w_]*/
-
-intLit ::= decInt | hexInt | octInt
-
-decInt ::= /[1-9]\d*/
-
-hexInt ::= /0[xX]([A-Fa-f0-9])+/
-
-octInt ::= /0[0-7]+/
-
-# allow_f_after_float_ is disabled by default in tokenizer.cc
-floatLit ::= /\d+(\.\d+)?([Ee][\+-]?\d+)?/
-
-boolLit ::= "true" | "false"
-
-# contents must not contain unescaped quote character
-strLit ::= quote ( hexEscape | octEscape | charEscape | /[^\0\n]/ )* quote
-
-quote ::= /["']/
-
-hexEscape ::= /\\[Xx][A-Fa-f0-9]{1,2}/
-
-octEscape ::= /\\0?[0-7]{1,3}/
-
-charEscape ::= /\\[abfnrtv\\\?'"]/
--}
+service = pName (LC.pack "service") >> do
+  name <- ident1
+  pChar '{'
+  f <- subParser subRpc (mergeEmpty {D.ServiceDescriptorProto.name=Just name})
+  update' (\s -> s {D.FileDescriptorProto.service=D.FileDescriptorProto.service s |> f})
+       
+ where subRpc = pChar '}' <|> ((eol <|> rpc <|> serviceOptions) >> subRpc)
+       rpc = pName (LC.pack "rpc") >> do
+               name <- ident1
+               input <- between (pChar '(') (pChar ')') ident1
+               pName (LC.pack "returns")
+               output <- between (pChar '(') (pChar ')') ident1
+               eol
+               let m = D.MethodDescriptorProto
+                         { D.MethodDescriptorProto.name=Just name
+                         , D.MethodDescriptorProto.input_type=Just input
+                         , D.MethodDescriptorProto.output_type=Just output
+                         , D.MethodDescriptorProto.options=Nothing
+                         }
+               update' (\s -> s {D.ServiceDescriptorProto.method=D.ServiceDescriptorProto.method s |> m})
+       serviceOptions = do pName (LC.pack "option")
+                           fail "There are no options for services (when this parser was written)"

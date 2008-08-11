@@ -5,7 +5,7 @@ module Text.DescriptorProtos.ServiceOptions
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
 
-data ServiceOptions = ServiceOptions{}
+data ServiceOptions = ServiceOptions
                     deriving (P'.Show, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
  
 instance P'.Mergeable ServiceOptions where
