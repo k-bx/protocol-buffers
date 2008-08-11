@@ -23,7 +23,7 @@ data Type = TYPE_DOUBLE
           | TYPE_SINT64
           deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
  
-instance P'.Mergeable Type
+instance P'.Mergeable Type where
  
 instance P'.Bounded Type where
         minBound = TYPE_DOUBLE
