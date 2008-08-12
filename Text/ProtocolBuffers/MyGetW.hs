@@ -263,11 +263,6 @@ type Get b y = CompGet b y () () () Identity
 setCheckpoint,useCheckpoint,clearCheckpoint :: InternalGet b y e r w user m ()
 setCheckpoint = InternalGet $ \ sc r w s (TopFrame u ys pc) ->
   sc () r w s (TopFrame (succ u) ys (HandlerFrame u Nothing s mempty pc))
-useCheckpoint = InternalGet $ \ sc r w sIn (TopFrame u ys (HandlerFrame _u catcher sOld future pc)) ->
-  case catcher of
-    Just {} -> error "Impossible: Bad use of useCheckpoint, error_handler was Just instead of Nothing"
-    Nothing -> let sOut = (collect sOld future) { user_field = user_field sIn }
-               in sc () r w sOut (TopFrame u ys pc)
 clearCheckpoint = InternalGet $ \ sc r w s (TopFrame u ys (HandlerFrame _u catcher _s _future pc)) ->
   case catcher of
     Just {} -> error "Impossible: Bad use of clearCheckpoint, error_handler was Just instead of Nothing"
