@@ -45,16 +45,19 @@ Library
                    Text.DescriptorProtos.MethodOptions
                    Text.DescriptorProtos.ServiceDescriptorProto
                    Text.DescriptorProtos.ServiceOptions
+                   Text.ProtocolBuffers.Basic
+                   Text.ProtocolBuffers.BootStrap
                    Text.ProtocolBuffers.Default
-                   Text.ProtocolBuffers.Header
-                   Text.ProtocolBuffers.Instances
-                   Text.ProtocolBuffers.ParseProto
-                   Text.ProtocolBuffers.WireMessage
-                   Text.ProtocolBuffers.Mergeable
                    Text.ProtocolBuffers.DeriveMergeable
                    Text.ProtocolBuffers.Gen
-                   Text.ProtocolBuffers.Reflections
                    Text.ProtocolBuffers.Get
+                   Text.ProtocolBuffers.Header
+                   Text.ProtocolBuffers.Instances
+                   Text.ProtocolBuffers.Lexer
+                   Text.ProtocolBuffers.Mergeable
+                   Text.ProtocolBuffers.Parser
+                   Text.ProtocolBuffers.Reflections
+                   Text.ProtocolBuffers.Resolve
                    Text.ProtocolBuffers.WireMessage
 
   if flag(small_base)
