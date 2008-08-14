@@ -1,4 +1,17 @@
-module Text.ProtocolBuffers.Resolve where
+-- | Text.ProtocolBuffers.Resolve takes the output of Text.ProtocolBuffers.Parse and runs all
+-- the preprocessing and sanity checks that precede Text.ProtocolBuffers.Gen creating modules.
+--
+-- Currently this involves mangling the names, building a NameSpace (or [NameSpace]), and making
+-- all the names fully qualified (and setting TYPE_MESSAGE or TYPE_ENUM) as appropriate.
+-- Field names are also checked against a list of reserved words, appending a single quote
+-- to disambiguate.
+-- All names from Parser should start with a letter, but _ is also handled by replacing with U' or u'.
+-- Anything else will trigger a "subborn ..." error.
+-- Name resolution failure are not handled elegantly: it will kill the system with a long error message.
+--
+-- TODO: treat names with leading "." as already "fully-qualified"
+--       make sure the optional fields that will be needed are not Nothing
+module Text.ProtocolBuffers.Resolve(resolveFDP) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
@@ -36,13 +49,15 @@ import Data.List(unfoldr,span,inits,foldl')
 import qualified Data.ByteString.Lazy.UTF8 as U
 import qualified Data.ByteString.Lazy.Char8 as LC
 
+err s = error $ "Text.ProtocolBuffers.Resolve fatal error encountered, message:\n"++indent s
+  where indent = unlines . map (\s -> ' ':' ':s) . lines
+
 newlineBefore s = go where
   go [] = []
   go (x:xs) | x `elem` s = '\n':x:go xs
             | otherwise = x:go xs
 
-indent = unlines . map (\s -> ' ':' ':s) . lines
-
+encodeModuleNames :: [String] -> ByteString
 encodeModuleNames [] = mempty
 encodeModuleNames xs = U.fromString . foldr1 (\a b -> a ++ '.':b) $ xs
 
@@ -64,8 +79,25 @@ splitDot = unfoldr s where
 mangleModuleName :: String -> String
 mangleModuleName [] = "Empty'Name"
 mangleModuleName ('_':xs) = "U'"++xs
-mangleModuleName (x:xs) | isLower x = toUpper x : xs
+mangleModuleName (x:xs) | isLower x = let x' = toUpper x
+                                      in if isLower x' then error ("subborn lower case"++show (x:xs))
+                                           else x': xs
 mangleModuleName xs = xs
+
+mangleFieldName :: Maybe ByteString -> Maybe ByteString
+mangleFieldName = fmap (U.fromString . fixname . U.toString)
+  where fixname [] = "empty'name"
+        fixname ('_':xs) = "u'"++xs
+        fixname (x:xs) | isUpper x = let x' = toLower x
+                                     in if isUpper x' then error ("stubborn upper case: "++show (x:xs))
+                                          else fixname (x':xs)
+        fixname xs | xs `elem` reserved = xs ++ "'"
+        fixname xs = xs
+
+reserved :: [String]
+reserved = ["case","class","data","default","deriving","do","else"
+           ,"if","import","in","infix","infixl","infixr","instance"
+           ,"let","module","newtype","of","then","type","where"] -- also reserved is "_"
 
 newtype NameSpace = NameSpace {unNameSpace::(Map String ([String],NameType,Maybe NameSpace))}
   deriving (Show,Read)
@@ -79,15 +111,13 @@ seeContext :: Context -> [String]
 seeContext cx = map ((++"[]") . concatMap (\k -> show k ++ ", ") . M.keys . unNameSpace) cx
 
 data Box a = Box a
-
 instance Show (Box a) where show (Box {}) = "Box"
-
 test = do
   (Right fdp) <- pbParse filename2
-  return (Box (fdp,resolveNames fdp))
+  return (Box (fdp,resolveFDP fdp))
 
---resolveNames :: D.FileDescriptorProto -> Context
-resolveNames protoIn =
+resolveFDP :: D.FileDescriptorProto -> D.FileDescriptorProto
+resolveFDP protoIn =
   let prefix = mangleCap . msum $
                  [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options protoIn)
                  , D.FileOptions.java_package =<< (D.FileDescriptorProto.options protoIn)
@@ -120,7 +150,7 @@ resolveNames protoIn =
         case M.lookup mangled n of
           Just (_,_,Nothing) -> cx
           Just (_,_,Just ns1) -> ns1:cx
-          x -> error $ "Name resolution failed:\n"++unlines (mangled : show x : seeContext cx)
+          x -> error $ "Name resolution failed:\n"++unlines (mangled : show x : "KNOWN NAMES" : seeContext cx)
        where mangled = mangleCap1 name
       resolve :: Context -> Maybe ByteString -> Maybe ByteString
       resolve context bsIn = fmap fst (resolve2 context bsIn)
@@ -142,52 +172,29 @@ resolveNames protoIn =
         { D.FileDescriptorProto.message_type=fmap (processMSG protoContext) (D.FileDescriptorProto.message_type fdp)
         , D.FileDescriptorProto.enum_type=fmap (processENM protoContext) (D.FileDescriptorProto.enum_type fdp)
         , D.FileDescriptorProto.service=fmap (processSRV protoContext) (D.FileDescriptorProto.service fdp)
-        , D.FileDescriptorProto.extension=fmap (processFLD protoContext) (D.FileDescriptorProto.extension fdp) }
+        , D.FileDescriptorProto.extension=fmap (processFLD protoContext Nothing) (D.FileDescriptorProto.extension fdp) }
       processMSG cx msg = msg
-        { D.DescriptorProto.name=resolve cx (D.DescriptorProto.name msg)
-        , D.DescriptorProto.field=fmap (processFLD cx') (D.DescriptorProto.field msg)
-        , D.DescriptorProto.extension=fmap (processFLD cx') (D.DescriptorProto.extension msg)
+        { D.DescriptorProto.name=self
+        , D.DescriptorProto.field=fmap (processFLD cx' self) (D.DescriptorProto.field msg)
+        , D.DescriptorProto.extension=fmap (processFLD cx' self) (D.DescriptorProto.extension msg)
         , D.DescriptorProto.nested_type=fmap (processMSG cx') (D.DescriptorProto.nested_type msg)
         , D.DescriptorProto.enum_type=fmap (processENM cx') (D.DescriptorProto.enum_type msg) }
        where cx' = descend cx (D.DescriptorProto.name msg)
+             self = resolve cx (D.DescriptorProto.name msg)
+      processFLD cx mp f = f { D.FieldDescriptorProto.name=mangleFieldName (D.FieldDescriptorProto.name f)
+                             , D.FieldDescriptorProto.type'=(D.FieldDescriptorProto.type' f) `mplus` (fmap (t.snd) r2)
+                             , D.FieldDescriptorProto.type_name=checkSelf mp (fmap fst r2)
+                             , D.FieldDescriptorProto.extendee=resolve cx (D.FieldDescriptorProto.extendee f) }
+       where r2 = resolve2 cx (D.FieldDescriptorProto.type_name f)
+             t Message = TYPE_MESSAGE
+             t Enumeration = TYPE_ENUM
+             t Void = error "processFLD cannot resolve type_name to Void"
+             checkSelf (Just parent) x@(Just name) = if parent==name then (D.FieldDescriptorProto.type_name f) else x
+             checkSelf _ x = x
       processENM cx e = e { D.EnumDescriptorProto.name=resolve cx (D.EnumDescriptorProto.name e) }
-      processSRV cx s = s { D.ServiceDescriptorProto.name=resolve cx (D.ServiceDescriptorProto.name s) }
-      processFLD cx f = f { D.FieldDescriptorProto.type'=(D.FieldDescriptorProto.type' f) `mplus` (fmap (t.snd) r2)
-                          , D.FieldDescriptorProto.type_name=fmap fst r2
-                          , D.FieldDescriptorProto.extendee=resolve cx (D.FieldDescriptorProto.extendee f) }
-        where r2 = resolve2 cx (D.FieldDescriptorProto.type_name f)
-              t Message = TYPE_MESSAGE
-              t Enumeration = TYPE_ENUM
-              t Void = error "processFLD cannot resolve type_name to Void"
-  in processFDP
-
--- also reserved is "_"
-reserved = ["case","class","data","default","deriving","do","else"
-           ,"if","import","in","infix","infixl","infixr","instance"
-           ,"let","module","newtype","of","then","type","where"]
-
-{- Initial name space
-
-  fromList [("DescriptorProtos",(["DescriptorProtos"],Void,Just (NameSpace (fromList 
-               [("DescriptorProto",(["DescriptorProtos","DescriptorProto"],Message,Just (NameSpace (fromList
-                   [("ExtensionRange",(["DescriptorProtos","DescriptorProto","ExtensionRange"],Message,Nothing))]))))
-               ,("EnumDescriptorProto",(["DescriptorProtos","EnumDescriptorProto"],Message,Nothing))
-               ,("EnumOptions",(["DescriptorProtos","EnumOptions"],Message,Nothing))
-               ,("EnumValueDescriptorProto",(["DescriptorProtos","EnumValueDescriptorProto"],Message,Nothing))
-               ,("EnumValueOptions",(["DescriptorProtos","EnumValueOptions"],Message,Nothing))
-               ,("FieldDescriptorProto",(["DescriptorProtos","FieldDescriptorProto"],Message,Just (NameSpace (fromList
-                   [("Label",(["DescriptorProtos","FieldDescriptorProto","Label"],Enumeration,Nothing))
-                   ,("Type",(["DescriptorProtos","FieldDescriptorProto","Type"],Enumeration,Nothing))]))))
-               ,("FieldOptions",(["DescriptorProtos","FieldOptions"],Message,Just (NameSpace (fromList
-                   [("CType",(["DescriptorProtos","FieldOptions","CType"],Enumeration,Nothing))]))))
-               ,("FileDescriptorProto",(["DescriptorProtos","FileDescriptorProto"],Message,Nothing))
-               ,("FileOptions",(["DescriptorProtos","FileOptions"],Message,Just (NameSpace (fromList
-                   [("OptimizeMode",(["DescriptorProtos","FileOptions","OptimizeMode"],Enumeration,Nothing))]))))
-               ,("MessageOptions",(["DescriptorProtos","MessageOptions"],Message,Nothing))
-               ,("MethodDescriptorProto",(["DescriptorProtos","MethodDescriptorProto"],Message,Nothing))
-               ,("MethodOptions",(["DescriptorProtos","MethodOptions"],Message,Nothing))
-               ,("ServiceDescriptorProto",(["DescriptorProtos","ServiceDescriptorProto"],Message,Nothing))
-               ,("ServiceOptions",(["DescriptorProtos","ServiceOptions"],Message,Nothing))]))))]
--}
-n = "NameSpace (fromList [(\"DescriptorProto\",([\"DescriptorProtos\",\"DescriptorProto\"],Message,Just (NameSpace (fromList [(\"ExtensionRange\",([\"DescriptorProtos\",\"DescriptorProto\",\"ExtensionRange\"],Message,Nothing))])))),(\"EnumDescriptorProto\",([\"DescriptorProtos\",\"EnumDescriptorProto\"],Message,Nothing)),(\"EnumOptions\",([\"DescriptorProtos\",\"EnumOptions\"],Message,Nothing)),(\"EnumValueDescriptorProto\",([\"DescriptorProtos\",\"EnumValueDescriptorProto\"],Message,Nothing)),(\"EnumValueOptions\",([\"DescriptorProtos\",\"EnumValueOptions\"],Message,Nothing)),(\"FieldDescriptorProto\",([\"DescriptorProtos\",\"FieldDescriptorProto\"],Message,Just (NameSpace (fromList [(\"Label\",([\"DescriptorProtos\",\"FieldDescriptorProto\",\"Label\"],Enumeration,Nothing)),(\"Type\",([\"DescriptorProtos\",\"FieldDescriptorProto\",\"Type\"],Enumeration,Nothing))])))),(\"FieldOptions\",([\"DescriptorProtos\",\"FieldOptions\"],Message,Just (NameSpace (fromList [(\"CType\",([\"DescriptorProtos\",\"FieldOptions\",\"CType\"],Enumeration,Nothing))])))),(\"FileDescriptorProto\",([\"DescriptorProtos\",\"FileDescriptorProto\"],Message,Nothing)),(\"FileOptions\",([\"DescriptorProtos\",\"FileOptions\"],Message,Just (NameSpace (fromList [(\"OptimizeMode\",([\"DescriptorProtos\",\"FileOptions\",\"OptimizeMode\"],Enumeration,Nothing))])))),(\"MessageOptions\",([\"DescriptorProtos\",\"MessageOptions\"],Message,Nothing)),(\"MethodDescriptorProto\",([\"DescriptorProtos\",\"MethodDescriptorProto\"],Message,Nothing)),(\"MethodOptions\",([\"DescriptorProtos\",\"MethodOptions\"],Message,Nothing)),(\"ServiceDescriptorProto\",([\"DescriptorProtos\",\"ServiceDescriptorProto\"],Message,Nothing)),(\"ServiceOptions\",([\"DescriptorProtos\",\"ServiceOptions\"],Message,Nothing))])"
-
+      processSRV cx s = s { D.ServiceDescriptorProto.name=resolve cx (D.ServiceDescriptorProto.name s)
+                          , D.ServiceDescriptorProto.method=fmap (processMTD cx) (D.ServiceDescriptorProto.method s) }
+      processMTD cx m = m { D.MethodDescriptorProto.name=mangleFieldName (D.MethodDescriptorProto.name m)
+                          , D.MethodDescriptorProto.input_type=resolve cx (D.MethodDescriptorProto.input_type m)
+                          , D.MethodDescriptorProto.output_type=resolve cx (D.MethodDescriptorProto.output_type m) }
+  in processFDP protoIn

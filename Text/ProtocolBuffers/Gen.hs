@@ -32,7 +32,7 @@
 -- some other unicode form, while bytes must be unparsed to use. The only sane thing to do is
 -- put a parsed and converted Haskell data type into the defaults interface.
 -- This has been done in Reflections.hs
-module Text.ProtocolBuffers.Gen where
+module Text.ProtocolBuffers.Gen(descriptorModule,enumModule,prettyPrint) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
@@ -156,7 +156,7 @@ dotPre s | '.' == last s = (s ++)
          | otherwise = (s ++) . ('.':)
 
 spanEndL f bs = let (a,b) = Data.ByteString.Char8.spanEnd f (Data.ByteString.concat . BSC.toChunks $ bs)
-               in (BSC.fromChunks [a],BSC.fromChunks [b])
+                in (BSC.fromChunks [a],BSC.fromChunks [b])
 
 -- Take a bytestring of "A" into "Right A" and "A.B.C" into "Left (A.B,C)"
 splitMod :: ByteString -> Either (ByteString,ByteString) ByteString
@@ -579,7 +579,7 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
 
     in HsInstDecl src [] (private "Wire") [HsTyCon me]
         [ HsInsDecl (HsFunBind [HsMatch src (HsIdent "wireSize") [myP11,mine] (HsUnGuardedRhs $
-                                  (pvar "lenSize" $$ HsParen (foldl1' add sizes))) noWhere])
+                                  (pvar "lenSize" $$ HsParen (foldl' add (HsLit (HsInt 0)) sizes))) noWhere])
         , HsInsDecl (HsFunBind [HsMatch src (HsIdent "wirePut") [myP11,HsPAsPat (HsIdent "self'") (HsPParen mine)] (HsUnGuardedRhs $
                                   (HsDo ((:) (HsQualifier $
                                               pvar "putSize" $$

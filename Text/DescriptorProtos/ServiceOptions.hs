@@ -1,47 +1,29 @@
-module Text.DescriptorProtos.ServiceOptions
-  (ServiceOptions(..))
- where
-
+module Text.DescriptorProtos.ServiceOptions (ServiceOptions(..))
+       where
+import Prelude ((+), (++))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
-
-data ServiceOptions = ServiceOptions
-                    deriving (P'.Show, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
+ 
+data ServiceOptions = ServiceOptions{}
+                    deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
  
 instance P'.Mergeable ServiceOptions where
         mergeEmpty = ServiceOptions
         mergeAppend (ServiceOptions) (ServiceOptions) = ServiceOptions
  
-instance P'.Default ServiceOptions
-
-{-
-data ServiceOptions = ServiceOptions{field1 ::
-                                     P'.Maybe P'.ByteString,
-                                     field2 :: P'.Maybe ServiceOptions}
-                    deriving (P'.Show, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
+instance P'.Default ServiceOptions where
+        defaultValue = ServiceOptions
  
-instance P'.Mergeable ServiceOptions where
-        mergeEmpty = ServiceOptions P'.mergeEmpty P'.mergeEmpty
-        mergeAppend (ServiceOptions x'1 x'2) (ServiceOptions y'1 y'2)
-          = ServiceOptions (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2)
+instance P'.Wire ServiceOptions where
+        wireSize 11 (ServiceOptions) = P'.lenSize (0)
+        wirePut 11 self'@(ServiceOptions)
+          = do P'.putSize (P'.wireSize 11 self')
+        wireGet 11 = P'.getMessage update'Self
+          where update'Self field'Number old'Self
+                  = case field'Number of
+                        _ -> P'.unknownField field'Number
  
-instance P'.Mergeable (P'.Maybe ServiceOptions) where
-        mergeEmpty = P'.Nothing
-        mergeAppend = P'.mayMerge
- 
-instance P'.Default ServiceOptions
--}
-{-
-data ServiceOptions = ServiceOptions
-  deriving (P'.Show,P'.Eq,P'.Ord,P'.Typeable)
-
-instance P'.Mergeable ServiceOptions where
-        mergeEmpty = ServiceOptions
-        mergeAppend = P'.mergeAppend
- 
-instance P'.Mergeable (P'.Maybe ServiceOptions) where
-        mergeEmpty = P'.Nothing
-        mergeAppend = P'.mayMerge
-
-instance P'.Default ServiceOptions
--}
+instance P'.ReflectDescriptor ServiceOptions where
+        reflectDescriptorInfo _
+          = P'.read
+              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"ServiceOptions\"}, fields = fromList []}"

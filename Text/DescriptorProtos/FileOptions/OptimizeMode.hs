@@ -1,33 +1,38 @@
 module Text.DescriptorProtos.FileOptions.OptimizeMode
-  (OptimizeMode(..))
- where
-
-import Data.Monoid
-import Text.ProtocolBuffers.Header
-
-data OptimizeMode = SPEED | CODE_SIZE
-  deriving (Read,Show,Eq,Ord,Typeable)
-
-$( makeMergeableEnum ''OptimizeMode )
-
-err'Name :: String
-err'Name = "DescriptorProtos.FileOptions.OptimizeMode"
-
-err' :: String -> b
-err' a = error (err'Name ++ " : " ++ show a)
-
-instance Enum OptimizeMode where
-  fromEnum SPEED = 1
-  fromEnum CODE_SIZE = 2
-
-  toEnum 1 = SPEED
-  toEnum 2 = CODE_SIZE
-  toEnum x = err' ("toEnum failed on value "++show x)
-
-  succ SPEED = CODE_SIZE
-  succ CODE_SIZE = err' ("succ failed on value "++show CODE_SIZE)
-
-  pred SPEED = err' ("pred failed on value "++show SPEED)
-  pred CODE_SIZE = SPEED
-
-instance ReflectEnum OptimizeMode where
+       (OptimizeMode(..)) where
+import Prelude ((+), (++))
+import qualified Prelude as P'
+import qualified Text.ProtocolBuffers.Header as P'
+ 
+data OptimizeMode = SPEED
+                  | CODE_SIZE
+                  deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
+ 
+instance P'.Mergeable OptimizeMode
+ 
+instance P'.Bounded OptimizeMode where
+        minBound = SPEED
+        maxBound = CODE_SIZE
+ 
+instance P'.Default OptimizeMode where
+        defaultValue = SPEED
+ 
+instance P'.Enum OptimizeMode where
+        fromEnum (SPEED) = 1
+        fromEnum (CODE_SIZE) = 2
+        toEnum 1 = SPEED
+        toEnum 2 = CODE_SIZE
+        succ (SPEED) = CODE_SIZE
+        pred (CODE_SIZE) = SPEED
+ 
+instance P'.Wire OptimizeMode where
+        wireSize 14 enum = P'.wireSize 14 (P'.fromEnum enum)
+        wirePut 14 enum = P'.wirePut 14 (P'.fromEnum enum)
+        wireGet 14 = P'.fmap P'.toEnum (P'.wireGet 14)
+ 
+instance P'.ReflectEnum OptimizeMode where
+        reflectEnum = [(1, "SPEED", SPEED), (2, "CODE_SIZE", CODE_SIZE)]
+        reflectEnumInfo _
+          = P'.EnumInfo
+              (P'.ProtoName "Text" "DescriptorProtos.FileOptions" "OptimizeMode")
+              [(1, "SPEED"), (2, "CODE_SIZE")]

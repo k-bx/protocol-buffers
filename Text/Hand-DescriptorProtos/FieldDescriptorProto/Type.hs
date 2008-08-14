@@ -1,6 +1,5 @@
 module Text.DescriptorProtos.FieldDescriptorProto.Type (Type(..))
        where
-import Prelude ((+), (++))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
@@ -24,7 +23,7 @@ data Type = TYPE_DOUBLE
           | TYPE_SINT64
           deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
  
-instance P'.Mergeable Type
+instance P'.Mergeable Type where
  
 instance P'.Bounded Type where
         minBound = TYPE_DOUBLE
@@ -132,3 +131,32 @@ instance P'.ReflectEnum Type where
                (10, "TYPE_GROUP"), (11, "TYPE_MESSAGE"), (12, "TYPE_BYTES"),
                (13, "TYPE_UINT32"), (14, "TYPE_ENUM"), (15, "TYPE_SFIXED32"),
                (16, "TYPE_SFIXED64"), (17, "TYPE_SINT32"), (18, "TYPE_SINT64")]
+{-module Text.DescriptorProtos.FieldDescriptorProto.Type
+  (Type(..))
+ where
+
+import Text.ProtocolBuffers.Header
+
+data Type = TYPE_DOUBLE
+          | TYPE_FLOAT
+          | TYPE_INT64    -- inefficient for negative values
+          | TYPE_UINT64
+          | TYPE_INT32    -- inefficient for negative values
+          | TYPE_FIXED64
+          | TYPE_FIXED32
+          | TYPE_BOOL
+          | TYPE_STRING
+          | TYPE_GROUP      -- Tag-delimited aggregate.
+          | TYPE_MESSAGE    -- Length-delimeted aggegate
+            -- descriptor.proto "New in version 2"
+          | TYPE_BYTES
+          | TYPE_UINT32
+          | TYPE_ENUM
+          | TYPE_SFIXED32
+          | TYPE_SFIXED64
+          | TYPE_SINT32 -- Uses ZipZag encoding
+          | TYPE_SINT64 -- Uses ZipZag encoding
+  deriving (Show,Read,Eq,Ord,Typeable,Data,Enum)
+
+$( makeMergeableEnum ''Type )
+-}
