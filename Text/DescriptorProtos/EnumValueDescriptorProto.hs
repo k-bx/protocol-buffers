@@ -7,7 +7,7 @@ import qualified Text.DescriptorProtos.EnumValueOptions
        as DescriptorProtos (EnumValueOptions)
  
 data EnumValueDescriptorProto = EnumValueDescriptorProto{name ::
-                                                         P'.Maybe P'.ByteString,
+                                                         P'.Maybe P'.Utf8,
                                                          number :: P'.Maybe P'.Int32,
                                                          options ::
                                                          P'.Maybe DescriptorProtos.EnumValueOptions}

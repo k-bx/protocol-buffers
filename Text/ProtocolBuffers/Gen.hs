@@ -87,9 +87,8 @@ import Text.ProtocolBuffers.WireMessage(size'Varint)
 
 import qualified Data.ByteString(concat)
 import qualified Data.ByteString.Char8(spanEnd)
-import qualified Data.ByteString.Lazy as BS
-import qualified Data.ByteString.Lazy.Char8 as BSC
-import qualified Data.ByteString.Lazy.UTF8 as U
+import qualified Data.ByteString.Lazy.Char8 as BSC(toChunks,fromChunks,length,init,unpack)
+import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.Bits(Bits((.|.),shiftL))
 import Data.Maybe(fromMaybe,catMaybes)
 import Data.List(sort,group,foldl',foldl1')
@@ -105,6 +104,8 @@ import Language.Haskell.Exts.Pretty
 ($$) = HsApp
 
 infixl 1 $$
+
+utf8FromString = Utf8 . U.fromString
 
 toWireTag :: FieldId -> FieldType -> WireTag
 toWireTag fieldId fieldType
@@ -159,15 +160,15 @@ spanEndL f bs = let (a,b) = Data.ByteString.Char8.spanEnd f (Data.ByteString.con
                 in (BSC.fromChunks [a],BSC.fromChunks [b])
 
 -- Take a bytestring of "A" into "Right A" and "A.B.C" into "Left (A.B,C)"
-splitMod :: ByteString -> Either (ByteString,ByteString) ByteString
-splitMod bs = case spanEndL ('.'/=) bs of
-                (pre,post) | BSC.length pre <= 1 -> Right bs
-                           | otherwise -> Left (BSC.init pre,post)
+splitMod :: Utf8 -> Either (Utf8,Utf8) Utf8
+splitMod (Utf8 bs) = case spanEndL ('.'/=) bs of
+                       (pre,post) | BSC.length pre <= 1 -> Right (Utf8 bs)
+                                  | otherwise -> Left (Utf8 (BSC.init pre),Utf8 post)
 
-unqual :: ByteString -> HsQName
+unqual :: Utf8 -> HsQName
 unqual bs = UnQual (base bs)
 
-base :: ByteString -> HsName
+base :: Utf8 -> HsName
 base bs = case splitMod bs of
             Right typeName -> (ident typeName)
             Left (_,typeName) -> (ident typeName)
@@ -175,17 +176,19 @@ base bs = case splitMod bs of
 src :: SrcLoc
 src = SrcLoc "No SrcLoc" 0 0
 
-ident :: ByteString -> HsName
-ident bs = HsIdent (U.toString bs)
+toString = U.toString . utf8
+
+ident :: Utf8 -> HsName
+ident bs = HsIdent (toString bs)
 
 typeApp :: String -> HsType -> HsType
 typeApp s =  HsTyApp (HsTyCon (private s))
 
 -- 'qual' and 'qmodname' are only correct for simple or fully looked-up names.
-qual :: ByteString -> HsQName
+qual :: Utf8 -> HsQName
 qual bs = case splitMod bs of
             Right typeName -> UnQual (ident typeName)
-            Left (modName,typeName) -> Qual (Module (U.toString modName)) (ident typeName)
+            Left (modName,typeName) -> Qual (Module (toString modName)) (ident typeName)
 
 pvar :: String -> HsExp
 pvar t = HsVar (private t)
@@ -209,8 +212,8 @@ enumModule prefix
            e@(D.EnumDescriptorProto.EnumDescriptorProto
               { D.EnumDescriptorProto.name = Just rawName})
     = let protoName = case splitMod rawName of
-                        Left (m,b) -> ProtoName prefix (U.toString m) (U.toString b)
-                        Right b    -> ProtoName prefix ""             (U.toString b)
+                        Left (m,b) -> ProtoName prefix (toString m) (toString b)
+                        Right b    -> ProtoName prefix ""             (toString b)
       in HsModule src (Module (fqName protoName))
                   (Just [HsEThingAll (UnQual (HsIdent (baseName protoName)))])
                   standardImports (enumDecls protoName e)
@@ -341,12 +344,12 @@ descriptorModule prefix
                  d@(D.DescriptorProto.DescriptorProto
                     { D.DescriptorProto.name = Just rawName
                     , D.DescriptorProto.field = field })
-    = let self = UnQual . HsIdent . U.toString . either snd id . splitMod $ rawName
-          fqModuleName = Module (dotPre prefix (U.toString rawName))
+    = let self = UnQual . HsIdent . toString . either snd id . splitMod $ rawName
+          fqModuleName = Module (dotPre prefix (toString rawName))
           imports = standardImports ++ map formatImport (toImport d)
           protoName = case splitMod rawName of
-                        Left (m,b) -> ProtoName prefix (U.toString m) (U.toString b)
-                        Right b    -> ProtoName prefix ""             (U.toString b)
+                        Left (m,b) -> ProtoName prefix (toString m) (toString b)
+                        Right b    -> ProtoName prefix ""             (toString b)
           (insts,di) = instancesDescriptor protoName d
       in HsModule src fqModuleName (Just [HsEThingAll self]) imports (descriptorX d : insts)
   where formatImport (Left (m,t)) = HsImportDecl src (Module (dotPre prefix (dotPre m t))) True
@@ -366,7 +369,7 @@ toImport (D.DescriptorProto.DescriptorProto
           { D.DescriptorProto.name = Just name
           , D.DescriptorProto.field = field })
     = map head . group . sort
-      . map (either (\(m,t) -> Left (U.toString m,U.toString t)) (Right . U.toString))
+      . map (either (\(m,t) -> Left (toString m,toString t)) (Right . toString))
       . map splitMod
       . filter (selfName /=)
       . catMaybes 
@@ -461,7 +464,7 @@ defaultValueExp  d@(D.FieldDescriptorProto.FieldDescriptorProto
   where toSyntax :: HsDefault -> HsExp
         toSyntax x = case x of
                        HsDef'Bool b -> HsCon (private (show b))
-                       HsDef'ByteString bs -> pvar "pack" $$ HsLit (HsString (BSC.unpack bs))
+                       HsDef'ByteString bs -> pvar "pack" $$ HsLit (HsString (BSC.unpack bs)) -- XXX change to UTF-8
                        HsDef'Rational r -> HsLit (HsFrac r)
                        HsDef'Integer i -> HsLit (HsInt i)
         mayDef = parseDefaultValue d
@@ -469,10 +472,10 @@ defaultValueExp  d@(D.FieldDescriptorProto.FieldDescriptorProto
                         fieldType = (FieldType (fromEnum type'))
                         wireTag = toWireTag fieldId fieldType
                         wireTagLength = size'Varint (getWireTag wireTag)
-                    in FieldInfo (U.toString rawName) fieldId wireTag wireTagLength
+                    in FieldInfo (toString rawName) fieldId wireTag wireTagLength
                                  (label == LABEL_REQUIRED) (label == LABEL_REPEATED)
                                  fieldType
-                                 (fmap U.toString mayTypeName) mayRawDef mayDef
+                                 (fmap toString mayTypeName) (fmap utf8 mayRawDef) mayDef
 
 -- "Nothing" means no value specified
 -- A failure to parse a provided value will result in an error at the moment
@@ -492,7 +495,7 @@ parseDefaultValue d@(D.FieldDescriptorProto.FieldDescriptorProto
                    TYPE_FLOAT   -> return parseDefFloat
                    TYPE_STRING  -> return parseDefString
                    _            -> return parseDefInteger
-         case todo bs of
+         case todo (utf8 bs) of
            Nothing -> error ("Could not parse the default value for "++show d)
            Just value -> return value
 
@@ -601,7 +604,7 @@ useType :: Type -> Maybe String
 useType TYPE_DOUBLE   = Just "Double"
 useType TYPE_FLOAT    = Just "Float"
 useType TYPE_BOOL     = Just "Bool"
-useType TYPE_STRING   = Just "ByteString"
+useType TYPE_STRING   = Just "Utf8"
 useType TYPE_BYTES    = Just "ByteString"
 useType TYPE_UINT32   = Just "Word32"
 useType TYPE_FIXED32  = Just "Word32"
@@ -630,18 +633,18 @@ testType = putStrLn . prettyPrint $ enumModule "Text" t
 genFieldOptions :: D.DescriptorProto.DescriptorProto
 genFieldOptions =
   defaultValue
-  { D.DescriptorProto.name = Just (BSC.pack "DescriptorProtos.FieldOptions") 
+  { D.DescriptorProto.name = Just (utf8FromString "DescriptorProtos.FieldOptions") 
   , D.DescriptorProto.field = Seq.fromList
     [ defaultValue
-      { D.FieldDescriptorProto.name = Just (BSC.pack "ctype")
+      { D.FieldDescriptorProto.name = Just (utf8FromString "ctype")
       , D.FieldDescriptorProto.number = Just 1
       , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
       , D.FieldDescriptorProto.type' = Just TYPE_ENUM
-      , D.FieldDescriptorProto.type_name = Just (BSC.pack "DescriptorProtos.FieldOptions.CType")
+      , D.FieldDescriptorProto.type_name = Just (utf8FromString "DescriptorProtos.FieldOptions.CType")
       , D.FieldDescriptorProto.default_value = Nothing
       }
     , defaultValue
-      { D.FieldDescriptorProto.name = Just (BSC.pack "experimental_map_key")
+      { D.FieldDescriptorProto.name = Just (utf8FromString "experimental_map_key")
       , D.FieldDescriptorProto.number = Just 9
       , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
       , D.FieldDescriptorProto.type' = Just TYPE_STRING
@@ -653,85 +656,85 @@ genFieldOptions =
 -- test several features
 d :: D.DescriptorProto.DescriptorProto
 d = defaultValue
-    { D.DescriptorProto.name = Just (BSC.pack "SomeMod.ServiceOptions") 
+    { D.DescriptorProto.name = Just (utf8FromString "SomeMod.ServiceOptions") 
     , D.DescriptorProto.field = Seq.fromList
        [ defaultValue
-         { D.FieldDescriptorProto.name = Just (BSC.pack "fieldString")
+         { D.FieldDescriptorProto.name = Just (utf8FromString "fieldString")
          , D.FieldDescriptorProto.number = Just 1
          , D.FieldDescriptorProto.label = Just LABEL_REQUIRED
          , D.FieldDescriptorProto.type' = Just TYPE_STRING
-         , D.FieldDescriptorProto.default_value = Just (BSC.pack "Hello World")
+         , D.FieldDescriptorProto.default_value = Just (utf8FromString "Hello World")
          }
        , defaultValue
-         { D.FieldDescriptorProto.name = Just (BSC.pack "fieldDouble")
+         { D.FieldDescriptorProto.name = Just (utf8FromString "fieldDouble")
          , D.FieldDescriptorProto.number = Just 4
          , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
          , D.FieldDescriptorProto.type' = Just TYPE_DOUBLE
-         , D.FieldDescriptorProto.default_value = Just (BSC.pack "+5.5e-10")
+         , D.FieldDescriptorProto.default_value = Just (utf8FromString "+5.5e-10")
         }
        , defaultValue
-         { D.FieldDescriptorProto.name = Just (BSC.pack "fieldBytes")
+         { D.FieldDescriptorProto.name = Just (utf8FromString "fieldBytes")
          , D.FieldDescriptorProto.number = Just 2
          , D.FieldDescriptorProto.label = Just LABEL_REQUIRED
          , D.FieldDescriptorProto.type' = Just TYPE_STRING
-         , D.FieldDescriptorProto.default_value = Just (BSC.pack . cEncode $ [0,5..255])
+         , D.FieldDescriptorProto.default_value = Just (utf8FromString . map toEnum $ [0,5..255])
         }
        , defaultValue
-         { D.FieldDescriptorProto.name = Just (BSC.pack "fieldInt64")
+         { D.FieldDescriptorProto.name = Just (utf8FromString "fieldInt64")
          , D.FieldDescriptorProto.number = Just 3
          , D.FieldDescriptorProto.label = Just LABEL_REQUIRED
          , D.FieldDescriptorProto.type' = Just TYPE_INT64
-         , D.FieldDescriptorProto.default_value = Just (BSC.pack "-0x40")
+         , D.FieldDescriptorProto.default_value = Just (utf8FromString "-0x40")
         }
        , defaultValue
-         { D.FieldDescriptorProto.name = Just (BSC.pack "fieldBool")
+         { D.FieldDescriptorProto.name = Just (utf8FromString "fieldBool")
          , D.FieldDescriptorProto.number = Just 5
          , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
          , D.FieldDescriptorProto.type' = Just TYPE_STRING
-         , D.FieldDescriptorProto.default_value = Just (BSC.pack "False")
+         , D.FieldDescriptorProto.default_value = Just (utf8FromString "False")
         }
        , defaultValue
-         { D.FieldDescriptorProto.name = Just (BSC.pack "field2TestSelf")
+         { D.FieldDescriptorProto.name = Just (utf8FromString "field2TestSelf")
          , D.FieldDescriptorProto.number = Just 6
          , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
          , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
-         , D.FieldDescriptorProto.type_name = Just (BSC.pack "ServiceOptions")
+         , D.FieldDescriptorProto.type_name = Just (utf8FromString "ServiceOptions")
          }
        , defaultValue
-         { D.FieldDescriptorProto.name = Just (BSC.pack "field3TestQualified")
+         { D.FieldDescriptorProto.name = Just (utf8FromString "field3TestQualified")
          , D.FieldDescriptorProto.number = Just 7
          , D.FieldDescriptorProto.label = Just LABEL_REPEATED
          , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
-         , D.FieldDescriptorProto.type_name = Just (BSC.pack "A.B.C.Label")
+         , D.FieldDescriptorProto.type_name = Just (utf8FromString "A.B.C.Label")
          }
        , defaultValue
-         { D.FieldDescriptorProto.name = Just (BSC.pack "field4TestUnqualified")
+         { D.FieldDescriptorProto.name = Just (utf8FromString "field4TestUnqualified")
          , D.FieldDescriptorProto.number = Just 8
          , D.FieldDescriptorProto.label = Just LABEL_REPEATED
          , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
-         , D.FieldDescriptorProto.type_name = Just (BSC.pack "Maybe")
+         , D.FieldDescriptorProto.type_name = Just (utf8FromString "Maybe")
          }
        ]
     }
 
 labelTest :: D.EnumDescriptorProto.EnumDescriptorProto
 labelTest = defaultValue
-    { D.EnumDescriptorProto.name = Just (BSC.pack "DescriptorProtos.FieldDescriptorProto.Label")
+    { D.EnumDescriptorProto.name = Just (utf8FromString "DescriptorProtos.FieldDescriptorProto.Label")
     , D.EnumDescriptorProto.value = Seq.fromList
-      [ defaultValue { D.EnumValueDescriptorProto.name = Just (BSC.pack "LABEL_OPTIONAL")
+      [ defaultValue { D.EnumValueDescriptorProto.name = Just (utf8FromString "LABEL_OPTIONAL")
                      , D.EnumValueDescriptorProto.number = Just 1 }
-      , defaultValue { D.EnumValueDescriptorProto.name = Just (BSC.pack "LABEL_REQUIRED")
+      , defaultValue { D.EnumValueDescriptorProto.name = Just (utf8FromString "LABEL_REQUIRED")
                      , D.EnumValueDescriptorProto.number = Just 2 }
-      , defaultValue { D.EnumValueDescriptorProto.name = Just (BSC.pack "LABEL_REPEATED")
+      , defaultValue { D.EnumValueDescriptorProto.name = Just (utf8FromString "LABEL_REPEATED")
                      , D.EnumValueDescriptorProto.number = Just 3 }
       ]
     }
 
 t :: D.EnumDescriptorProto.EnumDescriptorProto
-t = defaultValue { D.EnumDescriptorProto.name = Just (BSC.pack "DescriptorProtos.FieldDescriptorProto.Type")
+t = defaultValue { D.EnumDescriptorProto.name = Just (utf8FromString "DescriptorProtos.FieldDescriptorProto.Type")
                  , D.EnumDescriptorProto.value = Seq.fromList . zipWith make [1..] $ names }
   where make :: Int32 -> String -> D.EnumValueDescriptorProto
-        make i s = defaultValue { D.EnumValueDescriptorProto.name = Just (BSC.pack s)
+        make i s = defaultValue { D.EnumValueDescriptorProto.name = Just (utf8FromString s)
                                 , D.EnumValueDescriptorProto.number = Just i }
         names = ["TYPE_DOUBLE","TYPE_FLOAT","TYPE_INT64","TYPE_UINT64","TYPE_INT32"
                 ,"TYPE_FIXED64","TYPE_FIXED32","TYPE_BOOL","TYPE_STRING","TYPE_GROUP"

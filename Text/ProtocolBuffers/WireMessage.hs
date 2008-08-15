@@ -266,14 +266,16 @@ instance Wire Bool where
       x | x < 128 -> return True
       _ -> fail ("TYPE_BOOL read failure : " ++ show x)
 
-instance Wire ByteString where
+instance Wire Utf8 where
 -- items of TYPE_STRING is already in a UTF8 encoded Data.ByteString.Lazy
+  wireSize {- TYPE_STRING -} 9     x = lenSize $ BS.length (utf8 x)
+  wirePut {- TYPE_STRING -} 9      x = putVarUInt (BS.length (utf8 x)) >> putLazyByteString (utf8 x)
+  wireGet {- TYPE_STRING -} 9        = getVarInt >>= getByteString >>= return . Utf8 . toLazy --getLazyByteString 
+
+instance Wire ByteString where
 -- items of TYPE_BYTES is an untyped binary Data.ByteString.Lazy
-  wireSize {- TYPE_STRING -} 9     x = lenSize $ BS.length x
   wireSize {- TYPE_BYTES -} 12     x = lenSize $ BS.length x
-  wirePut {- TYPE_STRING -} 9      x = putVarUInt (BS.length x) >> putLazyByteString x
   wirePut {- TYPE_BYTES -} 12      x = putVarUInt (BS.length x) >> putLazyByteString x
-  wireGet {- TYPE_STRING -} 9        = getVarInt >>= getByteString >>= return . toLazy --getLazyByteString 
   wireGet {- TYPE_BYTES -} 12        = getVarInt >>= getByteString >>= return . toLazy --getLazyByteString
 
 -- Wrap a protocol-buffer Enum in fromEnum or toEnum and serialize the Int:

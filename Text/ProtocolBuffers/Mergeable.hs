@@ -22,6 +22,7 @@ class Mergeable a where
 instance Mergeable a => Mergeable (Maybe a) where mergeEmpty = Nothing; mergeAppend = mayMerge
 instance Mergeable (Seq a) where mergeEmpty = mempty; mergeAppend = mappend
 instance Mergeable Bool where mergeEmpty = False
+instance Mergeable Utf8 where mergeEmpty = Utf8 mempty
 instance Mergeable ByteString where mergeEmpty = mempty
 instance Mergeable Double where mergeEmpty = 0.0
 instance Mergeable Float where mergeEmpty = 0.0

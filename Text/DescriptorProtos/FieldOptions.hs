@@ -7,7 +7,7 @@ import qualified Text.DescriptorProtos.FieldOptions.CType
  
 data FieldOptions = FieldOptions{ctype ::
                                  P'.Maybe DescriptorProtos.FieldOptions.CType,
-                                 experimental_map_key :: P'.Maybe P'.ByteString}
+                                 experimental_map_key :: P'.Maybe P'.Utf8}
                   deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
  
 instance P'.Mergeable FieldOptions where

@@ -9,7 +9,7 @@ import qualified Text.DescriptorProtos.ServiceOptions
        as DescriptorProtos (ServiceOptions)
  
 data ServiceDescriptorProto = ServiceDescriptorProto{name ::
-                                                     P'.Maybe P'.ByteString,
+                                                     P'.Maybe P'.Utf8,
                                                      method ::
                                                      P'.Seq DescriptorProtos.MethodDescriptorProto,
                                                      options ::

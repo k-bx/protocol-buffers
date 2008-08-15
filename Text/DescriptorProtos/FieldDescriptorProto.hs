@@ -11,7 +11,7 @@ import qualified Text.DescriptorProtos.FieldDescriptorProto.Type
        as DescriptorProtos.FieldDescriptorProto (Type)
  
 data FieldDescriptorProto = FieldDescriptorProto{name ::
-                                                 P'.Maybe P'.ByteString,
+                                                 P'.Maybe P'.Utf8,
                                                  number :: P'.Maybe P'.Int32,
                                                  label ::
                                                  P'.Maybe
@@ -19,9 +19,9 @@ data FieldDescriptorProto = FieldDescriptorProto{name ::
                                                  type' ::
                                                  P'.Maybe
                                                    DescriptorProtos.FieldDescriptorProto.Type,
-                                                 type_name :: P'.Maybe P'.ByteString,
-                                                 extendee :: P'.Maybe P'.ByteString,
-                                                 default_value :: P'.Maybe P'.ByteString,
+                                                 type_name :: P'.Maybe P'.Utf8,
+                                                 extendee :: P'.Maybe P'.Utf8,
+                                                 default_value :: P'.Maybe P'.Utf8,
                                                  options :: P'.Maybe DescriptorProtos.FieldOptions}
                           deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
  

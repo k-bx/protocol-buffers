@@ -5,9 +5,8 @@ import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FileOptions.OptimizeMode
        as DescriptorProtos.FileOptions (OptimizeMode)
  
-data FileOptions = FileOptions{java_package ::
-                               P'.Maybe P'.ByteString,
-                               java_outer_classname :: P'.Maybe P'.ByteString,
+data FileOptions = FileOptions{java_package :: P'.Maybe P'.Utf8,
+                               java_outer_classname :: P'.Maybe P'.Utf8,
                                java_multiple_files :: P'.Maybe P'.Bool,
                                optimize_for :: P'.Maybe DescriptorProtos.FileOptions.OptimizeMode}
                  deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)

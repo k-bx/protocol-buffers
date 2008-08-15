@@ -7,9 +7,9 @@ import qualified Text.DescriptorProtos.MethodOptions
        as DescriptorProtos (MethodOptions)
  
 data MethodDescriptorProto = MethodDescriptorProto{name ::
-                                                   P'.Maybe P'.ByteString,
-                                                   input_type :: P'.Maybe P'.ByteString,
-                                                   output_type :: P'.Maybe P'.ByteString,
+                                                   P'.Maybe P'.Utf8,
+                                                   input_type :: P'.Maybe P'.Utf8,
+                                                   output_type :: P'.Maybe P'.Utf8,
                                                    options ::
                                                    P'.Maybe DescriptorProtos.MethodOptions}
                            deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)

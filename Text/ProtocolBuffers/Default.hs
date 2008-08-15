@@ -16,6 +16,7 @@ instance Default a => Default (Maybe a) where defaultValue = Just defaultValue
 instance Default (Seq a) where
 instance Default Bool where
 instance Default ByteString where
+instance Default Utf8 where
 instance Default Double where
 instance Default Float where
 instance Default Int32 where

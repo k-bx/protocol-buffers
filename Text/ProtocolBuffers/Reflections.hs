@@ -13,14 +13,12 @@ module Text.ProtocolBuffers.Reflections(ProtoName(..),DescriptorInfo(..),FieldIn
                                        ,parseDefDouble,parseDefFloat
                                        ,parseDefBool,parseDefInteger
                                        ,parseDefString,parseDefBytes
-                                       ,cEncode,cDecode
+--                                       ,cEncode,cDecode
                                        ) where
 
 import Text.ProtocolBuffers.Basic
 
-import qualified Data.ByteString.Lazy.UTF8 as U
-import qualified Data.ByteString.Lazy as BS (null,pack,unpack)
-import qualified Data.ByteString.Lazy.Char8 as BSC(pack,unpack)
+import qualified Data.ByteString.Lazy.UTF8 as U(toString,fromString)
 import Numeric(readHex,readOct,readDec,showOct)
 import Data.Char(ord,chr,isHexDigit,isOctDigit,toLower)
 import Data.List(sort,unfoldr)
@@ -28,7 +26,7 @@ import qualified Data.Foldable as F(toList)
 import Data.Bits(Bits((.|.),shiftL))
 import Data.Word(Word8)
 import Data.Set(Set)
-import qualified Data.Set as Set
+import qualified Data.Set as Set(fromDistinctAscList)
 import Data.Generics(Data)
 import Data.Typeable(Typeable)
 import Test.QuickCheck(quickCheck)
@@ -41,7 +39,8 @@ data ProtoName = ProtoName { haskellPrefix :: String  -- Haskell specific prefix
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
-                                     , fields :: Seq FieldInfo }
+                                     , fields :: Seq FieldInfo 
+                                     }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data GetMessageInfo = GetMessageInfo { requiredTags :: Set WireTag
@@ -57,7 +56,7 @@ data FieldInfo = FieldInfo { fieldName :: String
                            , canRepeat :: Bool
                            , typeCode :: FieldType            -- ^ fromEnum of Text.DescriptorProtos.FieldDescriptorProto.Type
                            , typeName :: Maybe String
-                           , hsRawDefault :: Maybe ByteString -- ^ crappy, perhaps escaped, thing
+                           , hsRawDefault :: Maybe ByteString -- ^ crappy, but not escaped, thing
                            , hsDefault :: Maybe HsDefault     -- ^ nice parsed thing
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
@@ -120,8 +119,8 @@ parseDefString :: ByteString -> Maybe HsDefault
 parseDefString bs = Just (HsDef'ByteString bs)
 
 parseDefBytes :: ByteString -> Maybe HsDefault
-parseDefBytes bs = Just . HsDef'ByteString 
-                   . BS.pack . cDecode . BSC.unpack $ bs
+parseDefBytes bs = Just (HsDef'ByteString bs)
+
 parseDefInteger :: ByteString -> Maybe HsDefault
 parseDefInteger bs = fmap HsDef'Integer . mayRead checkSign . U.toString $ bs
     where checkSign = readSigned' checkBase
@@ -130,14 +129,16 @@ parseDefInteger bs = fmap HsDef'Integer . mayRead checkSign . U.toString $ bs
           checkBase xs = readDec xs
 
 parseDefBool :: ByteString -> Maybe HsDefault
-parseDefBool bs | bs == BSC.pack "true" = Just (HsDef'Bool True)
-                | bs == BSC.pack "false" = Just (HsDef'Bool False)
+parseDefBool bs | bs == U.fromString "true" = Just (HsDef'Bool True)
+                | bs == U.fromString "false" = Just (HsDef'Bool False)
                 | otherwise = Nothing
 
 -- The Numeric.readSigned does not handle '+' for some odd reason
 readSigned' f ('-':xs) = map (\(v,s) -> (-v,s)) . f $ xs
 readSigned' f ('+':xs) = f xs
 readSigned' f xs = f xs
+
+{-
 
 -- see google's stubs/strutil.cc lines 398-449/1121 and C99 specification
 -- This mainly targets three digit octal codes
@@ -226,3 +227,4 @@ testEncodeDecode = let q :: [Int] -> Bool
                        q =  (\y -> let x = map (\z->abs z `mod` 255) y
                                    in  x == (map fromEnum . cDecode . cEncode . map toEnum$ x))
                    in quickCheck q
+-}

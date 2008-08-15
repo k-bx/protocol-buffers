@@ -13,8 +13,7 @@ import qualified
        Text.DescriptorProtos.DescriptorProto.ExtensionRange
        as DescriptorProtos.DescriptorProto (ExtensionRange)
  
-data DescriptorProto = DescriptorProto{name ::
-                                       P'.Maybe P'.ByteString,
+data DescriptorProto = DescriptorProto{name :: P'.Maybe P'.Utf8,
                                        field :: P'.Seq DescriptorProtos.FieldDescriptorProto,
                                        extension :: P'.Seq DescriptorProtos.FieldDescriptorProto,
                                        nested_type :: P'.Seq DescriptorProto,

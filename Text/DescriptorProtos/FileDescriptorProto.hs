@@ -15,9 +15,9 @@ import qualified Text.DescriptorProtos.ServiceDescriptorProto
        as DescriptorProtos (ServiceDescriptorProto)
  
 data FileDescriptorProto = FileDescriptorProto{name ::
-                                               P'.Maybe P'.ByteString,
-                                               package :: P'.Maybe P'.ByteString,
-                                               dependency :: P'.Seq P'.ByteString,
+                                               P'.Maybe P'.Utf8,
+                                               package :: P'.Maybe P'.Utf8,
+                                               dependency :: P'.Seq P'.Utf8,
                                                message_type ::
                                                P'.Seq DescriptorProtos.DescriptorProto,
                                                enum_type ::

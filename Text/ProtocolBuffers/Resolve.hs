@@ -11,6 +11,7 @@
 --
 -- TODO: treat names with leading "." as already "fully-qualified"
 --       make sure the optional fields that will be needed are not Nothing
+--       check enum default values are allowed symbols
 module Text.ProtocolBuffers.Resolve(resolveFDP) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
@@ -57,18 +58,18 @@ newlineBefore s = go where
   go (x:xs) | x `elem` s = '\n':x:go xs
             | otherwise = x:go xs
 
-encodeModuleNames :: [String] -> ByteString
-encodeModuleNames [] = mempty
-encodeModuleNames xs = U.fromString . foldr1 (\a b -> a ++ '.':b) $ xs
+encodeModuleNames :: [String] -> Utf8
+encodeModuleNames [] = Utf8 mempty
+encodeModuleNames xs = Utf8 . U.fromString . foldr1 (\a b -> a ++ '.':b) $ xs
 
-mangleModuleNames :: ByteString -> [String]
-mangleModuleNames bs = map mangleModuleName . splitDot . U.toString $ bs 
+mangleModuleNames :: Utf8 -> [String]
+mangleModuleNames bs = map mangleModuleName . splitDot . U.toString . utf8 $ bs 
 
-mangleCap :: Maybe ByteString -> [String]
-mangleCap = mangleModuleNames . fromMaybe mempty
+mangleCap :: Maybe Utf8 -> [String]
+mangleCap = mangleModuleNames . fromMaybe (Utf8 mempty)
 
-mangleCap1 :: Maybe ByteString -> String
-mangleCap1 = mangleModuleName . U.toString . fromMaybe mempty
+mangleCap1 :: Maybe Utf8 -> String
+mangleCap1 = mangleModuleName . U.toString . utf8 . fromMaybe (Utf8 mempty)
 
 splitDot :: String -> [String]
 splitDot = unfoldr s where
@@ -84,8 +85,8 @@ mangleModuleName (x:xs) | isLower x = let x' = toUpper x
                                            else x': xs
 mangleModuleName xs = xs
 
-mangleFieldName :: Maybe ByteString -> Maybe ByteString
-mangleFieldName = fmap (U.fromString . fixname . U.toString)
+mangleFieldName :: Maybe Utf8 -> Maybe Utf8
+mangleFieldName = fmap (Utf8 . U.fromString . fixname . U.toString . utf8)
   where fixname [] = "empty'name"
         fixname ('_':xs) = "u'"++xs
         fixname (x:xs) | isUpper x = let x' = toLower x
@@ -118,7 +119,8 @@ test = do
 
 resolveFDP :: D.FileDescriptorProto -> D.FileDescriptorProto
 resolveFDP protoIn =
-  let prefix = mangleCap . msum $
+  let prefix :: [String]
+      prefix = mangleCap . msum $
                  [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options protoIn)
                  , D.FileOptions.java_package =<< (D.FileDescriptorProto.options protoIn)
                  , D.FileDescriptorProto.package protoIn]
@@ -145,16 +147,16 @@ resolveFDP protoIn =
       protoContext = foldl' (\nss@(NameSpace ns:_) pre -> case M.lookup pre ns of
                                                             Just (_,Void,Just ns1) -> (ns1:nss)
                                                             _ -> nss) [nameSpace] prefix
-      descend :: Context -> Maybe ByteString -> Context
+      descend :: Context -> Maybe Utf8 -> Context
       descend cx@(NameSpace n:_) name =
         case M.lookup mangled n of
           Just (_,_,Nothing) -> cx
           Just (_,_,Just ns1) -> ns1:cx
           x -> error $ "Name resolution failed:\n"++unlines (mangled : show x : "KNOWN NAMES" : seeContext cx)
        where mangled = mangleCap1 name
-      resolve :: Context -> Maybe ByteString -> Maybe ByteString
+      resolve :: Context -> Maybe Utf8 -> Maybe Utf8
       resolve context bsIn = fmap fst (resolve2 context bsIn)
-      resolve2 :: Context -> Maybe ByteString -> Maybe (ByteString,NameType)
+      resolve2 :: Context -> Maybe Utf8 -> Maybe (Utf8,NameType)
       resolve2 context Nothing = Nothing
       resolve2 context bsIn = let nameIn = mangleCap bsIn
                                   resolver [] (NameSpace cx) = error $ "resolve2.resolver []\n"++unlines [show bsIn,show nameIn,show (M.keys cx)]
