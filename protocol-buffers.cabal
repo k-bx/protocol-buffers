@@ -48,9 +48,7 @@ Library
                    Text.ProtocolBuffers.Basic
                    Text.ProtocolBuffers.BootStrap
                    Text.ProtocolBuffers.Default
-                   Text.ProtocolBuffers.DeriveMergeable
                    Text.ProtocolBuffers.Gen
-                   Text.ProtocolBuffers.Get
                    Text.ProtocolBuffers.Header
                    Text.ProtocolBuffers.Instances
                    Text.ProtocolBuffers.Lexer
@@ -64,7 +62,11 @@ Library
         build-depends: base >= 3,
                        containers,
                        bytestring,
-                       array
+                       array,
+                       filepath,
+                       directory,
+                       mtl,
+                       QuickCheck
   else
         build-depends: base < 3
 

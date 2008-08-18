@@ -1,11 +1,19 @@
 -- http://code.google.com/apis/protocolbuffers/docs/encoding.html
 {- | This module cooperates with the generated code to implement the
   Wire instances.  
+
+  enum WireType {
+    WIRETYPE_VARINT           = 0,
+    WIRETYPE_FIXED64          = 1,
+    WIRETYPE_LENGTH_DELIMITED = 2,
+    WIRETYPE_START_GROUP      = 3,
+    WIRETYPE_END_GROUP        = 4,
+    WIRETYPE_FIXED32          = 5,
  -}
 module Text.ProtocolBuffers.WireMessage
     ( LazyResult(..),runGetOnLazy,runPut,size'Varint
     , Wire(..)
-    , size,lenSize,putSize
+    , putSize
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep
     , getMessage,getBareMessage
@@ -58,8 +66,10 @@ resolve BS.Empty (Get.Partial f)          = newPartial
         f' BS.Empty = newPartial
         f' (BS.Chunk x rest) = resolve rest (f x)
 
+type WireSize = Int64
 
-data WireSize = WireSize { childSize, internalSize :: !Int64 }
+prependMessageSize :: WireSize -> WireSize
+prependMessageSize n = n + size'Varint n
 
 -- The first Int argument is fromEnum on
 -- Text.DescriptorProtos.FieldDescriptorProto.Type.  The values of the
@@ -73,33 +83,44 @@ class Wire b where
   {-# INLINE wireGet #-}
   wireGet :: BinaryParser get => FieldType -> get b
 
+messageSize :: (ReflectDescriptor msg,Wire msg) => msg -> WireSize
+messageSize msg = prependMessageSize (wireSize 11 msg)
+
 {-# INLINE wirePutReq #-}
 wirePutReq :: Wire b => WireTag -> FieldType -> b -> Put
+-- -- -- wirePutReq wireTag 11 b = putVarUInt (getWireTag wireTag) >> putVarUInt (wireSize 11 b) >> wirePut 11 b
+wirePutReq wireTag 10 b = let startTag = getWireTag wireTag
+                              endTag = succ startTag
+                          in putVarUInt startTag >> wirePut 10 b >> putVarUInt endTag
 wirePutReq wireTag fieldType b = putVarUInt (getWireTag wireTag) >> wirePut fieldType b
 
 {-# INLINE wirePutOpt #-}
 wirePutOpt :: Wire b => WireTag -> FieldType -> Maybe b -> Put
-wirePutOpt wireTag fieldType Nothing = return ()
-wirePutOpt wireTag fieldType (Just b) = putVarUInt (getWireTag wireTag) >> wirePut fieldType b 
+wirePutOpt _wireTag _fieldType Nothing = return ()
+wirePutOpt wireTag fieldType (Just b) = wirePutReq wireTag fieldType b 
 
 {-# INLINE wirePutRep #-}
 wirePutRep :: Wire b => WireTag -> FieldType -> Seq b -> Put
-wirePutRep wireTag fieldType bs = F.forM_ bs (\b -> putVarUInt (getWireTag wireTag) >> wirePut fieldType b)
+wirePutRep wireTag fieldType bs = F.forM_ bs (\b -> wirePutReq wireTag fieldType b)
 
 {-# INLINE wireSizeReq #-}
 wireSizeReq :: Wire b => Int64 -> FieldType -> b -> Int64
-wireSizeReq tagSize i v = tagSize + childSize (wireSize i v)
+-- -- -- wireSizeReq tagSize 11 v = tagSize + prependMessageSize (wireSize 11 v)
+wireSizeReq tagSize 10 v = tagSize + wireSize 10 v + tagSize
+wireSizeReq tagSize 11 v = tagSize + prependMessageSize (wireSize 11 v)
+wireSizeReq tagSize  i v = tagSize + wireSize i v
 
 {-# INLINE wireSizeOpt #-}
 wireSizeOpt :: Wire b => Int64 -> FieldType -> Maybe b -> Int64
-wireSizeOpt tagSize i = maybe 0 (wireSizeReq tagSize i)
+wireSizeOpt _tagSize i Nothing = 0
+wireSizeOpt tagSize i (Just v) = wireSizeReq tagSize i v
 
 {-# INLINE wireSizeRep #-}
 wireSizeRep :: Wire b => Int64 -> FieldType -> Seq b -> Int64
-wireSizeRep tagSize i s = tagSize*(fromIntegral (Seq.length s)) + F.foldl' (\n v -> n+childSize(wireSize i v)) 0 s
+wireSizeRep tagSize i s = F.foldl' (\n v -> n + wireSizeReq tagSize i v) 0 s
 
 putSize :: WireSize -> Put
-putSize (WireSize {internalSize = x}) = putVarUInt x
+putSize = putVarUInt
 
 -- getMessage assumes the wireTag for the message, if it existed, has already been read.
 -- getMessage assumes that it still needs to read the Varint encoded length of the message.
@@ -155,7 +176,8 @@ getMessage updater = do
 
 -- getBareMessage assumes the wireTag for the message, if it existed, has already been read.
 -- getBareMessage assumes that it does needs to read the Varint encoded length of the message.
--- getBareMessage will consume the entire ByteString it is operating on.
+-- getBareMessage will consume the entire ByteString it is operating on, or until it
+-- finds any STOP_GROUP tag
 getBareMessage :: forall get message. (BinaryParser get, Mergeable message, ReflectDescriptor message)
            => (FieldId -> message -> get message)
            -> get message
@@ -168,17 +190,19 @@ getBareMessage updater = go required initialMessage
       else do
         wireTag <- fmap WireTag getWord32be -- get tag off wire
         let (fieldId,wireType) = splitWireTag wireTag
-        if Set.notMember wireTag allowed then unknown fieldId wireTag
-          else let reqs' = Set.delete wireTag reqs
-               in updater fieldId message >>= go reqs'
+        if wireType == 4 then notEnoughData -- END_GROUP too soon
+          else if Set.notMember wireTag allowed then unknown fieldId wireTag
+                 else let reqs' = Set.delete wireTag reqs
+                      in updater fieldId message >>= go reqs'
   go' message = do
     done <- isEmpty
     if done then return message
       else do
         wireTag <- fmap WireTag getWord32be -- get tag off wire
-        let (fieldId,wireType) = splitWireTag wireTag
-        if Set.notMember wireTag allowed then unknown fieldId wireType
-          else updater fieldId message >>= go'
+        let (fieldId,wireType) = splitWireTag wireTag -- WIRETYPE_END_GROUP
+        if wireType == 4 then return message
+          else if Set.notMember wireTag allowed then unknown fieldId wireType
+                 else updater fieldId message >>= go'
   initialMessage = mergeEmpty
   (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
   splitWireTag :: WireTag -> (FieldId,WireType)
@@ -197,69 +221,59 @@ unknownField fieldId = do
         ++" The Message's updater claims there is an unknown field id on wire: "++show fieldId
         ++" at a position just before here == "++show here)
 
--- | 'size' takes the length of a primitive which is the same
--- internally and as a child of a message
-size :: Int64 -> WireSize
-size n = WireSize {childSize = n, internalSize = n}
-
--- | 'lenSize' takes the length of a bare message and adds its encoded
--- size as a header to get the 'childSize'.
-lenSize :: Int64 -> WireSize
-lenSize n = WireSize {childSize = n+size'Varint n, internalSize = n}
-
 instance Wire Double where
-  wireSize {- TYPE_DOUBLE -} 1     _ = size $ 8
-  wirePut {- TYPE_DOUBLE -} 1 (D# d) = putWord64be (W64# (unsafeCoerce# d))
-  wireGet {- TYPE_DOUBLE -} 1        = fmap (\(W64# w) -> D# (unsafeCoerce# w)) getWord64be
+  wireSize {- TYPE_DOUBLE   -} 1      _ = 8
+  wirePut  {- TYPE_DOUBLE   -} 1 (D# d) = putWord64be (W64# (unsafeCoerce# d))
+  wireGet  {- TYPE_DOUBLE   -} 1        = fmap (\(W64# w) -> D# (unsafeCoerce# w)) getWord64be
 
 instance Wire Float where
-  wireSize {- TYPE_FLOAT -} 2      _ = size $ 4
-  wirePut {- TYPE_FLOAT -} 2  (F# f) = putWord32be (W32# (unsafeCoerce# f))
-  wireGet {- TYPE_FLOAT -} 2         = fmap (\(W32# w) -> F# (unsafeCoerce# w)) getWord32be
+  wireSize {- TYPE_FLOAT    -} 2      _ = 4
+  wirePut  {- TYPE_FLOAT    -} 2 (F# f) = putWord32be (W32# (unsafeCoerce# f))
+  wireGet  {- TYPE_FLOAT    -} 2        = fmap (\(W32# w) -> F# (unsafeCoerce# w)) getWord32be
 
 instance Wire Int64 where
-  wireSize {- TYPE_INT64 -} 3      x = size $ size'Varint x
-  wireSize {- TYPE_SINT64 -} 18    x = size $ size'Varint (zzEncode64 x)
-  wireSize {- TYPE_SFIXED64 -} 16  _ = size $ 8
-  wirePut {- TYPE_INT64 -} 3       x = putVarSInt x
-  wirePut {- TYPE_SINT64 -} 18     x = putVarUInt (zzEncode64 x)
-  wirePut {- TYPE_SFIXED64 -} 16   x = putWord64be (fromIntegral x)
-  wireGet {- TYPE_INT64 -} 3         = getVarInt
-  wireGet {- TYPE_SINT64 -} 18       = fmap zzDecode64 getVarInt
-  wireGet {- TYPE_SFIXED64 -} 16     = fmap fromIntegral getWord64be
+  wireSize {- TYPE_INT64    -} 3      x = size'Varint x
+  wireSize {- TYPE_SINT64   -} 18     x = size'Varint (zzEncode64 x)
+  wireSize {- TYPE_SFIXED64 -} 16     _ = 8
+  wirePut  {- TYPE_INT64    -} 3      x = putVarSInt x
+  wirePut  {- TYPE_SINT64   -} 18     x = putVarUInt (zzEncode64 x)
+  wirePut  {- TYPE_SFIXED64 -} 16     x = putWord64be (fromIntegral x)
+  wireGet  {- TYPE_INT64    -} 3        = getVarInt
+  wireGet  {- TYPE_SINT64   -} 18       = fmap zzDecode64 getVarInt
+  wireGet  {- TYPE_SFIXED64 -} 16       = fmap fromIntegral getWord64be
 
 instance Wire Int32 where
-  wireSize {- TYPE_INT32 -} 5      x = size $ size'Varint x
-  wireSize {- TYPE_SINT32 -} 17    x = size $ size'Varint (zzEncode32 x)
-  wireSize {- TYPE_SFIXED32 -} 15  _ = size $ 4
-  wirePut {- TYPE_INT32 -} 5       x = putVarSInt x
-  wirePut {- TYPE_SINT32 -} 17     x = putVarUInt (zzEncode32 x)
-  wirePut {- TYPE_SFIXED32 -} 15   x = putWord32be (fromIntegral x)
-  wireGet {- TYPE_INT32 -} 5         = getVarInt
-  wireGet {- TYPE_SINT32 -} 17       = fmap zzDecode32 getVarInt
-  wireGet {- TYPE_SFIXED32 -} 15     = fmap fromIntegral getWord32be
+  wireSize {- TYPE_INT32    -} 5      x = size'Varint x
+  wireSize {- TYPE_SINT32   -} 17     x = size'Varint (zzEncode32 x)
+  wireSize {- TYPE_SFIXED32 -} 15     _ = 4
+  wirePut  {- TYPE_INT32    -} 5      x = putVarSInt x
+  wirePut  {- TYPE_SINT32   -} 17     x = putVarUInt (zzEncode32 x)
+  wirePut  {- TYPE_SFIXED32 -} 15     x = putWord32be (fromIntegral x)
+  wireGet  {- TYPE_INT32    -} 5        = getVarInt
+  wireGet  {- TYPE_SINT32   -} 17       = fmap zzDecode32 getVarInt
+  wireGet  {- TYPE_SFIXED32 -} 15       = fmap fromIntegral getWord32be
 
 instance Wire Word64 where
-  wireSize {- TYPE_UINT64 -} 4     x = size $ size'Varint x
-  wireSize {- TYPE_FIXED64 -} 6    _ = size $ 8
-  wirePut {- TYPE_UINT64 -} 4      x = putVarUInt x
-  wirePut {- TYPE_FIXED64 -} 6     x = putWord64be x
-  wireGet {- TYPE_UINT64 -} 4        = getVarInt
-  wireGet {- TYPE_FIXED64 -} 6       = getWord64be
+  wireSize {- TYPE_UINT64   -} 4      x = size'Varint x
+  wireSize {- TYPE_FIXED64  -} 6      _ = 8
+  wirePut  {- TYPE_UINT64   -} 4      x = putVarUInt x
+  wirePut  {- TYPE_FIXED64  -} 6      x = putWord64be x
+  wireGet  {- TYPE_UINT64   -} 4        = getVarInt
+  wireGet  {- TYPE_FIXED64  -} 6        = getWord64be
 
 instance Wire Word32 where
-  wireSize {- TYPE_UINT32 -} 13    x = size $ size'Varint x
-  wireSize {- TYPE_FIXED32 -} 7    _ = size $ 4
-  wirePut {- TYPE_UINT32 -} 13     x = putVarUInt x
-  wirePut {- TYPE_FIXED32 -} 7     x = putWord32be x
-  wireGet {- TYPE_UINT32 -} 13       = getVarInt
-  wireGet {- TYPE_FIXED32 -} 7       = getWord32be
+  wireSize {- TYPE_UINT32   -} 13     x = size'Varint x
+  wireSize {- TYPE_FIXED32  -} 7      _ = 4
+  wirePut  {- TYPE_UINT32   -} 13     x = putVarUInt x
+  wirePut  {- TYPE_FIXED32  -} 7      x = putWord32be x
+  wireGet  {- TYPE_UINT32   -} 13       = getVarInt
+  wireGet  {- TYPE_FIXED32  -} 7        = getWord32be
 
 instance Wire Bool where
-  wireSize {- TYPE_BOOL -} 8       _ = size $ 1
-  wirePut {- TYPE_BOOL -} 8    False = putWord8 0
-  wirePut {- TYPE_BOOL -} 8    True  = putWord8 1 -- google's wire_format_inl.h
-  wireGet {- TYPE_BOOL -} 8          = do
+  wireSize {- TYPE_BOOL     -} 8      _ = 1
+  wirePut  {- TYPE_BOOL     -} 8  False = putWord8 0
+  wirePut  {- TYPE_BOOL     -} 8  True  = putWord8 1 -- google's wire_format_inl.h
+  wireGet  {- TYPE_BOOL     -} 8        = do
     (x :: Word32) <- getVarInt -- google's wire_format_inl.h line 97
     case x of
       0 -> return False
@@ -268,28 +282,24 @@ instance Wire Bool where
 
 instance Wire Utf8 where
 -- items of TYPE_STRING is already in a UTF8 encoded Data.ByteString.Lazy
-  wireSize {- TYPE_STRING -} 9     x = lenSize $ BS.length (utf8 x)
-  wirePut {- TYPE_STRING -} 9      x = putVarUInt (BS.length (utf8 x)) >> putLazyByteString (utf8 x)
-  wireGet {- TYPE_STRING -} 9        = getVarInt >>= getByteString >>= return . Utf8 . toLazy --getLazyByteString 
+  wireSize {- TYPE_STRING   -} 9      x = prependMessageSize $ BS.length (utf8 x)
+  wirePut  {- TYPE_STRING   -} 9      x = putVarUInt (BS.length (utf8 x)) >> putLazyByteString (utf8 x)
+  wireGet  {- TYPE_STRING   -} 9        = getVarInt >>= getByteString >>= return . Utf8 . toLazy --getLazyByteString 
 
 instance Wire ByteString where
 -- items of TYPE_BYTES is an untyped binary Data.ByteString.Lazy
-  wireSize {- TYPE_BYTES -} 12     x = lenSize $ BS.length x
-  wirePut {- TYPE_BYTES -} 12      x = putVarUInt (BS.length x) >> putLazyByteString x
-  wireGet {- TYPE_BYTES -} 12        = getVarInt >>= getByteString >>= return . toLazy --getLazyByteString
+  wireSize {- TYPE_BYTES    -} 12     x = prependMessageSize $ BS.length x
+  wirePut  {- TYPE_BYTES    -} 12     x = putVarUInt (BS.length x) >> putLazyByteString x
+  wireGet  {- TYPE_BYTES    -} 12       = getVarInt >>= getByteString >>= return . toLazy --getLazyByteString
 
 -- Wrap a protocol-buffer Enum in fromEnum or toEnum and serialize the Int:
 instance Wire Int where
-  wireSize {- TYPE_ENUM -} 14      x = size $ size'Varint x
-  wirePut {- TYPE_ENUM -} 14       x = putVarUInt x
-  wireGet {- TYPE_ENUM -} 14         = getVarInt
+  wireSize {- TYPE_ENUM    -} 14      x = size'Varint x
+  wirePut  {- TYPE_ENUM    -} 14      x = putVarUInt x
+  wireGet  {- TYPE_ENUM    -} 14        = getVarInt
 
 toLazy :: Strict.ByteString -> ByteString
 toLazy = BS.fromChunks . (:[])
-
--- TYPE_GROUP 10
--- TYPE_MESSAGE 11
--- -- 
 
 -- This will have to examine the value of positive numbers to get the size
 {-# INLINE size'Varint #-}

@@ -50,13 +50,12 @@ instance P'.Default DescriptorProto where
  
 instance P'.Wire DescriptorProto where
         wireSize 11 (DescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7)
-          = P'.lenSize
-              (0 + P'.wireSizeOpt 1 9 x'1 + P'.wireSizeRep 1 11 x'2 +
-                 P'.wireSizeRep 1 11 x'3
-                 + P'.wireSizeRep 1 11 x'4
-                 + P'.wireSizeRep 1 11 x'5
-                 + P'.wireSizeRep 1 11 x'6
-                 + P'.wireSizeOpt 1 11 x'7)
+          = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeRep 1 11 x'2 +
+               P'.wireSizeRep 1 11 x'3
+               + P'.wireSizeRep 1 11 x'4
+               + P'.wireSizeRep 1 11 x'5
+               + P'.wireSizeRep 1 11 x'6
+               + P'.wireSizeOpt 1 11 x'7)
         wirePut 11 self'@(DescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7)
           = do P'.putSize (P'.wireSize 11 self')
                P'.wirePutOpt 10 9 x'1

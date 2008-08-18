@@ -15,9 +15,10 @@ instance P'.Default MethodOptions where
         defaultValue = MethodOptions
  
 instance P'.Wire MethodOptions where
-        wireSize 11 (MethodOptions) = P'.lenSize (0)
+        wireSize 11 (MethodOptions) = 0
         wirePut 11 self'@(MethodOptions)
           = do P'.putSize (P'.wireSize 11 self')
+               P'.return ()
         wireGet 11 = P'.getMessage update'Self
           where update'Self field'Number old'Self
                   = case field'Number of

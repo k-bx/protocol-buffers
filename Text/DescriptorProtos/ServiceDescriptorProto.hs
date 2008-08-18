@@ -33,9 +33,8 @@ instance P'.Default ServiceDescriptorProto where
  
 instance P'.Wire ServiceDescriptorProto where
         wireSize 11 (ServiceDescriptorProto x'1 x'2 x'3)
-          = P'.lenSize
-              (0 + P'.wireSizeOpt 1 9 x'1 + P'.wireSizeRep 1 11 x'2 +
-                 P'.wireSizeOpt 1 11 x'3)
+          = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeRep 1 11 x'2 +
+               P'.wireSizeOpt 1 11 x'3)
         wirePut 11 self'@(ServiceDescriptorProto x'1 x'2 x'3)
           = do P'.putSize (P'.wireSize 11 self')
                P'.wirePutOpt 10 9 x'1

@@ -14,9 +14,10 @@ instance P'.Default EnumOptions where
         defaultValue = EnumOptions
  
 instance P'.Wire EnumOptions where
-        wireSize 11 (EnumOptions) = P'.lenSize (0)
+        wireSize 11 (EnumOptions) = 0
         wirePut 11 self'@(EnumOptions)
           = do P'.putSize (P'.wireSize 11 self')
+               P'.return ()
         wireGet 11 = P'.getMessage update'Self
           where update'Self field'Number old'Self
                   = case field'Number of

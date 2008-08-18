@@ -20,7 +20,7 @@ instance P'.Default ExtensionRange where
  
 instance P'.Wire ExtensionRange where
         wireSize 11 (ExtensionRange x'1 x'2)
-          = P'.lenSize (0 + P'.wireSizeOpt 1 5 x'1 + P'.wireSizeOpt 1 5 x'2)
+          = (P'.wireSizeOpt 1 5 x'1 + P'.wireSizeOpt 1 5 x'2)
         wirePut 11 self'@(ExtensionRange x'1 x'2)
           = do P'.putSize (P'.wireSize 11 self')
                P'.wirePutOpt 8 5 x'1

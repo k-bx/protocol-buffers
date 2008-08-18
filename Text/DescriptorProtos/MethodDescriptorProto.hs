@@ -34,10 +34,9 @@ instance P'.Default MethodDescriptorProto where
  
 instance P'.Wire MethodDescriptorProto where
         wireSize 11 (MethodDescriptorProto x'1 x'2 x'3 x'4)
-          = P'.lenSize
-              (0 + P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 9 x'2 +
-                 P'.wireSizeOpt 1 9 x'3
-                 + P'.wireSizeOpt 1 11 x'4)
+          = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 9 x'2 +
+               P'.wireSizeOpt 1 9 x'3
+               + P'.wireSizeOpt 1 11 x'4)
         wirePut 11 self'@(MethodDescriptorProto x'1 x'2 x'3 x'4)
           = do P'.putSize (P'.wireSize 11 self')
                P'.wirePutOpt 10 9 x'1

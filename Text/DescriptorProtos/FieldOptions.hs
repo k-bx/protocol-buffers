@@ -21,7 +21,7 @@ instance P'.Default FieldOptions where
  
 instance P'.Wire FieldOptions where
         wireSize 11 (FieldOptions x'1 x'2)
-          = P'.lenSize (0 + P'.wireSizeOpt 1 14 x'1 + P'.wireSizeOpt 1 9 x'2)
+          = (P'.wireSizeOpt 1 14 x'1 + P'.wireSizeOpt 1 9 x'2)
         wirePut 11 self'@(FieldOptions x'1 x'2)
           = do P'.putSize (P'.wireSize 11 self')
                P'.wirePutOpt 8 14 x'1

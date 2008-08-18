@@ -15,9 +15,10 @@ instance P'.Default ServiceOptions where
         defaultValue = ServiceOptions
  
 instance P'.Wire ServiceOptions where
-        wireSize 11 (ServiceOptions) = P'.lenSize (0)
+        wireSize 11 (ServiceOptions) = 0
         wirePut 11 self'@(ServiceOptions)
           = do P'.putSize (P'.wireSize 11 self')
+               P'.return ()
         wireGet 11 = P'.getMessage update'Self
           where update'Self field'Number old'Self
                   = case field'Number of

@@ -57,14 +57,13 @@ instance P'.Default FieldDescriptorProto where
  
 instance P'.Wire FieldDescriptorProto where
         wireSize 11 (FieldDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
-          = P'.lenSize
-              (0 + P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 5 x'2 +
-                 P'.wireSizeOpt 1 14 x'3
-                 + P'.wireSizeOpt 1 14 x'4
-                 + P'.wireSizeOpt 1 9 x'5
-                 + P'.wireSizeOpt 1 9 x'6
-                 + P'.wireSizeOpt 1 9 x'7
-                 + P'.wireSizeOpt 1 11 x'8)
+          = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 5 x'2 +
+               P'.wireSizeOpt 1 14 x'3
+               + P'.wireSizeOpt 1 14 x'4
+               + P'.wireSizeOpt 1 9 x'5
+               + P'.wireSizeOpt 1 9 x'6
+               + P'.wireSizeOpt 1 9 x'7
+               + P'.wireSizeOpt 1 11 x'8)
         wirePut 11
           self'@(FieldDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
           = do P'.putSize (P'.wireSize 11 self')

@@ -10,7 +10,7 @@ import Data.Monoid(mempty,mappend)
 
 class Mergeable a where
   mergeEmpty :: a
--- mergeEmpty = error "You did not define Mergeable.mergeEmpty!"
+  mergeEmpty = error "You did not define Mergeable.mergeEmpty!"
 
   mergeAppend :: a -> a -> a
   mergeAppend a b = b
@@ -21,15 +21,15 @@ class Mergeable a where
 -- Base types are not very mergeable, but their Maybe type are:
 instance Mergeable a => Mergeable (Maybe a) where mergeEmpty = Nothing; mergeAppend = mayMerge
 instance Mergeable (Seq a) where mergeEmpty = mempty; mergeAppend = mappend
-instance Mergeable Bool where mergeEmpty = False
-instance Mergeable Utf8 where mergeEmpty = Utf8 mempty
-instance Mergeable ByteString where mergeEmpty = mempty
-instance Mergeable Double where mergeEmpty = 0.0
-instance Mergeable Float where mergeEmpty = 0.0
-instance Mergeable Int32 where mergeEmpty = 0
-instance Mergeable Int64 where mergeEmpty = 0
-instance Mergeable Word32 where mergeEmpty = 0
-instance Mergeable Word64 where mergeEmpty = 0
+instance Mergeable Bool
+instance Mergeable Utf8
+instance Mergeable ByteString
+instance Mergeable Double
+instance Mergeable Float
+instance Mergeable Int32
+instance Mergeable Int64
+instance Mergeable Word32
+instance Mergeable Word64
 
 {-# INLINE mayMerge #-}
 mayMerge :: (Mergeable b) => Maybe b -> Maybe b -> Maybe b

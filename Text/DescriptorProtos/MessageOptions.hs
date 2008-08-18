@@ -17,8 +17,7 @@ instance P'.Default MessageOptions where
         defaultValue = MessageOptions (P'.Just (P'.False))
  
 instance P'.Wire MessageOptions where
-        wireSize 11 (MessageOptions x'1)
-          = P'.lenSize (0 + P'.wireSizeOpt 1 8 x'1)
+        wireSize 11 (MessageOptions x'1) = (P'.wireSizeOpt 1 8 x'1)
         wirePut 11 self'@(MessageOptions x'1)
           = do P'.putSize (P'.wireSize 11 self')
                P'.wirePutOpt 8 8 x'1

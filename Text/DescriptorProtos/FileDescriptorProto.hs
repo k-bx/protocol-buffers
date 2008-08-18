@@ -61,14 +61,13 @@ instance P'.Default FileDescriptorProto where
  
 instance P'.Wire FileDescriptorProto where
         wireSize 11 (FileDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
-          = P'.lenSize
-              (0 + P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 9 x'2 +
-                 P'.wireSizeRep 1 9 x'3
-                 + P'.wireSizeRep 1 11 x'4
-                 + P'.wireSizeRep 1 11 x'5
-                 + P'.wireSizeRep 1 11 x'6
-                 + P'.wireSizeRep 1 11 x'7
-                 + P'.wireSizeOpt 1 11 x'8)
+          = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 9 x'2 +
+               P'.wireSizeRep 1 9 x'3
+               + P'.wireSizeRep 1 11 x'4
+               + P'.wireSizeRep 1 11 x'5
+               + P'.wireSizeRep 1 11 x'6
+               + P'.wireSizeRep 1 11 x'7
+               + P'.wireSizeOpt 1 11 x'8)
         wirePut 11
           self'@(FileDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
           = do P'.putSize (P'.wireSize 11 self')

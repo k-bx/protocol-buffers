@@ -14,10 +14,6 @@ module Text.ProtocolBuffers.Header
     , module Text.ProtocolBuffers.Mergeable
     , module Text.ProtocolBuffers.Reflections
     , module Text.ProtocolBuffers.WireMessage
-    -- deprecated below
-    , module Data.Monoid
-    , module Data.DeriveTH
-    , module Text.ProtocolBuffers.DeriveMergeable
     ) where
 
 import Control.Monad(ap)
@@ -26,6 +22,7 @@ import Data.ByteString.Lazy.Char8(pack)
 import Data.Dynamic(Dynamic)
 import Data.Generics(Data(..))
 import Data.Monoid(Monoid(..))
+import Data.Sequence((|>)) -- for append, see below
 import Data.Typeable(Typeable(..))
 
 import Text.ProtocolBuffers.Basic -- all
@@ -33,21 +30,14 @@ import Text.ProtocolBuffers.Default(Default(..))
 import Text.ProtocolBuffers.Mergeable(Mergeable(..))
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(..),ReflectEnum(..),EnumInfo(..),ProtoName(..))
 import Text.ProtocolBuffers.WireMessage(Wire(..)
-                                       , size,lenSize,putSize
+                                       , putSize
                                        , wireSizeReq,wireSizeOpt,wireSizeRep
                                        , wirePutReq,wirePutOpt,wirePutRep
                                        , getMessage,getBareMessage
                                        , unknownField)
-import Data.Sequence((|>))
-
--- deprecated imports
-import Data.DeriveTH
-import Text.ProtocolBuffers.DeriveMergeable(makeMergeable,makeMergeableEnum)
-
 
 append :: Seq a -> a -> Seq a
 append = (|>)
 
 emptyBS :: ByteString
 emptyBS = Data.ByteString.Lazy.empty
-
