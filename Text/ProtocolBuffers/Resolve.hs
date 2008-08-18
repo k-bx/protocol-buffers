@@ -40,6 +40,7 @@ import Text.ProtocolBuffers.Header
 import Text.ProtocolBuffers.Parser
 
 import Control.Monad
+import Control.Monad.State
 import Data.Char
 import qualified Data.Foldable as F
 import qualified Data.Set as Set
@@ -123,23 +124,46 @@ test = do
 
 toString = U.toString . utf8
 
+-- loadProto is a slight kludge.  It takes a single search directory
+-- and an initial .proto file path raltive to this directory.  It
+-- loads this file and then chases the imports.  If an import loop is
+-- detected then it aborts.  A state monad is used to memorize
+-- previous invocations of 'load'.  A progress message of the filepath
+-- is printed before reading a new .proto file.
+--
+-- The "contexts" collected and used to "resolveWithContext" can
+-- contain duplicates: File A imports B and C, and File B imports C
+-- will cause the context for C to be included twice in contexts.
+--
+-- The result of load works, but may be changed in the future.
+-- It currently is a concatenation of all the results from its children.
 loadProto :: FilePath -> FilePath -> IO [D.FileDescriptorProto]
-loadProto protoDir protoFile = fmap (map snd) $ load (Set.singleton protoFile) protoFile where
+loadProto protoDir protoFile = fmap answer $ execStateT (load (Set.singleton protoFile) protoFile) mempty where
+  answer built = map snd (fromMaybe [] $ M.lookup (combine protoDir protoFile) built)
   loadFailed f msg = fail . unlines $ ["Parsing proto:",f,"has failed with message",msg]
-  load :: Set.Set FilePath -> FilePath -> IO [(Context,D.FileDescriptorProto)]
-  load files file = do
-    print (files,file)
+  load :: Set.Set FilePath -> FilePath -> StateT (M.Map FilePath [(Context,D.FileDescriptorProto)]) IO [(Context,D.FileDescriptorProto)]
+  load known file = do
     let toRead = combine protoDir file
-    proto <- LC.readFile toRead
-    parsed <- either (loadFailed toRead . show) return (parseProto toRead proto)
-    let (context,imports) = toContext parsed
-        files' = Set.union files imports
-    when (not (Set.null (Set.intersection files imports)))
-         (loadFailed file (unlines ["imports failed: recursive loop detected",show files,show imports]))
-    rest <- fmap concat $ mapM (load files') (Set.toList imports)
-    let contexts = concatMap withPackage rest
-    return $ (context, resolveWithContext (context++contexts) parsed) : rest
+    built <- get
+    case M.lookup toRead built of
+      Just result -> return result
+      Nothing -> do
+        liftIO . print $ "Loading filepath "++toRead
+        proto <- liftIO $ LC.readFile toRead
+        parsed <- either (loadFailed toRead . show) return (parseProto toRead proto)
+        let (context,imports) = toContext parsed
+        when (not (Set.null (Set.intersection known imports)))
+             (loadFailed toRead (unlines ["imports failed: recursive loop detected",show (M.keys built),show known,show imports]))
+        let known' = Set.union known imports
+        rest <- fmap concat $ mapM (load known') (Set.toList imports)
+        let contexts = concatMap withPackage rest
+            result = (context,resolveWithContext (context++contexts) parsed) : rest
+        modify (\built' -> M.insert toRead result built')
+        return result
 
+-- Imported names must be fully qualified in the .proto file by the
+-- target's package name, but the resolved name might be fully
+-- quilified by something else (e.g. one of the java options).
 withPackage :: (Context,D.FileDescriptorProto) -> Context
 withPackage ((cx:_),D.FileDescriptorProto {D.FileDescriptorProto.package=Just package}) =
   let prepend = mangleCap1 . Just $ package
