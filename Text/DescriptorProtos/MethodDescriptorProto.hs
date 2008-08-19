@@ -54,7 +54,10 @@ instance P'.Wire MethodDescriptorProto where
                         3 -> P'.fmap
                                (\ new'Field -> old'Self{output_type = P'.Just new'Field})
                                (P'.wireGet 9)
-                        4 -> P'.fmap (\ new'Field -> old'Self{options = P'.Just new'Field})
+                        4 -> P'.fmap
+                               (\ new'Field ->
+                                  old'Self{options =
+                                             P'.mergeAppend (options old'Self) (P'.Just new'Field)})
                                (P'.wireGet 11)
                         _ -> P'.unknownField field'Number
  

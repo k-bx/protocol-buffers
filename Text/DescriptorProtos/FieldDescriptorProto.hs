@@ -95,7 +95,10 @@ instance P'.Wire FieldDescriptorProto where
                         7 -> P'.fmap
                                (\ new'Field -> old'Self{default_value = P'.Just new'Field})
                                (P'.wireGet 9)
-                        8 -> P'.fmap (\ new'Field -> old'Self{options = P'.Just new'Field})
+                        8 -> P'.fmap
+                               (\ new'Field ->
+                                  old'Self{options =
+                                             P'.mergeAppend (options old'Self) (P'.Just new'Field)})
                                (P'.wireGet 11)
                         _ -> P'.unknownField field'Number
  

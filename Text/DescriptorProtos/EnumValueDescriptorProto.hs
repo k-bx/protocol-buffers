@@ -45,7 +45,10 @@ instance P'.Wire EnumValueDescriptorProto where
                                (P'.wireGet 9)
                         2 -> P'.fmap (\ new'Field -> old'Self{number = P'.Just new'Field})
                                (P'.wireGet 5)
-                        3 -> P'.fmap (\ new'Field -> old'Self{options = P'.Just new'Field})
+                        3 -> P'.fmap
+                               (\ new'Field ->
+                                  old'Self{options =
+                                             P'.mergeAppend (options old'Self) (P'.Just new'Field)})
                                (P'.wireGet 11)
                         _ -> P'.unknownField field'Number
  

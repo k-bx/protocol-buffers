@@ -49,7 +49,10 @@ instance P'.Wire ServiceDescriptorProto where
                                (\ new'Field ->
                                   old'Self{method = P'.append (method old'Self) new'Field})
                                (P'.wireGet 11)
-                        3 -> P'.fmap (\ new'Field -> old'Self{options = P'.Just new'Field})
+                        3 -> P'.fmap
+                               (\ new'Field ->
+                                  old'Self{options =
+                                             P'.mergeAppend (options old'Self) (P'.Just new'Field)})
                                (P'.wireGet 11)
                         _ -> P'.unknownField field'Number
  

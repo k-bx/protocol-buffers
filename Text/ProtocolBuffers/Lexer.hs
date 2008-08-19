@@ -216,7 +216,6 @@ sDecode = op one where
                               return $ Just (x',xs)  -- main case of unescaped value
   one [] = return Nothing
   one ('\\':[]) = Left "cannot understand a string that ends with a backslash"
-  one ('\\':'0':ys) = return $ Just ([0],ys)
   one ('\\':ys) | 1 <= len =
       case mayRead readOct oct of
         Just w -> do w' <- checkByte w

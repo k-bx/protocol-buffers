@@ -449,7 +449,7 @@ instanceDefault protoName (D.DescriptorProto.DescriptorProto
           [ inst "defaultValue" [] (foldl' HsApp (HsCon (unqual name)) deflist) ]
       , descriptorInfo )
   where len = Seq.length field
-        old =  (replicate len (HsCon (private "defaultValue")))
+        old = replicate len (pvar "defaultValue")
         fieldInfos :: [FieldInfo]
         (deflist,fieldInfos) = unzip (F.foldr ((:) . defX) [] field)
         descriptorInfo = DescriptorInfo protoName (Seq.fromList fieldInfos)
@@ -462,7 +462,7 @@ defaultValueExp  d@(D.FieldDescriptorProto.FieldDescriptorProto
                      , D.FieldDescriptorProto.type' = Just type'
                      , D.FieldDescriptorProto.type_name = mayTypeName
                      , D.FieldDescriptorProto.default_value = mayRawDef })
-    = ( maybe (HsCon (private "defaultValue")) (HsParen . toSyntax) mayDef
+    = ( maybe (pvar "defaultValue") (HsParen . toSyntax) mayDef
       , fieldInfo )
   where toSyntax :: HsDefault -> HsExp
         toSyntax x = case x of
@@ -542,7 +542,7 @@ instanceMergeable (D.DescriptorProto.DescriptorProto
 instanceWireDescriptor :: Bool -> DescriptorInfo -> HsDecl
 instanceWireDescriptor isGroup (DescriptorInfo { descName = protoName
                                                , fields = fieldInfos })
-  = let typeInt = if isGroup then 10 else 11
+  = let typeInt = toInteger . fromEnum $ if isGroup then TYPE_GROUP else TYPE_MESSAGE
         myPType = HsPLit (HsInt typeInt)
         myType= HsLit (HsInt typeInt)
         me = UnQual (HsIdent (baseName protoName))
@@ -581,10 +581,14 @@ instanceWireDescriptor isGroup (DescriptorInfo { descName = protoName
                                           HsRecUpdate (lvar "old'Self") [HsFieldUpdate (UnQual . HsIdent . fieldName $ fi)
                                                                                        (labelUpdate fi)])
                                     $$ (HsParen (pvar "wireGet" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
-        labelUpdate fi | isRequired fi = lvar "new'Field"
-                       | canRepeat fi = pvar "append" $$ HsParen ((lvar . fieldName $ fi) $$ lvar "old'Self")
+        labelUpdate fi | canRepeat fi = pvar "append" $$ HsParen ((lvar . fieldName $ fi) $$ lvar "old'Self")
                                                       $$ lvar "new'Field"
-                       | otherwise = HsCon (private "Just") $$ lvar "new'Field"
+                       | isRequired fi = qMerge (lvar "new'Field")
+                       | otherwise = qMerge (HsCon (private "Just") $$ lvar "new'Field")
+            where merges = map fromEnum [ TYPE_MESSAGE, TYPE_GROUP ]
+                  qMerge x | fromIntegral (getFieldType (typeCode fi)) `elem` merges =
+                               pvar "mergeAppend" $$ HsParen ((lvar . fieldName $ fi) $$ lvar "old'Self") $$ (HsParen x)
+                           | otherwise = x
 
     in HsInstDecl src [] (private "Wire") [HsTyCon me]
         [ inst "wireSize" [myPType,mine] sizes

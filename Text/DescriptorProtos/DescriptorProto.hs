@@ -92,7 +92,10 @@ instance P'.Wire DescriptorProto where
                                   old'Self{extension_range =
                                              P'.append (extension_range old'Self) new'Field})
                                (P'.wireGet 11)
-                        7 -> P'.fmap (\ new'Field -> old'Self{options = P'.Just new'Field})
+                        7 -> P'.fmap
+                               (\ new'Field ->
+                                  old'Self{options =
+                                             P'.mergeAppend (options old'Self) (P'.Just new'Field)})
                                (P'.wireGet 11)
                         _ -> P'.unknownField field'Number
  
