@@ -22,7 +22,7 @@ data Type = TYPE_DOUBLE
           | TYPE_SFIXED64
           | TYPE_SINT32
           | TYPE_SINT64
-          deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
+          deriving (P'.Read, P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
 instance P'.Mergeable Type
  
@@ -109,6 +109,8 @@ instance P'.Wire Type where
         wireSize 14 enum = P'.wireSize 14 (P'.fromEnum enum)
         wirePut 14 enum = P'.wirePut 14 (P'.fromEnum enum)
         wireGet 14 = P'.fmap P'.toEnum (P'.wireGet 14)
+ 
+instance P'.GPB Type
  
 instance P'.ReflectEnum Type where
         reflectEnum

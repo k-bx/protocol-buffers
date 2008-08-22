@@ -41,7 +41,7 @@
 -- The three 'lookAhead' and 'lookAheadM' and 'lookAheadE' functions are
 -- the same as the ones in binary's Data.Binary.Get.
 --
-module Text.ProtocolBuffers.MyGet
+module Text.ProtocolBuffers.MyGetSimplified
     (Get,runGet,Result(..)
      -- main primitives
     ,ensureBytes,getStorable,getLazyByteString,suspendUntilComplete
@@ -543,13 +543,13 @@ instance Monad Get where
 instance MonadError String Get where
   throwError msg = Get $ \_sc  s pcIn ->
     let go (ErrorFrame ec _) = ec msg s
-        go (HandlerFrame catcher s1 future pc1) = catcher (collect s1 future) pc1 msg
+        go (HandlerFrame (Just catcher) s1 future pc1) = catcher (collect s1 future) pc1 msg
         go (FutureFrame _ _ pc1) = go pc1 -- discard FutureFrame(s) between inner scope and a handler or error frame
     in go pcIn
 
   catchError mayFail handler = Get $ \sc s pc ->
     let pcWithHandler = let catcher s1 pc1 e1 = unGet (handler e1) sc s1 pc1
-                        in HandlerFrame catcher s mempty pc
+                        in HandlerFrame (Just catcher) s mempty pc
         actionWithCleanup = mayFail >>= \a -> discardInnerHandler >> return a
     in unGet actionWithCleanup sc s pcWithHandler
 

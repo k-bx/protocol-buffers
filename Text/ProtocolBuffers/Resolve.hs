@@ -144,13 +144,13 @@ loadProto protoDir protoFile = fmap answer $ execStateT (load (Set.singleton pro
   answer built = fmap snd built
   loadFailed f msg = fail . unlines $ ["Parsing proto:",f,"has failed with message",msg]
   load :: Set.Set FilePath -> FilePath -> StateT (Map FilePath (Context,(D.FileDescriptorProto,Set.Set FilePath)))
-                                                  IO           (Context,(D.FileDescriptorProto,Set.Set FilePath))
+                                                            IO (Context,(D.FileDescriptorProto,Set.Set FilePath))
   load parents file = do
-    let toRead = combine protoDir file
-    built <- get
+    built <- get -- check memorized results
     case M.lookup file built of
       Just result -> return result
       Nothing -> do
+        let toRead = combine protoDir file
         liftIO . print $ "Loading filepath "++toRead
         proto <- liftIO $ LC.readFile toRead
         parsed <- either (loadFailed toRead . show) return (parseProto toRead proto)
@@ -163,7 +163,7 @@ loadProto protoDir protoFile = fmap answer $ execStateT (load (Set.singleton pro
         let result = ( withPackage context parsed ++ contexts
                      , ( resolveWithContext (context++contexts) parsed
                        , imports ) )
-        modify (\built' -> M.insert file result built')
+        modify (\built' -> M.insert file result built') -- add to memorized results
         return result
 
 -- Imported names must be fully qualified in the .proto file by the
@@ -182,7 +182,6 @@ resolveFDP fdpIn =
   let context = fst (toContext fdpIn)
   in resolveWithContext context fdpIn
   
-
 -- process to get top level context for FDP and list of its imports
 toContext :: D.FileDescriptorProto -> (Context,Set.Set FilePath)
 toContext protoIn =
@@ -220,166 +219,80 @@ toContext protoIn =
       protoContext = foldl' (\nss@(NameSpace ns:_) pre -> case M.lookup pre ns of
                                                             Just (_,Void,Just ns1) -> (ns1:nss)
                                                             _ -> nss) [nameSpace] prefix
-  in (protoContext,Set.fromList (map toString (F.toList (D.FileDescriptorProto.dependency protoIn))))
+  in ( protoContext
+     , Set.fromList (map toString (F.toList (D.FileDescriptorProto.dependency protoIn)))
+     )
 
 resolveWithContext :: Context -> D.FileDescriptorProto -> D.FileDescriptorProto
 resolveWithContext protoContext protoIn =
-  let descend :: Context -> Maybe Utf8 -> Context
-      descend cx@(NameSpace n:_) name =
-        case M.lookup mangled n of
-          Just (_,_,Nothing) -> cx
-          Just (_,_,Just ns1) -> ns1:cx
-          x -> err $ "*** Name resolution failed when descending:\n"++unlines (mangled : show x : "KNOWN NAMES" : seeContext cx)
-       where mangled = mangleCap1 name
-      resolve :: Context -> Maybe Utf8 -> Maybe Utf8
-      resolve context bsIn = fmap fst (resolve2 context bsIn)
-      resolve2 :: Context -> Maybe Utf8 -> Maybe (Utf8,NameType)
-      resolve2 context Nothing = Nothing
-      resolve2 context bsIn = let nameIn = mangleCap bsIn
-                                  errMsg = "*** Name resolution failed:\n"++unlines [show bsIn,show nameIn,"KNOWN NAMES"]
-                                           ++ unlines (seeContext context)
-                                  resolver [] (NameSpace cx) = err $ "Impossible case in Text.ProtocolBuffers.Resolve.resolve2.resolver []\n" ++ errMsg
-                                  resolver [name] (NameSpace cx) =
-                                    case M.lookup name cx of
-                                      Nothing -> Nothing
-                                      Just (fqName,nameType,_) -> Just (encodeModuleNames fqName,nameType)
-                                  resolver (name:rest) (NameSpace cx) =
-                                    case M.lookup name cx of
-                                      Nothing -> Nothing
-                                      Just (_,_,Nothing) -> Nothing
-                                      Just (_,_,Just cx') -> resolver rest cx'
-                              in case msum . map (resolver nameIn) $ context of
-                                   Nothing -> err errMsg
-                                   Just x -> Just x
-      processFDP fdp = fdp
-        { D.FileDescriptorProto.message_type=fmap (processMSG protoContext) (D.FileDescriptorProto.message_type fdp)
-        , D.FileDescriptorProto.enum_type=fmap (processENM protoContext) (D.FileDescriptorProto.enum_type fdp)
-        , D.FileDescriptorProto.service=fmap (processSRV protoContext) (D.FileDescriptorProto.service fdp)
-        , D.FileDescriptorProto.extension=fmap (processFLD protoContext Nothing) (D.FileDescriptorProto.extension fdp) }
-      processMSG cx msg = msg
-        { D.DescriptorProto.name=self
-        , D.DescriptorProto.field=fmap (processFLD cx' self) (D.DescriptorProto.field msg)
-        , D.DescriptorProto.extension=fmap (processFLD cx' self) (D.DescriptorProto.extension msg)
-        , D.DescriptorProto.nested_type=fmap (processMSG cx') (D.DescriptorProto.nested_type msg)
-        , D.DescriptorProto.enum_type=fmap (processENM cx') (D.DescriptorProto.enum_type msg) }
-       where cx' = descend cx (D.DescriptorProto.name msg)
-             self = resolve cx (D.DescriptorProto.name msg)
-      processFLD cx mp f = f { D.FieldDescriptorProto.name=mangleFieldName (D.FieldDescriptorProto.name f)
-                             , D.FieldDescriptorProto.type'=new_type'
-                             , D.FieldDescriptorProto.type_name=checkSelf mp (fmap fst r2)
-                             , D.FieldDescriptorProto.default_value=checkEnumDefault
-                             , D.FieldDescriptorProto.extendee=resolve cx (D.FieldDescriptorProto.extendee f) }
-       where r2 = resolve2 cx (D.FieldDescriptorProto.type_name f)
-             t Message = TYPE_MESSAGE
-             t (Enumeration {}) = TYPE_ENUM
-             t Void = err "processFLD cannot resolve type_name to Void"
-             checkSelf (Just parent) x@(Just name) = if parent==name then (D.FieldDescriptorProto.type_name f) else x
-             checkSelf _ x = x
-             new_type' = (D.FieldDescriptorProto.type' f) `mplus` (fmap (t.snd) r2)
-             checkEnumDefault = case (D.FieldDescriptorProto.default_value f,fmap snd r2) of
-                                  (Just name,Just (Enumeration values)) | name  `notElem` values ->
-                                      err $ unlines ["default enumeration value not recognized:"
-                                                    ,"  file descriptor proto name is "++maybe "" toString (D.FileDescriptorProto.name protoIn)
-                                                    ,"  field name is "++maybe "" toString (D.FieldDescriptorProto.name f)
-                                                    ,"  bad enum name is "++show (toString name)
-                                                    ,"  possible enum values are "++show (map toString values)]
-                                  (def,_) -> def
-      processENM cx e = e { D.EnumDescriptorProto.name=resolve cx (D.EnumDescriptorProto.name e) }
-      processSRV cx s = s { D.ServiceDescriptorProto.name=resolve cx (D.ServiceDescriptorProto.name s)
-                          , D.ServiceDescriptorProto.method=fmap (processMTD cx) (D.ServiceDescriptorProto.method s) }
-      processMTD cx m = m { D.MethodDescriptorProto.name=mangleFieldName (D.MethodDescriptorProto.name m)
-                          , D.MethodDescriptorProto.input_type=resolve cx (D.MethodDescriptorProto.input_type m)
-                          , D.MethodDescriptorProto.output_type=resolve cx (D.MethodDescriptorProto.output_type m) }
-  in processFDP protoIn
-
-{-
-
-
-resolveFDP :: D.FileDescriptorProto -> D.FileDescriptorProto
-resolveFDP protoIn =
-  let prefix :: [String]
-      prefix = mangleCap . msum $
-                 [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options protoIn)
-                 , D.FileOptions.java_package =<< (D.FileDescriptorProto.options protoIn)
-                 , D.FileDescriptorProto.package protoIn]
-      -- Make top-most root NameSpace
-      nameSpace = fromMaybe (NameSpace mempty) $ foldr addPrefix protoNames $ zip prefix (tail (inits prefix))
-        where addPrefix (s1,ss) ns = Just . NameSpace $ M.singleton s1 (ss,Void,ns)
-              protoNames | null protoMsgs = Nothing
-                         | otherwise = Just . NameSpace . M.fromList $ protoMsgs
-                where protoMsgs = F.foldr ((:) . msgNames prefix) protoEnums (D.FileDescriptorProto.message_type protoIn)
-                      protoEnums = F.foldr ((:) . enumNames prefix) [] (D.FileDescriptorProto.enum_type protoIn)
-                      msgNames context dIn =
-                        let s1 = mangleCap1 (D.DescriptorProto.name dIn)
-                            ss' = context ++ [s1]
-                            dNames | null dMsgs = Nothing
-                                   | otherwise = Just . NameSpace . M.fromList $ dMsgs
-                            dMsgs = F.foldr ((:) . msgNames ss') dEnums (D.DescriptorProto.nested_type dIn)
-                            dEnums = F.foldr ((:) . enumNames ss') [] (D.DescriptorProto.enum_type dIn)
-                        in ( s1 , (ss',Message,dNames) )
-                      enumNames context eIn =
-                        let s1 = mangleCap1 (D.EnumDescriptorProto.name eIn)
-                            values :: [Utf8]
-                            values = catMaybes $ map D.EnumValueDescriptorProto.name (F.toList (D.EnumDescriptorProto.value eIn))
-                        in ( s1 , (context ++ [s1],Enumeration values,Nothing) )
-      -- Context stack for resolving the top level declarations
-      protoContext :: Context
-      protoContext = foldl' (\nss@(NameSpace ns:_) pre -> case M.lookup pre ns of
-                                                            Just (_,Void,Just ns1) -> (ns1:nss)
-                                                            _ -> nss) [nameSpace] prefix
+  let rerr msg = err $ "Failure while resolving file descriptor proto whose name is "
+                       ++ maybe "<empty name>" toString (D.FileDescriptorProto.name protoIn)++"\n"
+                       ++ msg
       descend :: Context -> Maybe Utf8 -> Context
       descend cx@(NameSpace n:_) name =
         case M.lookup mangled n of
           Just (_,_,Nothing) -> cx
           Just (_,_,Just ns1) -> ns1:cx
-          x -> err $ "*** Name resolution failed:\n"++unlines (mangled : show x : "KNOWN NAMES" : seeContext cx)
+          x -> rerr $ "*** Name resolution failed when descending:\n"++unlines (mangled : show x : "KNOWN NAMES" : seeContext cx)
        where mangled = mangleCap1 name
       resolve :: Context -> Maybe Utf8 -> Maybe Utf8
       resolve context bsIn = fmap fst (resolve2 context bsIn)
       resolve2 :: Context -> Maybe Utf8 -> Maybe (Utf8,NameType)
       resolve2 context Nothing = Nothing
-      resolve2 context bsIn = let nameIn = mangleCap bsIn
-                                  errMsg = err $ "*** Name resolution failed:\n"++unlines [show bsIn,show nameIn] ++ unlines (seeContext context)
-                                  resolver [] (NameSpace cx) = errMsg
-                                  resolver [name] (NameSpace cx) =
-                                    case M.lookup name cx of
-                                      Nothing -> errMsg
-                                      Just (fqName,nameType,_) -> Just (encodeModuleNames fqName,nameType)
-                                  resolver (name:rest) (NameSpace cx) =
-                                    case M.lookup name cx of
-                                      Nothing -> errMsg
-                                      Just (_,_,Nothing) -> errMsg
-                                      Just (_,_,Just cx') -> resolver rest cx'
-                              in msum . map (resolver nameIn) $ context
+      resolve2 context bsIn =
+        let nameIn = mangleCap bsIn
+            errMsg = "*** Name resolution failed:\n"++unlines [show bsIn,show nameIn,"KNOWN NAMES"]
+                     ++ unlines (seeContext context)
+            resolver [] (NameSpace cx) = rerr $ "Impossible case in Text.ProtocolBuffers.Resolve.resolve2.resolver []\n" ++ errMsg
+            resolver [name] (NameSpace cx) = case M.lookup name cx of
+                                               Nothing -> Nothing
+                                               Just (fqName,nameType,_) -> Just (encodeModuleNames fqName,nameType)
+            resolver (name:rest) (NameSpace cx) = case M.lookup name cx of
+                                                    Nothing -> Nothing
+                                                    Just (_,_,Nothing) -> Nothing
+                                                    Just (_,_,Just cx') -> resolver rest cx'
+        in case msum . map (resolver nameIn) $ context of
+             Nothing -> rerr errMsg
+             Just x -> Just x
       processFDP fdp = fdp
-        { D.FileDescriptorProto.message_type=fmap (processMSG protoContext) (D.FileDescriptorProto.message_type fdp)
-        , D.FileDescriptorProto.enum_type=fmap (processENM protoContext) (D.FileDescriptorProto.enum_type fdp)
-        , D.FileDescriptorProto.service=fmap (processSRV protoContext) (D.FileDescriptorProto.service fdp)
-        , D.FileDescriptorProto.extension=fmap (processFLD protoContext Nothing) (D.FileDescriptorProto.extension fdp) }
+        { D.FileDescriptorProto.message_type = fmap (processMSG protoContext) (D.FileDescriptorProto.message_type fdp)
+        , D.FileDescriptorProto.enum_type    = fmap (processENM protoContext) (D.FileDescriptorProto.enum_type fdp)
+        , D.FileDescriptorProto.service      = fmap (processSRV protoContext) (D.FileDescriptorProto.service fdp)
+        , D.FileDescriptorProto.extension    = fmap (processFLD protoContext Nothing) (D.FileDescriptorProto.extension fdp) }
       processMSG cx msg = msg
-        { D.DescriptorProto.name=self
-        , D.DescriptorProto.field=fmap (processFLD cx' self) (D.DescriptorProto.field msg)
-        , D.DescriptorProto.extension=fmap (processFLD cx' self) (D.DescriptorProto.extension msg)
-        , D.DescriptorProto.nested_type=fmap (processMSG cx') (D.DescriptorProto.nested_type msg)
-        , D.DescriptorProto.enum_type=fmap (processENM cx') (D.DescriptorProto.enum_type msg) }
+        { D.DescriptorProto.name        = self
+        , D.DescriptorProto.field       = fmap (processFLD cx' self) (D.DescriptorProto.field msg)
+        , D.DescriptorProto.extension   = fmap (processFLD cx' self) (D.DescriptorProto.extension msg)
+        , D.DescriptorProto.nested_type = fmap (processMSG cx') (D.DescriptorProto.nested_type msg)
+        , D.DescriptorProto.enum_type   = fmap (processENM cx') (D.DescriptorProto.enum_type msg) }
        where cx' = descend cx (D.DescriptorProto.name msg)
              self = resolve cx (D.DescriptorProto.name msg)
-      processFLD cx mp f = f { D.FieldDescriptorProto.name=mangleFieldName (D.FieldDescriptorProto.name f)
-                             , D.FieldDescriptorProto.type'=(D.FieldDescriptorProto.type' f) `mplus` (fmap (t.snd) r2)
-                             , D.FieldDescriptorProto.type_name=checkSelf mp (fmap fst r2)
-                             , D.FieldDescriptorProto.extendee=resolve cx (D.FieldDescriptorProto.extendee f) }
+      processFLD cx mp f = f { D.FieldDescriptorProto.name          = mangleFieldName (D.FieldDescriptorProto.name f)
+                             , D.FieldDescriptorProto.type'         = new_type'
+                             , D.FieldDescriptorProto.type_name     = checkSelf mp (fmap fst r2)
+                             , D.FieldDescriptorProto.default_value = checkEnumDefault
+                             , D.FieldDescriptorProto.extendee      = resolve cx (D.FieldDescriptorProto.extendee f) }
        where r2 = resolve2 cx (D.FieldDescriptorProto.type_name f)
              t Message = TYPE_MESSAGE
-             t Enumeration {} = TYPE_ENUM
-             t Service = err $ "processFLD resolved type_name to a Service!" ++ show f
-             t Void = err $ "processFLD resolved type_name to Void!" ++ show f
+             t (Enumeration {}) = TYPE_ENUM
+             t Void = rerr $ unlines [ "processFLD cannot resolve type_name to Void"
+                                     , "  The parent message is "++maybe "<no message>" toString mp
+                                     , "  The field name is "++maybe "<no field name>" toString (D.FieldDescriptorProto.name f)]
              checkSelf (Just parent) x@(Just name) = if parent==name then (D.FieldDescriptorProto.type_name f) else x
              checkSelf _ x = x
-      processENM cx e = e { D.EnumDescriptorProto.name=resolve cx (D.EnumDescriptorProto.name e) }
-      processSRV cx s = s { D.ServiceDescriptorProto.name=resolve cx (D.ServiceDescriptorProto.name s)
-                          , D.ServiceDescriptorProto.method=fmap (processMTD cx) (D.ServiceDescriptorProto.method s) }
-      processMTD cx m = m { D.MethodDescriptorProto.name=mangleFieldName (D.MethodDescriptorProto.name m)
-                          , D.MethodDescriptorProto.input_type=resolve cx (D.MethodDescriptorProto.input_type m)
-                          , D.MethodDescriptorProto.output_type=resolve cx (D.MethodDescriptorProto.output_type m) }
+             new_type' = (D.FieldDescriptorProto.type' f) `mplus` (fmap (t.snd) r2)
+             checkEnumDefault = case (D.FieldDescriptorProto.default_value f,fmap snd r2) of
+                                  (Just name,Just (Enumeration values)) | name  `notElem` values ->
+                                      rerr $ unlines ["default enumeration value not recognized:"
+                                                     ,"  The parent message is "++maybe "<no message>" toString mp
+                                                     ,"  field name is "++maybe "" toString (D.FieldDescriptorProto.name f)
+                                                     ,"  bad enum name is "++show (toString name)
+                                                     ,"  possible enum values are "++show (map toString values)]
+                                  (def,_) -> def
+      processENM cx e = e { D.EnumDescriptorProto.name = resolve cx (D.EnumDescriptorProto.name e) }
+      processSRV cx s = s { D.ServiceDescriptorProto.name   = resolve cx (D.ServiceDescriptorProto.name s)
+                          , D.ServiceDescriptorProto.method = fmap (processMTD cx) (D.ServiceDescriptorProto.method s) }
+      processMTD cx m = m { D.MethodDescriptorProto.name        = mangleFieldName (D.MethodDescriptorProto.name m)
+                          , D.MethodDescriptorProto.input_type  = resolve cx (D.MethodDescriptorProto.input_type m)
+                          , D.MethodDescriptorProto.output_type = resolve cx (D.MethodDescriptorProto.output_type m) }
   in processFDP protoIn
--}

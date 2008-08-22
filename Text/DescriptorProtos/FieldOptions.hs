@@ -8,7 +8,7 @@ import qualified Text.DescriptorProtos.FieldOptions.CType
 data FieldOptions = FieldOptions{ctype ::
                                  P'.Maybe DescriptorProtos.FieldOptions.CType,
                                  experimental_map_key :: P'.Maybe P'.Utf8}
-                  deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
+                  deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
 instance P'.Mergeable FieldOptions where
         mergeEmpty = FieldOptions P'.mergeEmpty P'.mergeEmpty
@@ -36,7 +36,9 @@ instance P'.Wire FieldOptions where
                                (P'.wireGet 9)
                         _ -> P'.unknownField field'Number
  
+instance P'.GPB FieldOptions
+ 
 instance P'.ReflectDescriptor FieldOptions where
         reflectDescriptorInfo _
           = P'.read
-              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"FieldOptions\"}, fields = fromList [FieldInfo {fieldName = \"ctype\", fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just \"DescriptorProtos.FieldOptions.CType\", hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = \"experimental_map_key\", fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 74}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}]}"
+              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"FieldOptions\"}, fields = fromList [FieldInfo {fieldName = \"ctype\", fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just \"DescriptorProtos.FieldOptions.CType\", hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = \"experimental_map_key\", fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 74}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}], extRanges = []}"

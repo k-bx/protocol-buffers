@@ -40,6 +40,7 @@ data ProtoName = ProtoName { haskellPrefix :: String  -- Haskell specific prefix
 
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , fields :: Seq FieldInfo 
+                                     , extRanges :: [(FieldId,FieldId)]
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
@@ -145,7 +146,7 @@ readSigned' f xs = f xs
 cEncode :: [Word8] -> [Char]
 cEncode = concatMap one where
   one :: Word8 -> [Char]
-  one x | (32 < x) && (x < 127) = [toEnum .  fromEnum $  x]  -- main case of unescaped value
+  one x | (32 <= x) && (x < 127) = [toEnum .  fromEnum $  x]  -- main case of unescaped value
   one 9 = sl  't'
   one 10 = sl 'n'
   one 13 = sl 'r'
@@ -154,7 +155,7 @@ cEncode = concatMap one where
   one 92 = sl '\\'
   one 0 = '\\':"000"
   one x | x < 8 = '\\':'0':'0':(showOct x "")
-        | x < 32 = '\\':'0':(showOct x "")
+        | x < 64 = '\\':'0':(showOct x "")
         | otherwise = '\\':(showOct x "")
   sl c = ['\\',c]
 

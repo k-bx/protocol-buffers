@@ -10,8 +10,7 @@ module Text.ProtocolBuffers.Header
     , module Data.Generics
     , module Data.Typeable
     , module Text.ProtocolBuffers.Basic
-    , module Text.ProtocolBuffers.Default
-    , module Text.ProtocolBuffers.Mergeable
+    , module Text.ProtocolBuffers.Extensions
     , module Text.ProtocolBuffers.Reflections
     , module Text.ProtocolBuffers.WireMessage
     ) where
@@ -26,11 +25,11 @@ import Data.Sequence((|>)) -- for append, see below
 import Data.Typeable(Typeable(..))
 
 import Text.ProtocolBuffers.Basic -- all
-import Text.ProtocolBuffers.Default(Default(..))
-import Text.ProtocolBuffers.Mergeable(Mergeable(..))
-import Text.ProtocolBuffers.Reflections(ReflectDescriptor(..),ReflectEnum(..),EnumInfo(..),ProtoName(..))
-import Text.ProtocolBuffers.WireMessage(Wire(..)
-                                       , putSize
+import Text.ProtocolBuffers.Default()
+import Text.ProtocolBuffers.Extensions(ExtendMessage(..),ExtField,Key(..),wireSizeExtField,wirePutExtField)
+import Text.ProtocolBuffers.Mergeable()
+import Text.ProtocolBuffers.Reflections(ReflectDescriptor(..),ReflectEnum(..),EnumInfo(..),ProtoName(..),DescriptorInfo(extRanges))
+import Text.ProtocolBuffers.WireMessage( putSize
                                        , wireSizeReq,wireSizeOpt,wireSizeRep
                                        , wirePutReq,wirePutOpt,wirePutRep
                                        , getMessage,getBareMessage

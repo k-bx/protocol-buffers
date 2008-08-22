@@ -7,7 +7,7 @@ import qualified Text.ProtocolBuffers.Header as P'
 data Label = LABEL_OPTIONAL
            | LABEL_REQUIRED
            | LABEL_REPEATED
-           deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
+           deriving (P'.Read, P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
 instance P'.Mergeable Label
  
@@ -34,6 +34,8 @@ instance P'.Wire Label where
         wireSize 14 enum = P'.wireSize 14 (P'.fromEnum enum)
         wirePut 14 enum = P'.wirePut 14 (P'.fromEnum enum)
         wireGet 14 = P'.fmap P'.toEnum (P'.wireGet 14)
+ 
+instance P'.GPB Label
  
 instance P'.ReflectEnum Label where
         reflectEnum

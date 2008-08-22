@@ -6,7 +6,7 @@ import qualified Text.ProtocolBuffers.Header as P'
  
 data MessageOptions = MessageOptions{message_set_wire_format ::
                                      P'.Maybe P'.Bool}
-                    deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
+                    deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
 instance P'.Mergeable MessageOptions where
         mergeEmpty = MessageOptions P'.mergeEmpty
@@ -30,7 +30,9 @@ instance P'.Wire MessageOptions where
                                (P'.wireGet 8)
                         _ -> P'.unknownField field'Number
  
+instance P'.GPB MessageOptions
+ 
 instance P'.ReflectDescriptor MessageOptions where
         reflectDescriptorInfo _
           = P'.read
-              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MessageOptions\"}, fields = fromList [FieldInfo {fieldName = \"message_set_wire_format\", fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)}]}"
+              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MessageOptions\"}, fields = fromList [FieldInfo {fieldName = \"message_set_wire_format\", fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)}], extRanges = []}"

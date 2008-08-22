@@ -5,7 +5,7 @@ import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
 data MethodOptions = MethodOptions{}
-                   deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
+                   deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
 instance P'.Mergeable MethodOptions where
         mergeEmpty = MethodOptions
@@ -24,7 +24,9 @@ instance P'.Wire MethodOptions where
                   = case field'Number of
                         _ -> P'.unknownField field'Number
  
+instance P'.GPB MethodOptions
+ 
 instance P'.ReflectDescriptor MethodOptions where
         reflectDescriptorInfo _
           = P'.read
-              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MethodOptions\"}, fields = fromList []}"
+              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MethodOptions\"}, fields = fromList [], extRanges = []}"

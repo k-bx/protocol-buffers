@@ -11,8 +11,9 @@
     WIRETYPE_FIXED32          = 5,
  -}
 module Text.ProtocolBuffers.WireMessage
-    ( LazyResult(..),runGetOnLazy,runPut,size'Varint
-    , Wire(..)
+    ( messageSize,messagePut,messageGet,messagePutM,messageGetM
+    , runGetOnLazy,runPut,size'Varint,toWireType,toWireTag
+    , Wire(..),WireSize,Put,BinaryParser
     , putSize
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep
@@ -31,7 +32,7 @@ import Data.Map (Map,unionWith)
 import Data.Monoid (Monoid(..))
 import Data.Word (Word8)
 import qualified Data.ByteString as Strict (ByteString)
-import qualified Data.ByteString.Lazy as BS (length,pack,fromChunks)
+import qualified Data.ByteString.Lazy as BS (length,pack,fromChunks,toChunks,drop)
 import qualified Data.ByteString.Lazy.Internal as BS (ByteString(Empty,Chunk),chunk)
 import qualified Data.Foldable as F(foldl',forM_)
 import qualified Data.Sequence as Seq(length)
@@ -42,49 +43,55 @@ import GHC.Word (Word64(W64#),Word32(W32#))
 
 import Data.Binary.Put (Put,putWord8,putWord32be,putWord64be,putLazyByteString,runPut)
 import Data.Binary.Builder (Builder)
-import Data.Binary.Strict.Class (BinaryParser(getWord8,getWord32be,getWord64be,getByteString,bytesRead,isEmpty))
-import qualified Data.Binary.Strict.IncrementalGet as Get (Get,runGet,Result(..))
+import Data.Binary.Strict.Class as BP (BinaryParser(getWord8,getWord32be,getWord64be,getByteString,isEmpty,bytesRead))
+--import qualified Data.Binary.Strict.IncrementalGet as Get (Get,runGet,Result(..))
+import Text.ProtocolBuffers.MyGetSimplified as Get (Get,runGet,Result(..),lookAhead,getLazyByteString,spanOf,skip,bytesRead)
 
 -- import qualified Data.ByteString.Lazy as BS (unpack)
 -- import Numeric
 
+
+runGetOnLazy :: Get.Get r -> ByteString -> Either String (r,ByteString)
+runGetOnLazy parser bs = resolve (Get.runGet parser bs)
+
+resolve :: Get.Result r -> Either String (r,ByteString)
+resolve (Get.Failed i s) = Left ("Failed at "++show i++" : "++s)
+resolve (Get.Finished bs i r) = Right (r,bs)
+resolve (Get.Partial {}) = Left ("Not enough input")
+
 -- Make IncrementalGet run on the Lazy ByteStrings
+{-
 data LazyResult r = Failed String
                   | Finished ByteString r
                   | Partial (ByteString -> LazyResult r)
 
-runGetOnLazy :: Get.Get r r -> ByteString -> LazyResult r
+runGetOnLazy :: Get.Get r r -> ByteString -> Either String (r,ByteString)
 runGetOnLazy parser (BS.Chunk x rest) = resolve rest $ Get.runGet parser x
 runGetOnLazy parser BS.Empty = resolve BS.Empty $ Get.runGet parser mempty
 
-resolve :: ByteString -> Get.Result r -> LazyResult r
-resolve _rest (Get.Failed s)              = Failed s
-resolve rest (Get.Finished b s)           = Finished (BS.chunk b rest) s
+resolve :: ByteString -> Get.Result r -> Either String (r,ByteString)
+resolve _rest (Get.Failed s)              = Left s
+resolve rest (Get.Finished b s)           = Right (s,(BS.chunk b rest))
 resolve (BS.Chunk x rest) (Get.Partial f) = resolve rest (f x)
-resolve BS.Empty (Get.Partial f)          = newPartial
-  where newPartial= Partial f'
-        f' BS.Empty = newPartial
-        f' (BS.Chunk x rest) = resolve rest (f x)
-
-type WireSize = Int64
-
+resolve BS.Empty (Get.Partial f)          = Left "Insufficient input"
+-}
 prependMessageSize :: WireSize -> WireSize
 prependMessageSize n = n + size'Varint n
 
--- The first Int argument is fromEnum on
--- Text.DescriptorProtos.FieldDescriptorProto.Type.  The values of the
--- Int parameters cannot change without breaking all serialized
--- protocol buffers.
-class Wire b where
-  {-# INLINE wireSize #-}
-  wireSize :: FieldType -> b -> WireSize
-  {-# INLINE wirePut #-}
-  wirePut :: FieldType -> b -> Put
-  {-# INLINE wireGet #-}
-  wireGet :: BinaryParser get => FieldType -> get b
-
 messageSize :: (ReflectDescriptor msg,Wire msg) => msg -> WireSize
 messageSize msg = prependMessageSize (wireSize 11 msg)
+
+messagePut :: (ReflectDescriptor msg, Wire msg) => msg -> ByteString
+messagePut msg = runPut (wirePut 11 msg)
+
+messagePutM :: (ReflectDescriptor msg, Wire msg) => msg -> Put
+messagePutM msg = wirePut 11 msg
+
+messageGet :: (ReflectDescriptor msg, Wire msg) => ByteString -> Either String (msg,ByteString)
+messageGet bs = runGetOnLazy (wireGet 11) bs
+
+messageGetM :: (BinaryParser get, ReflectDescriptor msg, Wire msg) => get msg
+messageGetM = wireGet 11
 
 {-# INLINE wirePutReq #-}
 wirePutReq :: Wire b => WireTag -> FieldType -> b -> Put
@@ -122,6 +129,15 @@ wireSizeRep tagSize i s = F.foldl' (\n v -> n + wireSizeReq tagSize i v) 0 s
 putSize :: WireSize -> Put
 putSize = putVarUInt
 
+toWireTag :: FieldId -> FieldType -> WireTag
+toWireTag fieldId fieldType
+    = ((fromIntegral . getFieldId $ fieldId) `shiftL` 3) .|. (fromIntegral . getWireType . toWireType $ fieldType)
+
+
+splitWireTag :: WireTag -> (FieldId,WireType)
+splitWireTag (WireTag wireTag) = ( FieldId . fromIntegral $ wireTag `shiftR` 3
+                                 , WireType . fromIntegral $ wireTag .&. 7 )
+
 -- getMessage assumes the wireTag for the message, if it existed, has already been read.
 -- getMessage assumes that it still needs to read the Varint encoded length of the message.
 getMessage :: forall get message. (BinaryParser get, Mergeable message, ReflectDescriptor message)
@@ -129,12 +145,12 @@ getMessage :: forall get message. (BinaryParser get, Mergeable message, ReflectD
            -> get message
 getMessage updater = do
   messageLength <- getVarInt
-  start <- bytesRead
+  start <- BP.bytesRead
   let stop = messageLength+start
       -- switch from go to go' once all the required fields have been found
       go reqs message | Set.null reqs = go' message
                       | otherwise = do
-        here <- bytesRead
+        here <- BP.bytesRead
         case compare stop here of
           EQ -> notEnoughData messageLength start
           LT -> tooMuchData messageLength start here
@@ -145,7 +161,7 @@ getMessage updater = do
               else let reqs' = Set.delete wireTag reqs
                    in updater fieldId message >>= go reqs'
       go' message = do
-        here <- bytesRead
+        here <- BP.bytesRead
         case compare stop here of
           EQ -> return message
           LT -> tooMuchData messageLength start here
@@ -158,9 +174,6 @@ getMessage updater = do
  where
   initialMessage = mergeEmpty
   (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
-  splitWireTag :: WireTag -> (FieldId,WireType)
-  splitWireTag (WireTag wireTag) = ( FieldId . fromIntegral $ wireTag `shiftR` 3
-                                   , WireType . fromIntegral $ wireTag .&. 7 )
   unknown fieldId wireType here =
       fail ("Text.ProtocolBuffers.WireMessage.getMessage: Unknown wire tag read (fieldId,wireType,here) == "
             ++ show (fieldId,wireType,here) ++ " when processing "
@@ -205,9 +218,6 @@ getBareMessage updater = go required initialMessage
                  else updater fieldId message >>= go'
   initialMessage = mergeEmpty
   (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
-  splitWireTag :: WireTag -> (FieldId,WireType)
-  splitWireTag (WireTag wireTag) = ( FieldId . fromIntegral $ wireTag `shiftR` 3
-                                   , WireType . fromIntegral $ wireTag .&. 7 )
   unknown fieldId wireType = fail ("Text.ProtocolBuffers.WireMessage.getBareMessage: Unknown wire tag read: "
                                    ++ show (fieldId,wireType) ++ " when processing "
                                    ++ (show . descName . reflectDescriptorInfo $ initialMessage))
@@ -216,7 +226,7 @@ getBareMessage updater = go required initialMessage
 
 unknownField :: (BinaryParser get) => FieldId -> get a
 unknownField fieldId = do 
-  here <- bytesRead
+  here <- BP.bytesRead
   fail ("Impossible? Text.ProtocolBuffers.WireMessage.unknownField "
         ++" The Message's updater claims there is an unknown field id on wire: "++show fieldId
         ++" at a position just before here == "++show here)
@@ -374,6 +384,110 @@ putVarUInt b = let go i | i < 0x80 = putWord8 (fromIntegral i)
                         | otherwise = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7)
                in go b
 
+data WireRaw = Raw_VarInt Integer
+             | Raw_Fixed64 Word64
+             | Raw_Length_Delimited ByteString Int64 ByteString -- with length header, length, without length header
+             | Raw_Group ByteString -- includes end tag
+             | Raw_Fixed32 Word32
+data FromWire = FromWire FieldId WireType Int64 WireRaw -- wiresize and decoded start tag and "raw" content
+
+getFromWire :: Get.Get FromWire
+getFromWire = do
+  (fieldId,wireType) <- fmap (splitWireTag . WireTag) getVarInt
+  here <- Get.bytesRead
+  raw <- case wireType of
+           0 -> fmap Raw_VarInt getVarInt
+           1 -> fmap Raw_Fixed64 getWord64be
+           2 -> do (lenInt,valInt) <- peekVarInt
+                   whole <- Get.getLazyByteString (lenInt+valInt)
+                   let part = BS.drop lenInt whole
+                   return (Raw_Length_Delimited whole valInt part)
+           3 -> do lenGroup <- peekLenGroup fieldId
+                   group <- Get.getLazyByteString lenGroup
+                   return (Raw_Group group)
+           5 -> fmap Raw_Fixed32 getWord32be
+           4 -> do here <- Get.bytesRead
+                   fail $ "Unexpected group end tag "++show (fieldId,wireType)++" before pos "++show here
+           _ -> do here <- Get.bytesRead
+                   fail $ "Bad WireTag" ++ show (fieldId,wireType) ++ " before pos "++show here
+  there <- Get.bytesRead
+  return (FromWire fieldId wireType (there-here) raw)
+
+peekVarInt :: Get.Get (Int64,Int64)
+peekVarInt = Get.lookAhead $ do
+  here <- Get.bytesRead 
+  i <- getVarInt
+  there <- Get.bytesRead
+  return (there-here,i)
+
+peekLenGroup :: FieldId -> Get.Get Int64
+peekLenGroup f = Get.lookAhead $ do
+  here <- Get.bytesRead
+  skipGroup f
+  there <- Get.bytesRead
+  return (there-here)
+
+skipGroup :: FieldId -> Get.Get ()
+skipGroup f = go where
+  go = do (fieldId,wireType) <- fmap (splitWireTag . WireTag) getVarInt
+          case wireType of
+            0 -> spanOf (>=128) >> skip 1 >> go
+            1 -> skip 8 >> go
+            2 -> getVarInt >>= skip >> go
+            3 -> skipGroup fieldId >> go
+            5 -> skip 4 >> go
+            4 | f /= fieldId -> fail $ "skipGroup failed, fieldId mismatch: "++show (f,fieldId)
+              | otherwise -> return ()
+
+{-
+  enum WireType {
+    WIRETYPE_VARINT           = 0,
+    WIRETYPE_FIXED64          = 1,
+    WIRETYPE_LENGTH_DELIMITED = 2,
+    WIRETYPE_START_GROUP      = 3,
+    WIRETYPE_END_GROUP        = 4,
+    WIRETYPE_FIXED32          = 5, };
+
+    TYPE_DOUBLE         = 1;
+    TYPE_FLOAT          = 2;
+    TYPE_INT64          = 3;
+    TYPE_UINT64         = 4;
+    TYPE_INT32          = 5;
+    TYPE_FIXED64        = 6;
+    TYPE_FIXED32        = 7;
+    TYPE_BOOL           = 8;
+    TYPE_STRING         = 9;
+    TYPE_GROUP          = 10;  // Tag-delimited aggregate.
+    TYPE_MESSAGE        = 11;
+    TYPE_BYTES          = 12;
+    TYPE_UINT32         = 13;
+    TYPE_ENUM           = 14;
+    TYPE_SFIXED32       = 15;
+    TYPE_SFIXED64       = 16;
+    TYPE_SINT32         = 17;
+    TYPE_SINT64         = 18; -}
+-- http://code.google.com/apis/protocolbuffers/docs/encoding.html
+toWireType :: FieldType -> WireType
+toWireType  1 =  1
+toWireType  2 =  5
+toWireType  3 =  0
+toWireType  4 =  0
+toWireType  5 =  0
+toWireType  6 =  1
+toWireType  7 =  5
+toWireType  8 =  0
+toWireType  9 =  2
+toWireType 10 =  3 -- START_GROUP
+toWireType 11 =  2
+toWireType 12 =  2
+toWireType 13 =  0
+toWireType 14 =  0
+toWireType 15 =  5
+toWireType 16 =  1
+toWireType 17 =  5
+toWireType 18 =  1
+toWireType  x = error $ "Text.ProcolBuffers.Basic.toWireType: Bad FieldType: "++show x
+
 {-
 -- copied from Data.Binary.Builder
 -- copied from Data.ByteString.Lazy
@@ -525,4 +639,4 @@ encodeWireMessage = undefined
 decodeWireMessage :: ByteString -> WireMessage
 decodeWireMessage = undefined
 
--}
+-} 

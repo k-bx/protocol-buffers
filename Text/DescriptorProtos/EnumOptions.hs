@@ -4,7 +4,7 @@ import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
 data EnumOptions = EnumOptions{}
-                 deriving (P'.Show, P'.Read, P'.Eq, P'.Ord, P'.Data, P'.Typeable)
+                 deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
 instance P'.Mergeable EnumOptions where
         mergeEmpty = EnumOptions
@@ -23,7 +23,9 @@ instance P'.Wire EnumOptions where
                   = case field'Number of
                         _ -> P'.unknownField field'Number
  
+instance P'.GPB EnumOptions
+ 
 instance P'.ReflectDescriptor EnumOptions where
         reflectDescriptorInfo _
           = P'.read
-              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"EnumOptions\"}, fields = fromList []}"
+              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"EnumOptions\"}, fields = fromList [], extRanges = []}"
