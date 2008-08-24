@@ -5,12 +5,18 @@ module Text.ProtocolBuffers.Mergeable(Mergeable(..),mayMerge) where
 -- implementation to mergeAppend that take the second parameter.
 
 import Text.ProtocolBuffers.Basic
-import qualified Data.Foldable as F(Foldable(foldr))
 import Data.Monoid(mempty,mappend)
 
--- Base types are not very mergeable, but their Maybe type are:
-instance Mergeable a => Mergeable (Maybe a) where mergeEmpty = Nothing; mergeAppend = mayMerge
-instance Mergeable (Seq a) where mergeEmpty = mempty; mergeAppend = mappend
+-- Base types are not very mergeable, but their Maybe and Seq versions are:
+instance Mergeable a => Mergeable (Maybe a) where
+    mergeEmpty = Nothing
+    mergeAppend = mayMerge
+
+instance Mergeable (Seq a) where
+    mergeEmpty = mempty
+    mergeAppend = mappend
+
+-- These all have errors as mergeEmpty and use the second paramater for mergeAppend
 instance Mergeable Bool
 instance Mergeable Utf8
 instance Mergeable ByteString

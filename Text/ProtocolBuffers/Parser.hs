@@ -224,14 +224,17 @@ extend :: (D.DescriptorProto -> P s ()) -> (D.FieldDescriptorProto -> P s ())
        -> P s ()
 extend upGroup upField = pName (U.fromString "extend") >> do
   typeExtendee <- ident
-  let first = (eol >> first) <|> ((field upGroup (Just typeExtendee) >>= upField) >> rest)
+  let first = (eol >> first) <|> ((field upGroup (Just typeExtendee) >>= upField)  >> rest)
       rest = pChar '}' <|> ((eol <|> (field upGroup (Just typeExtendee) >>= upField)) >> rest)
   pChar '{' >> first
   
 field :: (D.DescriptorProto -> P s ()) -> Maybe Utf8
       -> P s D.FieldDescriptorProto
 field upGroup maybeExtendee = do 
-  sLabel <- choice . map (pName . U.fromString) $ ["optional","repeated","required"]
+  let allowedLabels = case maybeExtendee of
+                        Nothing -> ["optional","repeated","required"]
+                        Just {} -> ["optional","repeated"] -- cannot add a required extension
+  sLabel <- choice . map (pName . U.fromString) $ allowedLabels
   theLabel <- maybe (fail ("not a valid Label :"++show sLabel)) return (parseLabel (utf8ToString sLabel))
   sType <- ident
   let (maybeTypeCode,maybeTypeName) = case parseType (utf8ToString sType) of
@@ -334,11 +337,12 @@ isValidUTF8 :: ByteString -> Maybe Int
 isValidUTF8 ws = go 0 (L.unpack ws) 0 where
   go 0 [] _ = Nothing
   go 0 (x:xs) n | x <= 127 = go 0 xs $! succ n -- binary 01111111
-                | x <= 193 = Just n            -- binary 11000001
+                | x <= 193 = Just n            -- binary 11000001, decodes to <=127, should not be here
                 | x <= 223 = go 1 xs $! succ n -- binary 11011111
                 | x <= 239 = go 2 xs $! succ n -- binary 11101111
                 | x <= 243 = go 3 xs $! succ n -- binary 11110011
                 | x == 244 = high xs $! succ n -- binary 11110100
+                | otherwise = Just n
   go i (x:xs) n | 128 <= x && x <= 191 = go (pred i) xs $! succ n
   go _ _ n = Just n
   -- leading 3 bits are 100, so next 6 are at most 001111, i.e. 10001111
@@ -350,8 +354,10 @@ enum up = pName (U.fromString "enum") >> do
   self <- ident1
   up =<< subParser (pChar '{' >> subEnum) (mergeEmpty {D.EnumDescriptorProto.name=Just self})
 
-subEnum = (pChar '}') <|> ((eol <|> enumVal <|> (pOption >>= setOption)) >> subEnum)
-  where setOption = fail "There are no options for enumerations (when this parser was written)"
+subEnum = first
+  where first = (eol >> first) <|> ((enumVal <|> (pOption >>= setOption)) >> rest)
+        rest = pChar '}' <|> ((eol <|> enumVal <|> (pOption >>= setOption)) >> rest)
+        setOption = fail "There are no options for enumerations (when this parser was written)"
         enumVal :: P D.EnumDescriptorProto ()
         enumVal = do
           name <- ident1

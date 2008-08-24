@@ -14,11 +14,14 @@ module Text.ProtocolBuffers.WireMessage
     ( messageSize,messagePut,messageGet,messagePutM,messageGetM
     , runGetOnLazy,runPut,size'Varint,toWireType,toWireTag
     , Wire(..),WireSize,Put,BinaryParser
-    , putSize
+    , putSize,putVarUInt
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep
     , getMessage,getBareMessage
-    , unknownField) where
+    , unknownField
+    , castWord64ToDouble,castWord32ToFloat,castDoubleToWord64,castFloatToWord32
+    , zzEncode64,zzEncode32,zzDecode64,zzDecode32
+    ) where
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
@@ -231,15 +234,24 @@ unknownField fieldId = do
         ++" The Message's updater claims there is an unknown field id on wire: "++show fieldId
         ++" at a position just before here == "++show here)
 
+{-# INLINE castWord64ToDouble #-}
+castWord64ToDouble (W64# w) = D# (unsafeCoerce# w)
+{-# INLINE castWord32ToFloat #-}
+castWord32ToFloat (W32# w) = F# (unsafeCoerce# w)
+{-# INLINE castDoubleToWord64 #-}
+castDoubleToWord64 (D# d) = W64# (unsafeCoerce# d)
+{-# INLINE castFloatToWord32 #-}
+castFloatToWord32 (F# d) = W32# (unsafeCoerce# d)
+
 instance Wire Double where
   wireSize {- TYPE_DOUBLE   -} 1      _ = 8
-  wirePut  {- TYPE_DOUBLE   -} 1 (D# d) = putWord64be (W64# (unsafeCoerce# d))
-  wireGet  {- TYPE_DOUBLE   -} 1        = fmap (\(W64# w) -> D# (unsafeCoerce# w)) getWord64be
+  wirePut  {- TYPE_DOUBLE   -} 1      x = putWord64be (castDoubleToWord64 x)
+  wireGet  {- TYPE_DOUBLE   -} 1        = fmap castWord64ToDouble getWord64be
 
 instance Wire Float where
   wireSize {- TYPE_FLOAT    -} 2      _ = 4
-  wirePut  {- TYPE_FLOAT    -} 2 (F# f) = putWord32be (W32# (unsafeCoerce# f))
-  wireGet  {- TYPE_FLOAT    -} 2        = fmap (\(W32# w) -> F# (unsafeCoerce# w)) getWord32be
+  wirePut  {- TYPE_FLOAT    -} 2      x = putWord32be (castFloatToWord32 x)
+  wireGet  {- TYPE_FLOAT    -} 2        = fmap castWord32ToFloat getWord32be
 
 instance Wire Int64 where
   wireSize {- TYPE_INT64    -} 3      x = size'Varint x
@@ -384,16 +396,18 @@ putVarUInt b = let go i | i < 0x80 = putWord8 (fromIntegral i)
                         | otherwise = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7)
                in go b
 
-data WireRaw = Raw_VarInt Integer
-             | Raw_Fixed64 Word64
-             | Raw_Length_Delimited ByteString Int64 ByteString -- with length header, length, without length header
-             | Raw_Group ByteString -- includes end tag
-             | Raw_Fixed32 Word32
-data FromWire = FromWire FieldId WireType Int64 WireRaw -- wiresize and decoded start tag and "raw" content
+{-
+putFromWire :: FromWire -> Put
+putFromWire (FromWire fieldId wireType len raw) = do
+  case raw of
+    Raw_VarInt i -> putVarUInt i
+    Raw_Fixed64 i -> putWord64be i
+    Raw_Length_Delimited w _ _ -> putLazyByteString w
+    Raw_Group bs -> putLazyByteString bs
+    Raw_Fixed32 i -> putWord32be i
 
-getFromWire :: Get.Get FromWire
-getFromWire = do
-  (fieldId,wireType) <- fmap (splitWireTag . WireTag) getVarInt
+getFromWire :: FieldId -> WireType -> Get.Get FromWire
+getFromWire (fieldId,wireType) = do
   here <- Get.bytesRead
   raw <- case wireType of
            0 -> fmap Raw_VarInt getVarInt
@@ -412,6 +426,7 @@ getFromWire = do
                    fail $ "Bad WireTag" ++ show (fieldId,wireType) ++ " before pos "++show here
   there <- Get.bytesRead
   return (FromWire fieldId wireType (there-here) raw)
+-}
 
 peekVarInt :: Get.Get (Int64,Int64)
 peekVarInt = Get.lookAhead $ do
