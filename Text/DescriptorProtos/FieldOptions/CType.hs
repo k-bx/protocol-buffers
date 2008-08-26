@@ -1,5 +1,5 @@
 module Text.DescriptorProtos.FieldOptions.CType (CType(..)) where
-import Prelude ((+), (++))
+import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  

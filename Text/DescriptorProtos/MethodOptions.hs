@@ -1,6 +1,6 @@
 module Text.DescriptorProtos.MethodOptions (MethodOptions(..))
        where
-import Prelude ((+), (++))
+import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
@@ -29,4 +29,4 @@ instance P'.GPB MethodOptions
 instance P'.ReflectDescriptor MethodOptions where
         reflectDescriptorInfo _
           = P'.read
-              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MethodOptions\"}, fields = fromList [], extRanges = []}"
+              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MethodOptions\"}, fields = fromList [], keys = fromList [], extRanges = []}"

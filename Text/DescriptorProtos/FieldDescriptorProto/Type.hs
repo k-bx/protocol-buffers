@@ -1,6 +1,6 @@
 module Text.DescriptorProtos.FieldDescriptorProto.Type (Type(..))
        where
-import Prelude ((+), (++))
+import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  

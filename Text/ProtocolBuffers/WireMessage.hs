@@ -12,12 +12,12 @@
  -}
 module Text.ProtocolBuffers.WireMessage
     ( messageSize,messagePut,messageGet,messagePutM,messageGetM
-    , runGetOnLazy,runPut,size'Varint,toWireType,toWireTag
-    , Wire(..),WireSize,Put,BinaryParser
-    , putSize,putVarUInt
+    , runGetOnLazy,runPut,size'Varint,toWireType,toWireTag,mkWireTag
+    , Wire(..),WireSize,Put
+    , putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep
-    , getMessage,getBareMessage
+    , getMessage,getBareMessage,getMessageWith
     , unknownField
     , castWord64ToDouble,castWord32ToFloat,castDoubleToWord64,castFloatToWord32
     , zzEncode64,zzEncode32,zzDecode64,zzDecode32
@@ -44,17 +44,15 @@ import qualified Data.Set as Set(notMember,delete,null)
 import GHC.Exts (Double(D#),Float(F#),unsafeCoerce#)
 import GHC.Word (Word64(W64#),Word32(W32#))
 
-import Data.Binary.Put (Put,putWord8,putWord32be,putWord64be,putLazyByteString,runPut)
-import Data.Binary.Builder (Builder)
-import Data.Binary.Strict.Class as BP (BinaryParser(getWord8,getWord32be,getWord64be,getByteString,isEmpty,bytesRead))
---import qualified Data.Binary.Strict.IncrementalGet as Get (Get,runGet,Result(..))
-import Text.ProtocolBuffers.MyGetSimplified as Get (Get,runGet,Result(..),lookAhead,getLazyByteString,spanOf,skip,bytesRead)
+import Data.Binary.Put (Put,runPut,putWord8,putWord32be,putWord64be,putLazyByteString)
+--import Data.Binary.Builder (Builder)
+import Text.ProtocolBuffers.MyGetSimplified as Get (Result(..),Get,runGet,lookAhead,spanOf,skip,bytesRead,isEmpty
+                                                   ,getWord8,getWord32be,getWord64be,getLazyByteString,getByteString)
 
 -- import qualified Data.ByteString.Lazy as BS (unpack)
 -- import Numeric
 
-
-runGetOnLazy :: Get.Get r -> ByteString -> Either String (r,ByteString)
+runGetOnLazy :: Get r -> ByteString -> Either String (r,ByteString)
 runGetOnLazy parser bs = resolve (Get.runGet parser bs)
 
 resolve :: Get.Result r -> Either String (r,ByteString)
@@ -68,7 +66,7 @@ data LazyResult r = Failed String
                   | Finished ByteString r
                   | Partial (ByteString -> LazyResult r)
 
-runGetOnLazy :: Get.Get r r -> ByteString -> Either String (r,ByteString)
+runGetOnLazy :: Get r r -> ByteString -> Either String (r,ByteString)
 runGetOnLazy parser (BS.Chunk x rest) = resolve rest $ Get.runGet parser x
 runGetOnLazy parser BS.Empty = resolve BS.Empty $ Get.runGet parser mempty
 
@@ -93,7 +91,7 @@ messagePutM msg = wirePut 11 msg
 messageGet :: (ReflectDescriptor msg, Wire msg) => ByteString -> Either String (msg,ByteString)
 messageGet bs = runGetOnLazy (wireGet 11) bs
 
-messageGetM :: (BinaryParser get, ReflectDescriptor msg, Wire msg) => get msg
+messageGetM :: (ReflectDescriptor msg, Wire msg) => Get msg
 messageGetM = wireGet 11
 
 {-# INLINE wirePutReq #-}
@@ -136,51 +134,56 @@ toWireTag :: FieldId -> FieldType -> WireTag
 toWireTag fieldId fieldType
     = ((fromIntegral . getFieldId $ fieldId) `shiftL` 3) .|. (fromIntegral . getWireType . toWireType $ fieldType)
 
+mkWireTag :: FieldId -> WireType -> WireTag
+mkWireTag fieldId fieldType
+    = ((fromIntegral . getFieldId $ fieldId) `shiftL` 3) .|. (fromIntegral . getWireType $ fieldType)
 
 splitWireTag :: WireTag -> (FieldId,WireType)
 splitWireTag (WireTag wireTag) = ( FieldId . fromIntegral $ wireTag `shiftR` 3
                                  , WireType . fromIntegral $ wireTag .&. 7 )
 
+getMessage :: (Mergeable message, ReflectDescriptor message,Typeable message)
+           => (FieldId -> message -> Get message)           -- handles "allowed" wireTags
+           -> Get message
+getMessage = getMessageWith unknown
+
 -- getMessage assumes the wireTag for the message, if it existed, has already been read.
 -- getMessage assumes that it still needs to read the Varint encoded length of the message.
-getMessage :: forall get message. (BinaryParser get, Mergeable message, ReflectDescriptor message)
-           => (FieldId -> message -> get message)
-           -> get message
-getMessage updater = do
+getMessageWith :: forall message. (Mergeable message, ReflectDescriptor message)
+               => (FieldId -> WireType -> message -> Get message) -- handle wireTags that updater cannot
+               -> (FieldId -> message -> Get message)           -- handles "allowed" wireTags
+               -> Get message
+getMessageWith punt updater = do
   messageLength <- getVarInt
-  start <- BP.bytesRead
+  start <- bytesRead
   let stop = messageLength+start
       -- switch from go to go' once all the required fields have been found
       go reqs message | Set.null reqs = go' message
                       | otherwise = do
-        here <- BP.bytesRead
+        here <- bytesRead
         case compare stop here of
           EQ -> notEnoughData messageLength start
           LT -> tooMuchData messageLength start here
           GT -> do
             wireTag <- fmap WireTag getVarInt -- get tag off wire
             let (fieldId,wireType) = splitWireTag wireTag
-            if Set.notMember wireTag allowed then unknown fieldId wireType here
+            if Set.notMember wireTag allowed then punt fieldId wireType message
               else let reqs' = Set.delete wireTag reqs
                    in updater fieldId message >>= go reqs'
       go' message = do
-        here <- BP.bytesRead
+        here <- bytesRead
         case compare stop here of
           EQ -> return message
           LT -> tooMuchData messageLength start here
           GT -> do
             wireTag <- fmap WireTag getVarInt -- get tag off wire
             let (fieldId,wireType) = splitWireTag wireTag
-            if Set.notMember wireTag allowed then unknown fieldId wireType here
+            if Set.notMember wireTag allowed then punt fieldId wireType message
               else updater fieldId message >>= go'
   go required initialMessage
  where
   initialMessage = mergeEmpty
   (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
-  unknown fieldId wireType here =
-      fail ("Text.ProtocolBuffers.WireMessage.getMessage: Unknown wire tag read (fieldId,wireType,here) == "
-            ++ show (fieldId,wireType,here) ++ " when processing "
-            ++ (show . descName . reflectDescriptorInfo $ initialMessage))
   notEnoughData messageLength start =
       fail ("Text.ProtocolBuffers.WireMessage.getMessage: Required fields missing when processing "
             ++ (show . descName . reflectDescriptorInfo $ initialMessage)
@@ -190,13 +193,21 @@ getMessage updater = do
             ++ (show . descName . reflectDescriptorInfo $ initialMessage)
             ++ " at  (messageLength,start,here) == " ++ show (messageLength,start,here))
 
+unknown :: (Typeable a,ReflectDescriptor a) => FieldId -> WireType -> a -> Get a
+unknown fieldId wireType initialMessage = do
+  here <- bytesRead
+  fail ("Text.ProtocolBuffers.WireMessage.getMessage: Unknown wire tag read (type,fieldId,wireType,here) == "
+        ++ show (typeOf initialMessage,fieldId,wireType,here) ++ " when processing "
+        ++ (show . descName . reflectDescriptorInfo $ initialMessage))
+
+
 -- getBareMessage assumes the wireTag for the message, if it existed, has already been read.
 -- getBareMessage assumes that it does needs to read the Varint encoded length of the message.
 -- getBareMessage will consume the entire ByteString it is operating on, or until it
 -- finds any STOP_GROUP tag
-getBareMessage :: forall get message. (BinaryParser get, Mergeable message, ReflectDescriptor message)
-           => (FieldId -> message -> get message)
-           -> get message
+getBareMessage :: forall message. (Mergeable message, ReflectDescriptor message)
+           => (FieldId -> message -> Get message)
+           -> Get message
 getBareMessage updater = go required initialMessage
  where
   go reqs message | Set.null reqs = go' message
@@ -227,9 +238,9 @@ getBareMessage updater = go required initialMessage
   notEnoughData = fail ("Text.ProtocolBuffers.WireMessage.getBareMessage: Required fields missing when processing "
                         ++ (show . descName . reflectDescriptorInfo $ initialMessage))
 
-unknownField :: (BinaryParser get) => FieldId -> get a
+unknownField :: FieldId -> Get a
 unknownField fieldId = do 
-  here <- BP.bytesRead
+  here <- bytesRead
   fail ("Impossible? Text.ProtocolBuffers.WireMessage.unknownField "
         ++" The Message's updater claims there is an unknown field id on wire: "++show fieldId
         ++" at a position just before here == "++show here)
@@ -243,85 +254,122 @@ castDoubleToWord64 (D# d) = W64# (unsafeCoerce# d)
 {-# INLINE castFloatToWord32 #-}
 castFloatToWord32 (F# d) = W32# (unsafeCoerce# d)
 
+wireSizeErr :: Typeable a => FieldType -> a -> WireSize
+wireSizeErr ft x = error $ concat [ "Impossible? wireSize field type mismatch error: Field type number ", show ft
+                                  , " does not match internal type ", show (typeOf x) ]
+wirePutErr :: Typeable a => FieldType -> a -> Put
+wirePutErr ft x = fail $ concat [ "Impossible? wirePut field type mismatch error: Field type number ", show ft
+                                , " does not match internal type ", show (typeOf x) ]
+wireGetErr :: forall a. (Typeable a) => FieldType -> Get a
+wireGetErr ft = fail $ concat [ "Impossible? wireGet field type mismatch error: Field type number ", show ft
+                              , " does not match internal type ", show (typeOf (undefined :: a)) ]
+
 instance Wire Double where
   wireSize {- TYPE_DOUBLE   -} 1      _ = 8
+  wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_DOUBLE   -} 1      x = putWord64be (castDoubleToWord64 x)
+  wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_DOUBLE   -} 1        = fmap castWord64ToDouble getWord64be
+  wireGet ft = wireGetErr ft
 
 instance Wire Float where
   wireSize {- TYPE_FLOAT    -} 2      _ = 4
+  wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_FLOAT    -} 2      x = putWord32be (castFloatToWord32 x)
+  wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_FLOAT    -} 2        = fmap castWord32ToFloat getWord32be
+  wireGet ft = wireGetErr ft
 
 instance Wire Int64 where
   wireSize {- TYPE_INT64    -} 3      x = size'Varint x
   wireSize {- TYPE_SINT64   -} 18     x = size'Varint (zzEncode64 x)
   wireSize {- TYPE_SFIXED64 -} 16     _ = 8
+  wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_INT64    -} 3      x = putVarSInt x
   wirePut  {- TYPE_SINT64   -} 18     x = putVarUInt (zzEncode64 x)
   wirePut  {- TYPE_SFIXED64 -} 16     x = putWord64be (fromIntegral x)
+  wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_INT64    -} 3        = getVarInt
   wireGet  {- TYPE_SINT64   -} 18       = fmap zzDecode64 getVarInt
   wireGet  {- TYPE_SFIXED64 -} 16       = fmap fromIntegral getWord64be
+  wireGet ft = wireGetErr ft
 
 instance Wire Int32 where
   wireSize {- TYPE_INT32    -} 5      x = size'Varint x
   wireSize {- TYPE_SINT32   -} 17     x = size'Varint (zzEncode32 x)
   wireSize {- TYPE_SFIXED32 -} 15     _ = 4
+  wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_INT32    -} 5      x = putVarSInt x
   wirePut  {- TYPE_SINT32   -} 17     x = putVarUInt (zzEncode32 x)
   wirePut  {- TYPE_SFIXED32 -} 15     x = putWord32be (fromIntegral x)
+  wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_INT32    -} 5        = getVarInt
   wireGet  {- TYPE_SINT32   -} 17       = fmap zzDecode32 getVarInt
   wireGet  {- TYPE_SFIXED32 -} 15       = fmap fromIntegral getWord32be
+  wireGet ft = wireGetErr ft
 
 instance Wire Word64 where
   wireSize {- TYPE_UINT64   -} 4      x = size'Varint x
   wireSize {- TYPE_FIXED64  -} 6      _ = 8
+  wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_UINT64   -} 4      x = putVarUInt x
   wirePut  {- TYPE_FIXED64  -} 6      x = putWord64be x
-  wireGet  {- TYPE_UINT64   -} 4        = getVarInt
+  wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_FIXED64  -} 6        = getWord64be
+  wireGet  {- TYPE_UINT64   -} 4        = getVarInt
+  wireGet ft = wireGetErr ft
 
 instance Wire Word32 where
   wireSize {- TYPE_UINT32   -} 13     x = size'Varint x
   wireSize {- TYPE_FIXED32  -} 7      _ = 4
+  wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_UINT32   -} 13     x = putVarUInt x
   wirePut  {- TYPE_FIXED32  -} 7      x = putWord32be x
+  wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_UINT32   -} 13       = getVarInt
   wireGet  {- TYPE_FIXED32  -} 7        = getWord32be
+  wireGet ft = wireGetErr ft
 
 instance Wire Bool where
   wireSize {- TYPE_BOOL     -} 8      _ = 1
+  wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_BOOL     -} 8  False = putWord8 0
   wirePut  {- TYPE_BOOL     -} 8  True  = putWord8 1 -- google's wire_format_inl.h
+  wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_BOOL     -} 8        = do
     (x :: Word32) <- getVarInt -- google's wire_format_inl.h line 97
     case x of
       0 -> return False
       x | x < 128 -> return True
       _ -> fail ("TYPE_BOOL read failure : " ++ show x)
+  wireGet ft = wireGetErr ft
 
 instance Wire Utf8 where
 -- items of TYPE_STRING is already in a UTF8 encoded Data.ByteString.Lazy
   wireSize {- TYPE_STRING   -} 9      x = prependMessageSize $ BS.length (utf8 x)
+  wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_STRING   -} 9      x = putVarUInt (BS.length (utf8 x)) >> putLazyByteString (utf8 x)
-  wireGet  {- TYPE_STRING   -} 9        = getVarInt >>= getByteString >>= return . Utf8 . toLazy --getLazyByteString 
+  wirePut ft x = wirePutErr ft x
+  wireGet  {- TYPE_STRING   -} 9        = getVarInt >>= getLazyByteString >>= return . Utf8
+  wireGet ft = wireGetErr ft
 
 instance Wire ByteString where
 -- items of TYPE_BYTES is an untyped binary Data.ByteString.Lazy
   wireSize {- TYPE_BYTES    -} 12     x = prependMessageSize $ BS.length x
+  wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_BYTES    -} 12     x = putVarUInt (BS.length x) >> putLazyByteString x
-  wireGet  {- TYPE_BYTES    -} 12       = getVarInt >>= getByteString >>= return . toLazy --getLazyByteString
+  wirePut ft x = wirePutErr ft x
+  wireGet  {- TYPE_BYTES    -} 12       = getVarInt >>= getLazyByteString >>= return
+  wireGet ft = wireGetErr ft
 
 -- Wrap a protocol-buffer Enum in fromEnum or toEnum and serialize the Int:
 instance Wire Int where
   wireSize {- TYPE_ENUM    -} 14      x = size'Varint x
+  wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_ENUM    -} 14      x = putVarUInt x
+  wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_ENUM    -} 14        = getVarInt
-
-toLazy :: Strict.ByteString -> ByteString
-toLazy = BS.fromChunks . (:[])
+  wireGet ft = wireGetErr ft
 
 -- This will have to examine the value of positive numbers to get the size
 {-# INLINE size'Varint #-}
@@ -364,7 +412,7 @@ testZZ = and (concat testsZZ)
         values = [minBound,div minBound 2,-3,-2,-1,0,1,2,3,div maxBound 2, maxBound]
 
 {-# INLINE getVarInt #-}
-getVarInt :: (Integral a, Bits a, BinaryParser get) => get a
+getVarInt :: (Integral a, Bits a) => Get a
 getVarInt = do -- optimize first read instead of calling (go 0 0)
   b <- getWord8
   if testBit b 7 then go 7 (fromIntegral (b .&. 0x7F))
@@ -396,64 +444,7 @@ putVarUInt b = let go i | i < 0x80 = putWord8 (fromIntegral i)
                         | otherwise = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7)
                in go b
 
-{-
-putFromWire :: FromWire -> Put
-putFromWire (FromWire fieldId wireType len raw) = do
-  case raw of
-    Raw_VarInt i -> putVarUInt i
-    Raw_Fixed64 i -> putWord64be i
-    Raw_Length_Delimited w _ _ -> putLazyByteString w
-    Raw_Group bs -> putLazyByteString bs
-    Raw_Fixed32 i -> putWord32be i
-
-getFromWire :: FieldId -> WireType -> Get.Get FromWire
-getFromWire (fieldId,wireType) = do
-  here <- Get.bytesRead
-  raw <- case wireType of
-           0 -> fmap Raw_VarInt getVarInt
-           1 -> fmap Raw_Fixed64 getWord64be
-           2 -> do (lenInt,valInt) <- peekVarInt
-                   whole <- Get.getLazyByteString (lenInt+valInt)
-                   let part = BS.drop lenInt whole
-                   return (Raw_Length_Delimited whole valInt part)
-           3 -> do lenGroup <- peekLenGroup fieldId
-                   group <- Get.getLazyByteString lenGroup
-                   return (Raw_Group group)
-           5 -> fmap Raw_Fixed32 getWord32be
-           4 -> do here <- Get.bytesRead
-                   fail $ "Unexpected group end tag "++show (fieldId,wireType)++" before pos "++show here
-           _ -> do here <- Get.bytesRead
-                   fail $ "Bad WireTag" ++ show (fieldId,wireType) ++ " before pos "++show here
-  there <- Get.bytesRead
-  return (FromWire fieldId wireType (there-here) raw)
--}
-
-peekVarInt :: Get.Get (Int64,Int64)
-peekVarInt = Get.lookAhead $ do
-  here <- Get.bytesRead 
-  i <- getVarInt
-  there <- Get.bytesRead
-  return (there-here,i)
-
-peekLenGroup :: FieldId -> Get.Get Int64
-peekLenGroup f = Get.lookAhead $ do
-  here <- Get.bytesRead
-  skipGroup f
-  there <- Get.bytesRead
-  return (there-here)
-
-skipGroup :: FieldId -> Get.Get ()
-skipGroup f = go where
-  go = do (fieldId,wireType) <- fmap (splitWireTag . WireTag) getVarInt
-          case wireType of
-            0 -> spanOf (>=128) >> skip 1 >> go
-            1 -> skip 8 >> go
-            2 -> getVarInt >>= skip >> go
-            3 -> skipGroup fieldId >> go
-            5 -> skip 4 >> go
-            4 | f /= fieldId -> fail $ "skipGroup failed, fieldId mismatch: "++show (f,fieldId)
-              | otherwise -> return ()
-
+          
 {-
   enum WireType {
     WIRETYPE_VARINT           = 0,

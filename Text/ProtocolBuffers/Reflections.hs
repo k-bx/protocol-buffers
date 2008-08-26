@@ -7,7 +7,7 @@
 -- This prevents me hitting any circular dependencies.
 --
 -- 
-module Text.ProtocolBuffers.Reflections(ProtoName(..),DescriptorInfo(..),FieldInfo(..)
+module Text.ProtocolBuffers.Reflections(ProtoName(..),DescriptorInfo(..),FieldInfo(..),KeyInfo
                                        ,HsDefault(..),EnumInfo(..),EnumInfoApp
                                        ,ReflectDescriptor(..),ReflectEnum(..),GetMessageInfo(..)
                                        ,parseDefDouble,parseDefFloat
@@ -40,6 +40,7 @@ data ProtoName = ProtoName { haskellPrefix :: String  -- Haskell specific prefix
 
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , fields :: Seq FieldInfo 
+                                     , keys :: Seq KeyInfo
                                      , extRanges :: [(FieldId,FieldId)]
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
@@ -49,6 +50,8 @@ data GetMessageInfo = GetMessageInfo { requiredTags :: Set WireTag
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
+type KeyInfo = (String,FieldInfo)
+
 data FieldInfo = FieldInfo { fieldName :: String
                            , fieldNumber :: FieldId
                            , wireTag :: WireTag
@@ -56,7 +59,7 @@ data FieldInfo = FieldInfo { fieldName :: String
                            , isRequired :: Bool
                            , canRepeat :: Bool
                            , typeCode :: FieldType            -- ^ fromEnum of Text.DescriptorProtos.FieldDescriptorProto.Type
-                           , typeName :: Maybe String
+                           , typeName :: Maybe String         -- XXX remove Maybe and call useType?
                            , hsRawDefault :: Maybe ByteString -- ^ crappy, but not escaped, thing
                            , hsDefault :: Maybe HsDefault     -- ^ nice parsed thing
                            }

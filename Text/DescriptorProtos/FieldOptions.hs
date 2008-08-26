@@ -1,5 +1,5 @@
 module Text.DescriptorProtos.FieldOptions (FieldOptions(..)) where
-import Prelude ((+), (++))
+import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FieldOptions.CType
@@ -41,4 +41,4 @@ instance P'.GPB FieldOptions
 instance P'.ReflectDescriptor FieldOptions where
         reflectDescriptorInfo _
           = P'.read
-              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"FieldOptions\"}, fields = fromList [FieldInfo {fieldName = \"ctype\", fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just \"DescriptorProtos.FieldOptions.CType\", hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = \"experimental_map_key\", fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 74}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}], extRanges = []}"
+              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"FieldOptions\"}, fields = fromList [FieldInfo {fieldName = \"ctype\", fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just \"DescriptorProtos.FieldOptions.CType\", hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = \"experimental_map_key\", fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 74}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = []}"

@@ -1,6 +1,6 @@
 module Text.DescriptorProtos.FileOptions.OptimizeMode
        (OptimizeMode(..)) where
-import Prelude ((+), (++))
+import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  

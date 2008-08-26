@@ -13,6 +13,8 @@ import Numeric(readHex,readOct,readDec,showOct,readSigned,readFloat)
 
 %wrapper "posn-bytestring"
 
+@inBlockComment = [^\*]|(\*[^\*\/])
+
 $d = [0-9]
 @decInt = [\-]?[1-9]$d*
 @hexInt = [\-]?0[xX]([A-Fa-f0-9])+
@@ -36,7 +38,6 @@ $special    = [=\(\)\,\;\[\]\{\}]
   $white+ ;
   "//".*  ;
   "#".*   ;
-  "/*".*"*/" ;
   @decInt / @notChar    { parseDec }
   @octInt / @notChar    { parseOct }
   @hexInt / @notChar    { parseHex }

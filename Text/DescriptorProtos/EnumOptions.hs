@@ -1,5 +1,5 @@
 module Text.DescriptorProtos.EnumOptions (EnumOptions(..)) where
-import Prelude ((+), (++))
+import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
@@ -28,4 +28,4 @@ instance P'.GPB EnumOptions
 instance P'.ReflectDescriptor EnumOptions where
         reflectDescriptorInfo _
           = P'.read
-              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"EnumOptions\"}, fields = fromList [], extRanges = []}"
+              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"EnumOptions\"}, fields = fromList [], keys = fromList [], extRanges = []}"
