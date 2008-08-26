@@ -13,7 +13,8 @@ import Numeric(readHex,readOct,readDec,showOct,readSigned,readFloat)
 
 %wrapper "posn-bytestring"
 
-@inBlockComment = [^\*]|(\*[^\*\/])
+@inComment = ([^\*] | $white)+ | ([\*]+ [^\/])
+@comment = [\/] [\*] (@inComment)* [\*]+ [\/] | "//".* | "#".*
 
 $d = [0-9]
 @decInt = [\-]?[1-9]$d*
@@ -35,9 +36,8 @@ $special    = [=\(\)\,\;\[\]\{\}]
 
 :-
 
-  $white+ ;
-  "//".*  ;
-  "#".*   ;
+  $white+  ;
+  @comment ;
   @decInt / @notChar    { parseDec }
   @octInt / @notChar    { parseOct }
   @hexInt / @notChar    { parseHex }
@@ -85,11 +85,19 @@ mayRead :: ReadS a -> String -> Maybe a
 mayRead f s = case f s of [(a,"")] -> Just a; _ -> Nothing
 
 -- Given the regexps above, the "parse* failed" messages should be impossible.
-parseDec pos s = maybe (errAt pos "parseDec failed") (L_Integer (line pos)) $ mayRead (readSigned readDec) (ByteString.unpack s)
-parseOct pos s = maybe (errAt pos "parseOct failed") (L_Integer (line pos)) $ mayRead (readSigned readOct) (ByteString.unpack s)
-parseHex pos s = maybe (errAt pos "parseHex failed") (L_Integer (line pos)) $ mayRead (readSigned (readHex . drop 2)) (ByteString.unpack s)
-parseDouble pos s = maybe (errAt pos "parseDouble failed") (L_Double (line pos)) $ mayRead (readSigned readFloat) (ByteString.unpack s)
-parseStr pos s = either (errAt pos) (L_String (line pos) . L.pack) $ sDecode . ByteString.unpack $ (ByteString.init (ByteString.tail s))
+parseDec pos s = maybe (errAt pos "Impossible? parseDec failed")
+                       (L_Integer (line pos)) $ mayRead (readSigned readDec) (ByteString.unpack s)
+parseOct pos s = maybe (errAt pos "Impossible? parseOct failed")
+                       (L_Integer (line pos)) $ mayRead (readSigned readOct) (ByteString.unpack s)
+parseHex pos s = maybe (errAt pos "Impossible? parseHex failed")
+                       (L_Integer (line pos)) $ mayRead (readSigned (readHex . drop 2)) (ByteString.unpack s)
+parseDouble pos s = maybe (errAt pos "Impossible? parseDouble failed")
+                          (L_Double (line pos)) $ mayRead (readSigned readFloat) (ByteString.unpack s)
+-- The sDecode of the string contents may fail
+parseStr pos s = either (errAt pos) (L_String (line pos) . L.pack) 
+               . sDecode . ByteString.unpack
+               . ByteString.init . ByteString.tail
+               $ s
 parseName pos s = L_Name (line pos) s
 parseChar pos s = L (line pos) (ByteString.head s)
 
