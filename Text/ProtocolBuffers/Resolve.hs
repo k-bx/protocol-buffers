@@ -10,8 +10,8 @@
 -- Name resolution failure are not handled elegantly: it will kill the system with a long error message.
 --
 -- TODO: treat names with leading "." as already "fully-qualified"
---       make sure the optional fields that will be needed are not Nothing
---       check enum default values are allowed symbols
+--       make sure the optional fields that will be needed are not Nothing (or punt to Reflections.hs)
+--       look for repeated use of the same name (before and after mangling)
 module Text.ProtocolBuffers.Resolve(loadProto,resolveFDP) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
@@ -42,6 +42,7 @@ import Text.ProtocolBuffers.Parser
 import Control.Monad
 import Control.Monad.State
 import Data.Char
+import Data.Ix(inRange)
 import qualified Data.Foldable as F
 import qualified Data.Set as Set
 import Data.Maybe(fromMaybe,catMaybes)
@@ -104,9 +105,23 @@ reserved = ["case","class","data","default","deriving","do","else"
            ,"if","import","in","infix","infixl","infixr","instance"
            ,"let","module","newtype","of","then","type","where"] -- also reserved is "_"
 
+checkER :: [(Int32,Int32)] -> Int32 -> Bool
+checkER ers fid = any (`inRange` fid) ers
+
+extRangeList :: D.DescriptorProto -> [(Int32,Int32)]
+extRangeList d = concatMap check unchecked
+  where check x@(lo,hi) | hi < lo = []
+                        | hi<19000 || 19999<lo  = [x]
+                        | otherwise = concatMap check [(lo,18999),(20000,hi)]
+        unchecked = F.foldr ((:) . extToPair) [] (D.DescriptorProto.extension_range d)
+        extToPair (D.ExtensionRange
+                    { D.ExtensionRange.start = start
+                    , D.ExtensionRange.end = end }) =
+          (getFieldId $ maybe minBound FieldId start, getFieldId $ maybe maxBound FieldId end)
+
 newtype NameSpace = NameSpace {unNameSpace::(Map String ([String],NameType,Maybe NameSpace))}
   deriving (Show,Read)
-data NameType = Message | Enumeration [Utf8] | Service | Void
+data NameType = Message [(Int32,Int32)] | Enumeration [Utf8] | Service | Void
   deriving (Show,Read)
 
 type Context = [NameSpace]
@@ -205,7 +220,7 @@ toContext protoIn =
                                    | otherwise = Just . NameSpace . M.fromList $ dMsgs
                             dMsgs = F.foldr ((:) . msgNames ss') dEnums (D.DescriptorProto.nested_type dIn)
                             dEnums = F.foldr ((:) . enumNames ss') [] (D.DescriptorProto.enum_type dIn)
-                        in ( s1 , (ss',Message,dNames) )
+                        in ( s1 , (ss',Message (extRangeList dIn),dNames) )
                       enumNames context eIn =
                         let s1 = mangleCap1 (D.EnumDescriptorProto.name eIn)
                             values :: [Utf8]
@@ -271,9 +286,16 @@ resolveWithContext protoContext protoIn =
                              , D.FieldDescriptorProto.type'         = new_type'
                              , D.FieldDescriptorProto.type_name     = checkSelf mp (fmap fst r2)
                              , D.FieldDescriptorProto.default_value = checkEnumDefault
-                             , D.FieldDescriptorProto.extendee      = checkSelf mp (resolve cx (D.FieldDescriptorProto.extendee f)) }
-       where r2 = resolve2 cx (D.FieldDescriptorProto.type_name f)
-             t Message = TYPE_MESSAGE
+                             , D.FieldDescriptorProto.extendee      = newExt }
+--                             , D.FieldDescriptorProto.extendee      = checkSelf mp (resolve cx (D.FieldDescriptorProto.extendee f)) }
+       where e2 = resolve2 cx (D.FieldDescriptorProto.extendee f)
+             validExt = case (e2,D.FieldDescriptorProto.number f) of
+                          (Just (_,Message ers),Just fid) -> if checkER ers fid then Nothing else Just (fid,ers)
+                          _ -> Nothing
+             newExt = case validExt of Nothing -> checkSelf mp (fmap fst e2)
+                                       Just (fid,ers) -> rerr $ "*** Name resolution found extension field out of extension range: "++show f ++ "\n has a number "++ show fid ++" not in one of the valid ranges : " ++ show ers
+             r2 = resolve2 cx (D.FieldDescriptorProto.type_name f)
+             t (Message {}) = TYPE_MESSAGE
              t (Enumeration {}) = TYPE_ENUM
              t Void = rerr $ unlines [ "processFLD cannot resolve type_name to Void"
                                      , "  The parent message is "++maybe "<no message>" toString mp

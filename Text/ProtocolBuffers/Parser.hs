@@ -233,7 +233,7 @@ field :: (D.DescriptorProto -> P s ()) -> Maybe Utf8
 field upGroup maybeExtendee = do 
   let allowedLabels = case maybeExtendee of
                         Nothing -> ["optional","repeated","required"]
-                        Just {} -> ["optional","repeated"] -- cannot add a required extension
+                        Just {} -> ["optional","repeated"] -- cannot declare a required extension
   sLabel <- choice . map (pName . U.fromString) $ allowedLabels
   theLabel <- maybe (fail ("not a valid Label :"++show sLabel)) return (parseLabel (utf8ToString sLabel))
   sType <- ident

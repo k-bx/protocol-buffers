@@ -47,9 +47,10 @@ instance P'.Wire FileOptions where
                         8 -> P'.fmap
                                (\ new'Field -> old'Self{java_outer_classname = P'.Just new'Field})
                                (P'.wireGet 9)
-                        10 -> P'.fmap
-                                (\ new'Field -> old'Self{java_multiple_files = P'.Just new'Field})
-                                (P'.wireGet 8)
+                        10
+                          -> P'.fmap
+                               (\ new'Field -> old'Self{java_multiple_files = P'.Just new'Field})
+                               (P'.wireGet 8)
                         9 -> P'.fmap
                                (\ new'Field -> old'Self{optimize_for = P'.Just new'Field})
                                (P'.wireGet 14)
@@ -60,4 +61,4 @@ instance P'.GPB FileOptions
 instance P'.ReflectDescriptor FileOptions where
         reflectDescriptorInfo _
           = P'.read
-              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"FileOptions\"}, fields = fromList [FieldInfo {fieldName = \"java_package\", fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = \"java_outer_classname\", fieldNumber = FieldId {getFieldId = 8}, wireTag = WireTag {getWireTag = 66}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = \"java_multiple_files\", fieldNumber = FieldId {getFieldId = 10}, wireTag = WireTag {getWireTag = 80}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)},FieldInfo {fieldName = \"optimize_for\", fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 72}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just \"DescriptorProtos.FileOptions.OptimizeMode\", hsRawDefault = Just (Chunk \"CODE_SIZE\" Empty), hsDefault = Nothing}], keys = fromList [], extRanges = []}"
+              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"FileOptions\"}, fields = fromList [FieldInfo {fieldName = \"java_package\", fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = \"java_outer_classname\", fieldNumber = FieldId {getFieldId = 8}, wireTag = WireTag {getWireTag = 66}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = \"java_multiple_files\", fieldNumber = FieldId {getFieldId = 10}, wireTag = WireTag {getWireTag = 80}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)},FieldInfo {fieldName = \"optimize_for\", fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 72}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just (ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.FileOptions\", baseName = \"OptimizeMode\"}), hsRawDefault = Just (Chunk \"CODE_SIZE\" Empty), hsDefault = Nothing}], keys = fromList [], extRanges = []}"

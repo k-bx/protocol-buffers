@@ -337,7 +337,7 @@ instance Wire Bool where
   wirePut  {- TYPE_BOOL     -} 8  True  = putWord8 1 -- google's wire_format_inl.h
   wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_BOOL     -} 8        = do
-    (x :: Word32) <- getVarInt -- google's wire_format_inl.h line 97
+    x <- getVarInt :: Get Int32 -- google's wire_format_inl.h line 97
     case x of
       0 -> return False
       x | x < 128 -> return True

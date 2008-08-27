@@ -130,7 +130,7 @@ instance Show ExtField where
 -}
 
 instance Show (GPWitness a) where
-  showsPrec n (GPWitness :: GPWitness a) = ("(GPWitness :: GPWitness ("++) . shows (typeOf (undefined :: a)) . (')':) . (')':)
+  showsPrec n GPWitness = ("(GPWitness :: GPWitness ("++) . shows (typeOf (undefined :: a)) . (')':) . (')':)
 
 instance Eq (GPWitness a) where
   (==) GPWitness GPWitness = True
@@ -212,13 +212,13 @@ wirePutGPDyn :: FieldType -> GPDyn -> Put
 wirePutGPDyn f (GPDyn GPWitness a) = wirePut f a 
 
 wireGetGPDyn :: forall a. GPWitness a -> FieldType -> Get GPDyn
-wireGetGPDyn (GPWitness :: GPWitness a) f = fmap (GPDyn GPWitness) (wireGet f :: Get a)
+wireGetGPDyn GPWitness f = fmap (GPDyn GPWitness) (wireGet f :: Get a)
 
 getWitness :: (GPB a) => GPDyn -> Maybe (GPWitness a)
 getWitness (GPDyn x@GPWitness _) = cast x
 
-readGPDyn :: Read a => GPWitness a -> String -> GPDyn
-readGPDyn x@(GPWitness :: GPWitness a) s =
+readGPDyn :: forall a . Read a => GPWitness a -> String -> GPDyn
+readGPDyn x@(GPWitness) s =
   let t :: a; t = read s
   in GPDyn x t
 

@@ -50,18 +50,18 @@ data GetMessageInfo = GetMessageInfo { requiredTags :: Set WireTag
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
-type KeyInfo = (String,FieldInfo)
+type KeyInfo = (ProtoName,FieldInfo)
 
-data FieldInfo = FieldInfo { fieldName :: String
-                           , fieldNumber :: FieldId
-                           , wireTag :: WireTag
-                           , wireTagLength :: Int64           -- ^ Bytes required in the Varint formatted wireTag
-                           , isRequired :: Bool
-                           , canRepeat :: Bool
-                           , typeCode :: FieldType            -- ^ fromEnum of Text.DescriptorProtos.FieldDescriptorProto.Type
-                           , typeName :: Maybe String         -- XXX remove Maybe and call useType?
-                           , hsRawDefault :: Maybe ByteString -- ^ crappy, but not escaped, thing
-                           , hsDefault :: Maybe HsDefault     -- ^ nice parsed thing
+data FieldInfo = FieldInfo { fieldName     :: String
+                           , fieldNumber   :: FieldId
+                           , wireTag       :: WireTag
+                           , wireTagLength :: WireSize         -- ^ Bytes required in the Varint formatted wireTag
+                           , isRequired    :: Bool
+                           , canRepeat     :: Bool
+                           , typeCode      :: FieldType        -- ^ fromEnum of Text.DescriptorProtos.FieldDescriptorProto.Type
+                           , typeName      :: Maybe ProtoName  -- ^ Set for Messages,Groups,and Enums
+                           , hsRawDefault  :: Maybe ByteString -- ^ crappy, but not escaped, thing
+                           , hsDefault     :: Maybe HsDefault  -- ^ nice parsed thing
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 

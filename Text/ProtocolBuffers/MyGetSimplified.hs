@@ -58,7 +58,7 @@ module Text.ProtocolBuffers.MyGetSimplified
     ) where
 
 -- The Get monad is an instance of binary-strict's BinaryParser:
-import qualified Data.Binary.Strict.Class as P(BinaryParser(..))
+-- import qualified Data.Binary.Strict.Class as P(BinaryParser(..))
 -- The Get monad is an instance of all of these library classes:
 import Control.Applicative(Applicative(pure,(<*>)),Alternative(empty,(<|>)))
 import Control.Monad(MonadPlus(mzero,mplus))
@@ -504,6 +504,7 @@ getWord64le = do
 getWord64host = getStorable
 {-# INLINE getWord64host #-}
 
+{-
 instance P.BinaryParser Get where
   skip = skip . fromIntegral
   bytesRead = fmap fromIntegral bytesRead
@@ -526,6 +527,7 @@ instance P.BinaryParser Get where
   getWord16host = getWord16host
   getWord32host = getWord32host
   getWord64host = getWord64host
+-}
 
 -- Below here are the class instances
     
