@@ -29,11 +29,8 @@ import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,
 import Text.ProtocolBuffers.Mergeable(Mergeable(mergeEmpty))
 
 import Data.Bits (Bits(..))
-import Data.Generics (Data(..),Typeable(..))
-import Data.List (unfoldr,genericLength)
-import Data.Map (Map,unionWith)
-import Data.Monoid (Monoid(..))
-import Data.Word (Word8)
+import Data.Typeable (Typeable(..))
+import Data.List (genericLength)
 import qualified Data.ByteString as Strict (ByteString)
 import qualified Data.ByteString.Lazy as BS (length,pack,fromChunks,toChunks,drop)
 import qualified Data.ByteString.Lazy.Internal as BS (ByteString(Empty,Chunk),chunk)
@@ -46,8 +43,8 @@ import GHC.Word (Word64(W64#),Word32(W32#))
 
 import Data.Binary.Put (Put,runPut,putWord8,putWord32be,putWord64be,putLazyByteString)
 --import Data.Binary.Builder (Builder)
-import Text.ProtocolBuffers.MyGetSimplified as Get (Result(..),Get,runGet,lookAhead,spanOf,skip,bytesRead,isEmpty
-                                                   ,getWord8,getWord32be,getWord64be,getLazyByteString,getByteString)
+import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,lookAhead,spanOf,skip,bytesRead,isEmpty
+                                       ,getWord8,getWord32be,getWord64be,getLazyByteString,getByteString)
 
 -- import qualified Data.ByteString.Lazy as BS (unpack)
 -- import Numeric
@@ -57,7 +54,7 @@ runGetOnLazy parser bs = resolve (Get.runGet parser bs)
 
 resolve :: Get.Result r -> Either String (r,ByteString)
 resolve (Get.Failed i s) = Left ("Failed at "++show i++" : "++s)
-resolve (Get.Finished bs i r) = Right (r,bs)
+resolve (Get.Finished bs _i r) = Right (r,bs)
 resolve (Get.Partial {}) = Left ("Not enough input")
 
 -- Make IncrementalGet run on the Lazy ByteStrings
@@ -120,7 +117,7 @@ wireSizeReq tagSize  i v = tagSize + wireSize i v
 
 {-# INLINE wireSizeOpt #-}
 wireSizeOpt :: Wire b => Int64 -> FieldType -> Maybe b -> Int64
-wireSizeOpt _tagSize i Nothing = 0
+wireSizeOpt _tagSize _i Nothing = 0
 wireSizeOpt tagSize i (Just v) = wireSizeReq tagSize i v
 
 {-# INLINE wireSizeRep #-}
@@ -218,7 +215,7 @@ getBareMessage updater = go required initialMessage
         wireTag <- fmap WireTag getWord32be -- get tag off wire
         let (fieldId,wireType) = splitWireTag wireTag
         if wireType == 4 then notEnoughData -- END_GROUP too soon
-          else if Set.notMember wireTag allowed then unknown fieldId wireTag
+          else if Set.notMember wireTag allowed then go'unknown fieldId wireTag
                  else let reqs' = Set.delete wireTag reqs
                       in updater fieldId message >>= go reqs'
   go' message = do
@@ -228,11 +225,11 @@ getBareMessage updater = go required initialMessage
         wireTag <- fmap WireTag getWord32be -- get tag off wire
         let (fieldId,wireType) = splitWireTag wireTag -- WIRETYPE_END_GROUP
         if wireType == 4 then return message
-          else if Set.notMember wireTag allowed then unknown fieldId wireType
+          else if Set.notMember wireTag allowed then go'unknown fieldId wireType
                  else updater fieldId message >>= go'
   initialMessage = mergeEmpty
   (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
-  unknown fieldId wireType = fail ("Text.ProtocolBuffers.WireMessage.getBareMessage: Unknown wire tag read: "
+  go'unknown fieldId wireType = fail ("Text.ProtocolBuffers.WireMessage.getBareMessage: Unknown wire tag read: "
                                    ++ show (fieldId,wireType) ++ " when processing "
                                    ++ (show . descName . reflectDescriptorInfo $ initialMessage))
   notEnoughData = fail ("Text.ProtocolBuffers.WireMessage.getBareMessage: Required fields missing when processing "
@@ -246,12 +243,16 @@ unknownField fieldId = do
         ++" at a position just before here == "++show here)
 
 {-# INLINE castWord64ToDouble #-}
+castWord64ToDouble :: Word64 -> Double
 castWord64ToDouble (W64# w) = D# (unsafeCoerce# w)
 {-# INLINE castWord32ToFloat #-}
+castWord32ToFloat :: Word32 -> Float
 castWord32ToFloat (W32# w) = F# (unsafeCoerce# w)
 {-# INLINE castDoubleToWord64 #-}
+castDoubleToWord64 :: Double -> Word64
 castDoubleToWord64 (D# d) = W64# (unsafeCoerce# d)
 {-# INLINE castFloatToWord32 #-}
+castFloatToWord32 :: Float -> Word32
 castFloatToWord32 (F# d) = W32# (unsafeCoerce# d)
 
 wireSizeErr :: Typeable a => FieldType -> a -> WireSize
@@ -340,7 +341,7 @@ instance Wire Bool where
     x <- getVarInt :: Get Int32 -- google's wire_format_inl.h line 97
     case x of
       0 -> return False
-      x | x < 128 -> return True
+      x' | x' < 128 -> return True
       _ -> fail ("TYPE_BOOL read failure : " ++ show x)
   wireGet ft = wireGetErr ft
 
@@ -394,7 +395,9 @@ zzDecode32 w = (fromIntegral (w `shiftR` 1)) `xor` (negate (fromIntegral (w .&. 
 zzDecode64 :: Word64 -> Int64
 zzDecode64 w = (fromIntegral (w `shiftR` 1)) `xor` (negate (fromIntegral (w .&. 1)))
 
+{-
 -- The above is tricky, so the testing roundtrips and versus examples is needed:
+testZZ :: Bool
 testZZ = and (concat testsZZ)
   where testsZZ = [ map (\v -> v ==zzEncode64 (zzDecode64 v)) values
                   , map (\v -> v ==zzEncode32 (zzDecode32 v)) values
@@ -410,7 +413,7 @@ testZZ = and (concat testsZZ)
                     ] ]
         values :: (Bounded a,Integral a) => [a]
         values = [minBound,div minBound 2,-3,-2,-1,0,1,2,3,div maxBound 2, maxBound]
-
+-}
 {-# INLINE getVarInt #-}
 getVarInt :: (Integral a, Bits a) => Get a
 getVarInt = do -- optimize first read instead of calling (go 0 0)

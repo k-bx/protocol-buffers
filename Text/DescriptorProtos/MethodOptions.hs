@@ -29,4 +29,4 @@ instance P'.GPB MethodOptions
 instance P'.ReflectDescriptor MethodOptions where
         reflectDescriptorInfo _
           = P'.read
-              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MethodOptions\"}, fields = fromList [], keys = fromList [], extRanges = []}"
+              "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MethodOptions\"}, isGroup = False, fields = fromList [], keys = fromList [], extRanges = []}"

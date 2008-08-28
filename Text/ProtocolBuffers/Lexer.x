@@ -1,4 +1,5 @@
 {
+{-# OPTIONS_GHC -Wwarn #-}
 module Text.ProtocolBuffers.Lexer (Lexed(..), alexScanTokens,getLinePos)  where
 
 import Control.Monad.Error()
@@ -74,8 +75,8 @@ getLinePos x = case x of
                  L_Error   i _ -> i
 
 -- 'errAt' is the only access to L_Error, so I can see where it is created with pos
-errAt pos msg =  L_Error (line pos) $ "Lexical error (in Text.ProtocolBuffers.Lexer): "++ msg ++ ", at "++see pos where
-  see (AlexPn char line col) = "character "++show char++" line "++show line++" column "++show col++"."
+errAt pos msg =  L_Error (line' pos) $ "Lexical error (in Text.ProtocolBuffers.Lexer): "++ msg ++ ", at "++see pos where
+  see (AlexPn char line' col) = "character "++show char++" line' "++show line'++" column "++show col++"."
 dieAt msg pos _s = errAt pos msg
 wtfAt pos s = errAt pos $ "unknown character "++show c++" (decimal "++show (ord c)++")"
   where (c:_) = ByteString.unpack s
@@ -107,7 +108,7 @@ op one = go id where
   go f cs = case one cs of
               Left msg -> Left msg
               Right Nothing -> Right (f [])
-              Right (Just (ws,cs)) -> go (f . (ws++)) cs
+              Right (Just (ws,cs')) -> go (f . (ws++)) cs'
 
 -- Put this mess in the lexer, so the rest of the code can assume
 -- everything is saner.  The input is checked to really be "Char8"

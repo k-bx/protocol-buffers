@@ -91,6 +91,8 @@ import Language.Haskell.Pretty
 
 -- -- -- -- Helper functions
 
+noWhere = [] -- YYY noWhere = (HsBDecls [])
+
 ($$) :: HsExp -> HsExp -> HsExp
 ($$) = HsApp
 
@@ -113,9 +115,6 @@ splitMod (Utf8 bs) = case spanEndL ('.'/=) bs of
                        (pre,post) | BSC.length pre <= 1 -> Right (Utf8 bs)
                                   | otherwise -> Left (Utf8 (BSC.init pre),Utf8 post)
 
-unqual :: Utf8 -> HsQName
-unqual bs = UnQual (base bs)
-
 base :: Utf8 -> HsName
 base bs = case splitMod bs of
             Right base -> (ident base)
@@ -134,6 +133,9 @@ ident bs = HsIdent (toString bs)
 
 typeApp :: String -> HsType -> HsType
 typeApp s =  HsTyApp (HsTyCon (private s))
+
+unqual :: Utf8 -> HsQName
+unqual bs = UnQual (base bs)
 
 -- 'qual' and 'qmodname' are only correct for simple or fully looked-up names.
 qual :: Utf8 -> HsQName
@@ -159,98 +161,68 @@ qualName :: ProtoName -> HsQName
 qualName (ProtoName prefix "" base) = UnQual (HsIdent base)
 qualName (ProtoName prefix parent base) = Qual (Module parent) (HsIdent base)
 
---------------------------------------------
--- EnumDescriptorProto module creation
---------------------------------------------
-
-data EnumSyntax = EnumSyntax ProtoName [(Integer,HsName)]
-
 toProtoName :: String -> Utf8 -> ProtoName
 toProtoName prefix rawName =
   case splitMod rawName of
     Left (m,b) -> ProtoName prefix (toString m) (toString b)
     Right b    -> ProtoName prefix ""           (toString b)
 
-enumModule :: String -> D.EnumDescriptorProto -> HsModule
-enumModule prefix
-           e@(D.EnumDescriptorProto.EnumDescriptorProto
-              { D.EnumDescriptorProto.name = Just rawName})
+unqualName :: ProtoName -> HsQName
+unqualName (ProtoName _prefix _parent base) = UnQual (HsIdent base)
+
+--------------------------------------------
+-- EnumDescriptorProto module creation
+--------------------------------------------
+
+
+makeEnumInfo :: String -> D.EnumDescriptorProto -> EnumInfo
+makeEnumInfo prefix e@(D.EnumDescriptorProto.EnumDescriptorProto
+                        { D.EnumDescriptorProto.name = Just rawName })
     = let protoName = toProtoName prefix rawName
-          enumSyntax = EnumSyntax protoName (enumValues e)
+      in EnumInfo protoName (enumValues e)
+  where enumValues :: D.EnumDescriptorProto -> [(EnumCode,String)]
+        enumValues (D.EnumDescriptorProto.EnumDescriptorProto
+                    { D.EnumDescriptorProto.value = value}) 
+            = sort $ F.foldr ((:) . oneValue) [] value
+          where oneValue  :: D.EnumValueDescriptorProto -> (EnumCode,String)
+                oneValue (D.EnumValueDescriptorProto.EnumValueDescriptorProto
+                          { D.EnumValueDescriptorProto.name = Just name
+                          , D.EnumValueDescriptorProto.number = Just number })
+                    = (EnumCode number,toString name)
+
+enumModule :: String -> D.EnumDescriptorProto -> HsModule
+enumModule prefix e
+    = let ei = makeEnumInfo prefix e
+          protoName = enumName ei
       in HsModule src (Module (fqName protoName))
-                  (Just [HsEThingAll (UnQual (HsIdent (baseName protoName)))])
-                  (standardImports False) (enumDecls protoName e)
+           (Just [HsEThingAll (UnQual (HsIdent (baseName protoName)))])
+           (standardImports False) (enumDecls ei)
 
-enumValues :: D.EnumDescriptorProto -> [(Integer,HsName)]
-enumValues (D.EnumDescriptorProto.EnumDescriptorProto
-            { D.EnumDescriptorProto.value = value}) 
-    = sort $ F.foldr ((:) . oneValue) [] value
-  where oneValue  :: D.EnumValueDescriptorProto -> (Integer,HsName)
-        oneValue (D.EnumValueDescriptorProto.EnumValueDescriptorProto
-                  { D.EnumValueDescriptorProto.name = Just name
-                  , D.EnumValueDescriptorProto.number = Just number })
-            = (toInteger number,ident name)
-      
-enumX :: D.EnumDescriptorProto -> HsDecl
-enumX e@(D.EnumDescriptorProto.EnumDescriptorProto
-         { D.EnumDescriptorProto.name = Just rawName})
-    = HsDataDecl src [] (base rawName) [] (map enumValueX values) derivesEnum --YYY = HsDataDecl src DataType [] (base rawName) [] (map enumValueX values) derivesEnum
-        where values = enumValues e
-              enumValueX :: (Integer,HsName) -> HsConDecl -- YYY enumValueX :: (Integer,HsName) -> HsQualConDecl
-              enumValueX (_,hsName) = HsConDecl src hsName [] -- YYY enumValueX (_,hsName) = HsQualConDecl src [] [] (HsConDecl hsName [])
-
-enumDecls :: ProtoName -> D.EnumDescriptorProto -> [HsDecl]
-enumDecls p e = enumX e :  [ instanceMergeableEnum e
-                           , instanceBounded e
-                           , instanceDefaultEnum e
-                           , instanceEnum e
-                           , instanceWireEnum e
-                           , instanceGPB p 
-                           , instanceReflectEnum p e
+enumDecls :: EnumInfo -> [HsDecl]
+enumDecls ei =  map ($ ei) [ enumX
+                           , instanceMergeableEnum
+                           , instanceBounded
+                           , instanceDefaultEnum
+                           , instanceEnum
+                           , instanceWireEnum
+                           , instanceGPB . enumName
+                           , instanceReflectEnum
                            ]
 
-instanceBounded :: D.EnumDescriptorProto -> HsDecl
-instanceBounded e@(D.EnumDescriptorProto.EnumDescriptorProto
-                   { D.EnumDescriptorProto.name = Just name})
-    = HsInstDecl src [] (private "Bounded") [HsTyCon (unqual name)] 
-                 [set "minBound" (head values),set "maxBound" (last values)]
-        where values = enumValues e
-              set f (_,n) = inst f [] (HsCon (UnQual n))
+enumX :: EnumInfo -> HsDecl
+enumX ei = HsDataDecl src [] (HsIdent (baseName (enumName ei))) [] (map enumValueX (enumValues ei)) derivesEnum
+  where enumValueX (_,name) = HsConDecl src (HsIdent name) []
 
-instanceEnum :: D.EnumDescriptorProto -> HsDecl
-instanceEnum e@(D.EnumDescriptorProto.EnumDescriptorProto
-                { D.EnumDescriptorProto.name = Just name})
-    = HsInstDecl src [] (private "Enum") [HsTyCon (unqual name)] 
-                 (map HsFunBind [fromEnum',toEnum',succ',pred']) where -- YYY (map (HsInsDecl . HsFunBind) [fromEnum',toEnum',succ',pred']) where
-        values = enumValues e
-        fromEnum' = map fromEnum'one values
-        fromEnum'one (v,n) = HsMatch src (HsIdent "fromEnum") [HsPApp (UnQual n) []]
-                               (HsUnGuardedRhs (HsLit (HsInt v))) noWhere
-        toEnum' = map toEnum'one values
-        toEnum'one (v,n) = HsMatch src (HsIdent "toEnum") [HsPLit (HsInt v)]
-                               (HsUnGuardedRhs (HsCon (UnQual n))) noWhere
-        succ' = zipWith (equate "succ") values (tail values)
-        pred' = zipWith (equate "pred") (tail values) values
-        equate f (_,n1) (_,n2) = HsMatch src (HsIdent f) [HsPApp (UnQual n1) []]
-                                   (HsUnGuardedRhs (HsCon (UnQual n2))) noWhere
+instanceMergeableEnum :: EnumInfo -> HsDecl
+instanceMergeableEnum ei 
+  = HsInstDecl src [] (private "Mergeable") [HsTyCon (unqualName (enumName ei))] []
 
--- fromEnum TYPE_ENUM == 14 :: Int
-instanceWireEnum :: D.EnumDescriptorProto -> HsDecl
-instanceWireEnum (D.EnumDescriptorProto.EnumDescriptorProto
-                  { D.EnumDescriptorProto.name = Just name })
-    = HsInstDecl src [] (private "Wire") [HsTyCon (unqual name)]
-      [ withName "wireSize", withName "wirePut", withGet ]
-  where withName foo = inst foo [HsPLit (HsInt 14),HsPVar (HsIdent "enum")] rhs
-          where rhs = (pvar foo $$ HsLit (HsInt 14)) $$
-                      (HsParen $ pvar "fromEnum" $$ lvar "enum")
-        withGet = inst "wireGet" [HsPLit (HsInt 14)] rhs
-          where rhs = (pvar "fmap" $$ pvar "toEnum") $$
-                      (HsParen $ pvar "wireGet" $$ HsLit (HsInt 14))
-
-instanceMergeableEnum :: D.EnumDescriptorProto -> HsDecl
-instanceMergeableEnum (D.EnumDescriptorProto.EnumDescriptorProto
-                       { D.EnumDescriptorProto.name = Just name }) =
-    HsInstDecl src [] (private "Mergeable") [HsTyCon (unqual name)] []
+instanceBounded :: EnumInfo -> HsDecl
+instanceBounded ei
+    = HsInstDecl src [] (private "Bounded") [HsTyCon (unqualName (enumName ei))] 
+        [set "minBound" (head values),set "maxBound" (last values)]
+  where values = enumValues ei
+        set f (_,n) = inst f [] (HsCon (UnQual (HsIdent n)))
 
 {- from google's descriptor.h, about line 346:
 
@@ -260,92 +232,173 @@ instanceMergeableEnum (D.EnumDescriptorProto.EnumDescriptorProto
   // This never returns NULL.
 
 -}
-
-instanceDefaultEnum :: D.EnumDescriptorProto -> HsDecl
-instanceDefaultEnum edp@(D.EnumDescriptorProto.EnumDescriptorProto
-                         { D.EnumDescriptorProto.name = Just name
-                         , D.EnumDescriptorProto.value = value})
-    = HsInstDecl src [] (private "Default") [HsTyCon (unqual name)]
+instanceDefaultEnum :: EnumInfo -> HsDecl
+instanceDefaultEnum ei
+    = HsInstDecl src [] (private "Default") [HsTyCon (unqualName (enumName ei))]
       [ inst "defaultValue" [] firstValue ]
   where firstValue :: HsExp
-        firstValue = case viewl value of
-                       (:<) (D.EnumValueDescriptorProto.EnumValueDescriptorProto
-                             { D.EnumValueDescriptorProto.name = Just name }) _ ->
-                                 HsCon (UnQual (ident name))
-                       EmptyL -> error $ "EnumDescriptorProto had empty sequence of EnumValueDescriptorProto.\n" ++ show edp
+        firstValue = case enumValues ei of
+                       (:) (_,n) _ -> HsCon (UnQual (HsIdent n))
+                       [] -> error $ "Impossible? EnumDescriptorProto had empty sequence of EnumValueDescriptorProto.\n" ++ show ei
 
-instanceReflectEnum :: ProtoName -> D.EnumDescriptorProto -> HsDecl
-instanceReflectEnum protoName@(ProtoName a b c)
-                    e@(D.EnumDescriptorProto.EnumDescriptorProto
-                       { D.EnumDescriptorProto.name = Just rawName })
-    = HsInstDecl src [] (private "ReflectEnum") [HsTyCon (unqual rawName)]
-      [ inst "reflectEnum" [] ascList
-      , inst "reflectEnumInfo" [ HsPWildCard ] ei
-      ]
-  where values = enumValues e
-        ascList,ei,protoNameExp :: HsExp
-        ascList = HsList (map one values)
-          where one (v,n@(HsIdent ns)) = HsTuple [HsLit (HsInt v),HsLit (HsString ns),HsCon (UnQual n)]
-        ei = foldl' HsApp (HsCon (private "EnumInfo")) [protoNameExp,HsList (map two values)]
-          where two (v,n@(HsIdent ns)) = HsTuple [HsLit (HsInt v),HsLit (HsString ns)]
-        protoNameExp = HsParen $ foldl' HsApp (HsCon (private "ProtoName")) [HsLit (HsString a)
-                                                                            ,HsLit (HsString b)
-                                                                            ,HsLit (HsString c)]
+instanceEnum :: EnumInfo -> HsDecl
+instanceEnum ei
+    = HsInstDecl src [] (private "Enum") [HsTyCon (unqualName (enumName ei))]
+        (map HsFunBind [fromEnum',toEnum',succ',pred'])
+  where values = enumValues ei
+        fromEnum' = map fromEnum'one values
+        fromEnum'one (v,n) = HsMatch src (HsIdent "fromEnum") [HsPApp (UnQual (HsIdent n)) []]
+                               (HsUnGuardedRhs (litInt (getEnumCode v))) noWhere
+        toEnum' = map toEnum'one values
+        toEnum'one (v,n) = HsMatch src (HsIdent "toEnum") [HsPLit (HsInt (toInteger (getEnumCode v)))]
+                             (HsUnGuardedRhs (HsCon (UnQual (HsIdent n)))) noWhere
+        succ' = zipWith (equate "succ") values (tail values)
+        pred' = zipWith (equate "pred") (tail values) values
+        equate f (_,n1) (_,n2) = HsMatch src (HsIdent f) [HsPApp (UnQual (HsIdent n1)) []]
+                                   (HsUnGuardedRhs (HsCon (UnQual (HsIdent n2)))) noWhere
+
+-- fromEnum TYPE_ENUM == 14 :: Int
+instanceWireEnum :: EnumInfo -> HsDecl
+instanceWireEnum ei
+    = HsInstDecl src [] (private "Wire") [HsTyCon (unqualName (enumName ei))]
+        [ withName "wireSize", withName "wirePut", withGet ]
+  where withName foo = inst foo [HsPLit (HsInt 14),HsPVar (HsIdent "enum")] rhs
+          where rhs = (pvar foo $$ HsLit (HsInt 14)) $$
+                      (HsParen $ pvar "fromEnum" $$ lvar "enum")
+        withGet = inst "wireGet" [HsPLit (HsInt 14)] rhs
+          where rhs = (pvar "fmap" $$ pvar "toEnum") $$
+                      (HsParen $ pvar "wireGet" $$ HsLit (HsInt 14))
 
 instanceGPB :: ProtoName -> HsDecl
-instanceGPB (ProtoName {baseName=name}) =
-  HsInstDecl src [] (private "GPB") [HsTyCon (UnQual (HsIdent name))] []
+instanceGPB protoName
+    = HsInstDecl src [] (private "GPB") [HsTyCon (unqualName protoName)] []
+
+instanceReflectEnum :: EnumInfo -> HsDecl
+instanceReflectEnum ei
+    = HsInstDecl src [] (private "ReflectEnum") [HsTyCon (unqualName (enumName ei))]
+        [ inst "reflectEnum" [] ascList
+        , inst "reflectEnumInfo" [ HsPWildCard ] ei' ]
+  where protoName@(ProtoName a b c) = enumName ei
+        values = enumValues ei
+        ascList,ei',protoNameExp :: HsExp
+        ascList = HsList (map one values)
+          where one (v,ns) = HsTuple [litInt (getEnumCode v),HsLit (HsString ns),HsCon (UnQual (HsIdent ns))]
+        ei' = foldl' HsApp (HsCon (private "EnumInfo")) [protoNameExp,HsList (map two values)]
+          where two (v,ns) = HsTuple [litInt (getEnumCode v),HsLit (HsString ns)]
+        protoNameExp = HsParen $ foldl' HsApp (HsCon (private "ProtoName")) . map (HsLit . HsString) $ [a,b,c]
 
 --------------------------------------------
 -- DescriptorProto module creation is unfinished
 --   There are difficult namespace issues
 --------------------------------------------
 
+hasExt :: DescriptorInfo -> Bool
+hasExt di = not (null (extRanges di))
+
+makeDescriptorInfo :: String -> Bool -> D.DescriptorProto -> DescriptorInfo
+makeDescriptorInfo prefix isGroup d@(D.DescriptorProto.DescriptorProto
+                                      { D.DescriptorProto.name = Just rawName
+                                      , D.DescriptorProto.field = rawFields
+                                      , D.DescriptorProto.extension_range = extension_range })
+    = DescriptorInfo protoName isGroup fieldInfos keyInfos extRangeList
+  where protoName = toProtoName prefix rawName
+        (fields,keys) = partition (\ f -> Nothing == D.FieldDescriptorProto.extendee f) . F.toList $ rawFields
+        fieldInfos = Seq.fromList . map toFieldInfo $ fields
+        keyInfos = Seq.fromList . map (\f -> (keyNameOf f,toFieldInfo f)) $ keys
+        keyNameOf f = case D.FieldDescriptorProto.extendee f of
+                        Nothing -> error "Impossible? makeDescriptorInfo partitioned to Just but found Nothing"
+                        Just extName -> toProtoName prefix extName
+        extRangeList = concatMap check unchecked
+          where check x@(lo,hi) | hi < lo = []
+                                | hi<19000 || 19999<lo  = [x]
+                                | otherwise = concatMap check [(lo,18999),(20000,hi)]
+                unchecked = F.foldr ((:) . extToPair) [] extension_range
+                extToPair (D.DescriptorProto.ExtensionRange
+                            { D.DescriptorProto.ExtensionRange.start = start
+                            , D.DescriptorProto.ExtensionRange.end = end }) =
+                  (maybe minBound FieldId start, maybe maxBound FieldId end)
+
+        toFieldInfo :: D.FieldDescriptorProto -> FieldInfo
+        toFieldInfo f@(D.FieldDescriptorProto.FieldDescriptorProto
+                        { D.FieldDescriptorProto.name = Just fieldName
+                        , D.FieldDescriptorProto.number = Just number
+                        , D.FieldDescriptorProto.label = Just label
+                        , D.FieldDescriptorProto.type' = Just type'
+                        , D.FieldDescriptorProto.type_name = mayTypeName
+                        , D.FieldDescriptorProto.default_value = mayRawDef })
+            = fieldInfo
+          where mayDef = parseDefaultValue f
+                fieldInfo = let fieldId = (FieldId (fromIntegral number))
+                                fieldType = (FieldType (fromEnum type'))
+                                wireTag = toWireTag fieldId fieldType
+                                wireTagLength = size'Varint (getWireTag wireTag)
+                            in FieldInfo (toString fieldName)
+                                         fieldId
+                                         wireTag
+                                         wireTagLength
+                                         (label == LABEL_REQUIRED)
+                                         (label == LABEL_REPEATED)
+                                         fieldType
+                                         (fmap (toProtoName (haskellPrefix protoName)) mayTypeName)
+                                         (fmap utf8 mayRawDef)
+                                         mayDef
+
+-- "Nothing" means no value specified
+-- A failure to parse a provided value will result in an error at the moment
+parseDefaultValue :: D.FieldDescriptorProto -> Maybe HsDefault
+parseDefaultValue d@(D.FieldDescriptorProto.FieldDescriptorProto
+                     { D.FieldDescriptorProto.type' = type'
+                     , D.FieldDescriptorProto.default_value = mayDef })
+    = do bs <- mayDef
+         t <- type'
+         todo <- case t of
+                   TYPE_MESSAGE -> Nothing
+                   TYPE_ENUM    -> Nothing
+                   TYPE_GROUP   -> Nothing
+                   TYPE_BOOL    -> Just parseDefBool
+                   TYPE_BYTES   -> Just parseDefBytes
+                   TYPE_DOUBLE  -> Just parseDefDouble
+                   TYPE_FLOAT   -> Just parseDefFloat
+                   TYPE_STRING  -> Just parseDefString
+                   _            -> Just parseDefInteger
+         case todo (utf8 bs) of
+           Nothing -> error ("Could not parse the default value for "++show d)
+           Just value -> return value
+
 descriptorModule :: Bool -> String -> D.DescriptorProto -> HsModule
 descriptorModule isGroup prefix
                  d@(D.DescriptorProto.DescriptorProto
                     { D.DescriptorProto.name = Just rawName })
-    = let self = UnQual . HsIdent . toString . either snd id . splitMod $ rawName
-          fqModuleName = Module (dotPre prefix (toString rawName))
-          imports = standardImports (isExt d) ++ map formatImport (toImport d)
-          protoName = toProtoName prefix rawName
-          (insts,di) = instancesDescriptor isGroup protoName d
+    = let di = makeDescriptorInfo prefix isGroup d
+          protoName = descName di
+          self = UnQual . HsIdent . baseName $ protoName
+          imports = standardImports (hasExt di) ++ map formatImport (toImport di)
           exportKeys = map (HsEVar . UnQual . HsIdent . fieldName . snd) (F.toList (keys di))
-      in HsModule src fqModuleName (Just (HsEThingAll self : exportKeys)) imports (descriptorX di : (keysX di ++ insts))
-  where formatImport (Left (m,t)) = HsImportDecl src (Module (dotPre prefix (dotPre m t))) True
-                                      (Just (Module m)) (Just (False,[HsIAbs (HsIdent t)]))
-        formatImport (Right t)    = HsImportDecl src (Module (dotPre prefix t)) False
-                                      Nothing (Just (False,[HsIAbs (HsIdent t)]))
+      in HsModule src (Module (fqName protoName))
+           (Just (HsEThingAll self : exportKeys))
+           imports (descriptorX di : (keysX di ++ instancesDescriptor di))
+  where formatImport (m,t) = HsImportDecl src (Module (dotPre prefix (dotPre m t))) True
+                               (Just (Module m)) (Just (False,[HsIAbs (HsIdent t)]))
 
 standardImports ext =
   [ HsImportDecl src (Module "Prelude") False Nothing (Just (False,ops))
   , HsImportDecl src (Module "Prelude") True (Just (Module "P'")) Nothing
   , HsImportDecl src (Module "Text.ProtocolBuffers.Header") True (Just (Module "P'")) Nothing ]
- where ops | ext = map (HsIVar . HsSymbol) ["+","<=","&&","||"]
+ where ops | ext = map (HsIVar . HsSymbol) ["+","<=","&&"," || "]
            | otherwise = map (HsIVar . HsSymbol) ["+"]
 
--- Create a list of (Module,Name) to import
--- Assumes that all self references are _not_ qualified!
-toImport :: D.DescriptorProto -> [Either (String,String) String]
-toImport msg@(D.DescriptorProto.DescriptorProto
-              { D.DescriptorProto.name = Just name
-              , D.DescriptorProto.field = field })
-    = map head . group . sort
-      . map (either (\(m,t) -> Left (toString m,toString t)) (Right . toString))
-      . map splitMod
+toImport :: DescriptorInfo -> [(String,String)]
+toImport di
+    = map head . group . sort 
       . filter (selfName /=)
-      . concat
-      . F.foldr ((:) . mayImport) []
-      $ field
-  where selfName = either snd id (splitMod name)
-        mayImport (D.FieldDescriptorProto.FieldDescriptorProto
-                   { D.FieldDescriptorProto.type' = type'
-                   , D.FieldDescriptorProto.type_name = type_name
-                   , D.FieldDescriptorProto.extendee = maybeExt })
-            = answer ++ maybe [] (:[]) maybeExt
-          where answer     = maybe answerName checkType type'
-                checkType  = maybe answerName (const []) . useType
-                answerName = maybe (error $ "No Name for Descriptor!\n" ++ show msg) (:[]) type_name
+      . concatMap withMod
+      $ allNames
+  where selfName = (parentModule (descName di), baseName (descName di))
+        withMod (ProtoName _prefix "" base) = []
+        withMod (ProtoName _prefix modname base) = [(modname,base)]
+        allNames = F.foldr addName keyNames (fields di)
+        keyNames = F.foldr (\(e,fi) rest -> e : addName fi rest) [] (keys di)
+        addName fi rest = maybe rest (:rest) (typeName fi)
 
 keysX ::  DescriptorInfo -> [HsDecl]
 keysX d = concatMap makeKey . F.toList . keys $ d
@@ -367,9 +420,24 @@ makeKey (extendee,f) = [ keyType, keyVal ]
                    (pvar "Key" $$ litInt (getFieldId (fieldNumber f))
                                $$ litInt typeNumber
                                $$ maybe (pvar "Nothing") (HsParen . (pvar "Just" $$) . defToSyntax) (hsDefault f))) noWhere
+
+defToSyntax :: HsDefault -> HsExp
+defToSyntax x = HsParen $
+  case x of
+    HsDef'Bool b -> HsCon (private (show b))
+    HsDef'ByteString bs -> pvar "pack" $$ HsLit (HsString (BSC.unpack bs))
+    HsDef'Rational r -> HsLit (HsFrac r)
+    HsDef'Integer i -> HsLit (HsInt i)
        
--- data HsConDecl = HsConDecl HsName [HsBangType] -- ^ ordinary data constructor
---                | HsRecDecl HsName [([HsName],HsBangType)] -- ^ record constructor
+descriptorX :: DescriptorInfo -> HsDecl
+descriptorX di = HsDataDecl src [] name [] [con] derives --YYY descriptorX di = HsDataDecl src DataType [] name [] [con] derives
+  where name = HsIdent (baseName (descName di))
+        con = HsRecDecl src name eFields -- YYY con = HsQualConDecl src [] [] (HsRecDecl name eFields)
+                where eFields = F.foldr ((:) . fieldX) end (fields di)
+                      end = if hasExt di then [extfield] else []
+        extfield :: ([HsName],HsBangType)
+        extfield = ([HsIdent "ext'field"],HsUnBangedTy (HsTyCon (Qual (Module "P'") (HsIdent "ExtField"))))
+
 fieldX :: FieldInfo -> ([HsName],HsBangType)
 fieldX fi = ([HsIdent (fieldName fi)],HsUnBangedTy (labeled (HsTyCon typed)))
   where labeled | canRepeat fi = typeApp "Seq"
@@ -382,43 +450,15 @@ fieldX fi = ([HsIdent (fieldName fi)],HsUnBangedTy (labeled (HsTyCon typed)))
                                Just s -> qualName s
                                Nothing -> error $  "No Name for Field!\n" ++ show fi
 
--- HsDataDecl     SrcLoc DataOrNew HsContext HsName [HsName] [HsQualConDecl] [HsQName]
--- data HsQualConDecl = HsQualConDecl SrcLoc {-forall-} [HsTyVarBind] {- . -} HsContext {- => -} HsConDecl
--- data HsConDecl = HsConDecl HsName [HsBangType] -- ^ ordinary data constructor
---                | HsRecDecl HsName [([HsName],HsBangType)] -- ^ record constructor
-descriptorX :: DescriptorInfo -> HsDecl
-descriptorX di = HsDataDecl src [] name [] [con] derives --YYY descriptorX di = HsDataDecl src DataType [] name [] [con] derives
-  where name = HsIdent (baseName (descName di))
-        con = HsRecDecl src name eFields -- YYY con = HsQualConDecl src [] [] (HsRecDecl name eFields)
-                where eFields = F.foldr ((:) . fieldX) end (fields di)
-                      end = if hasExt di then [extfield] else []
-        extfield :: ([HsName],HsBangType)
-        extfield = ([HsIdent "ext'field"],HsUnBangedTy (HsTyCon (Qual (Module "P'") (HsIdent "ExtField"))))
-
--- There is some confusing code below.  The FieldInfo and
--- DescriptorInfo are getting built as a "side effect" of
--- instanceDefault generating the instances for the Default class.
--- This DescriptorInfo information is then passed to
--- instanceReflectDescriptor to generate the instance of the
--- ReflectDescriptor class.
-
--- | HsInstDecl     SrcLoc HsContext HsQName [HsType] [HsInstDecl]
-instancesDescriptor :: Bool -> ProtoName -> D.DescriptorProto -> ([HsDecl],DescriptorInfo)
-instancesDescriptor isGroup protoName d = ([ instanceMergeable di
-                                           , instanceDefault di
-                                           , instanceWireDescriptor isGroup di
-                                           , instanceGPB protoName
-                                           , instanceReflectDescriptor di 
-                                           ]
-                                           ++ if isExt d then [instanceExtendMessage di] else []
-                                          ,di)
-  where di = makeDescriptorInfo protoName d
-
-isExt :: D.DescriptorProto -> Bool
-isExt d = not (Seq.null (D.DescriptorProto.extension_range d))
-
-hasExt :: DescriptorInfo -> Bool
-hasExt di = not (null (extRanges di))
+instancesDescriptor :: DescriptorInfo -> [HsDecl]
+instancesDescriptor di = map ($ di) $
+   (if hasExt di then (instanceExtendMessage:) else id) $
+   [ instanceMergeable
+   , instanceDefault
+   , instanceWireDescriptor
+   , instanceGPB . descName
+   , instanceReflectDescriptor
+   ]
 
 instanceExtendMessage :: DescriptorInfo -> HsDecl
 instanceExtendMessage di
@@ -428,104 +468,6 @@ instanceExtendMessage di
         , inst "validExtRanges" [ HsPVar (HsIdent "msg") ] (pvar "extRanges" $$ (HsParen $ pvar "reflectDescriptorInfo" $$ lvar "msg"))
         ]
   where putextfield = HsRecUpdate (lvar "msg") [ HsFieldUpdate (UnQual (HsIdent "ext'field")) (lvar "e'f") ]
-
-instanceReflectDescriptor :: DescriptorInfo -> HsDecl
-instanceReflectDescriptor di
-    = HsInstDecl src [] (private "ReflectDescriptor") [HsTyCon (UnQual (HsIdent (baseName (descName di))))]
-        [ inst "reflectDescriptorInfo" [ HsPWildCard ] rdi ]
-  where -- massive shortcut through show and read
-        rdi :: HsExp
-        rdi = pvar "read" $$ HsLit (HsString (show di))
-
-makeDescriptorInfo :: ProtoName -> D.DescriptorProto -> DescriptorInfo
-makeDescriptorInfo protoName d@(D.DescriptorProto.DescriptorProto
-                                 { D.DescriptorProto.name = Just name
-                                 , D.DescriptorProto.field = rawFields
-                                 , D.DescriptorProto.extension_range = extension_range })
-    = DescriptorInfo protoName fieldInfos keyInfos extRangeList
-  where (fields,keys) = partition (\ f -> Nothing == D.FieldDescriptorProto.extendee f) . F.toList $ rawFields
-        fieldInfos = Seq.fromList . map toFieldInfo $ fields
-        keyInfos = Seq.fromList . map (\f -> (keyNameOf f,toFieldInfo f)) $ keys
-        keyNameOf f = case D.FieldDescriptorProto.extendee f of
-                        Nothing -> error "Impossible? makeDescriptorInfo partitioned to Just but found Nothing"
-                        Just rawName -> toProtoName (haskellPrefix protoName) rawName
-        extRangeList = concatMap check unchecked
-          where check x@(lo,hi) | hi < lo = []
-                                | hi<19000 || 19999<lo  = [x]
-                                | otherwise = concatMap check [(lo,18999),(20000,hi)]
-                unchecked = F.foldr ((:) . extToPair) [] extension_range
-                extToPair (D.DescriptorProto.ExtensionRange
-                            { D.DescriptorProto.ExtensionRange.start = start
-                            , D.DescriptorProto.ExtensionRange.end = end }) =
-                  (maybe minBound FieldId start, maybe maxBound FieldId end)
-
-        toFieldInfo :: D.FieldDescriptorProto -> FieldInfo
-        toFieldInfo f@(D.FieldDescriptorProto.FieldDescriptorProto
-                        { D.FieldDescriptorProto.name = Just rawName
-                        , D.FieldDescriptorProto.number = Just number
-                        , D.FieldDescriptorProto.label = Just label
-                        , D.FieldDescriptorProto.type' = Just type'
-                        , D.FieldDescriptorProto.type_name = mayTypeName
-                        , D.FieldDescriptorProto.default_value = mayRawDef })
-            = fieldInfo
-          where mayDef = parseDefaultValue f
-                fieldInfo = let fieldId = (FieldId (fromIntegral number))
-                                fieldType = (FieldType (fromEnum type'))
-                                wireTag = toWireTag fieldId fieldType
-                                wireTagLength = size'Varint (getWireTag wireTag)
-                            in FieldInfo (toString rawName)
-                                         fieldId
-                                         wireTag
-                                         wireTagLength
-                                         (label == LABEL_REQUIRED)
-                                         (label == LABEL_REPEATED)
-                                         fieldType
-                                         (fmap (toProtoName (haskellPrefix protoName)) mayTypeName)
-                                         (fmap utf8 mayRawDef)
-                                         mayDef
-
-instanceDefault :: DescriptorInfo -> HsDecl
-instanceDefault di
-    = HsInstDecl src [] (private "Default") [HsTyCon un]
-        [ inst "defaultValue" [] (foldl' HsApp (HsCon un) deflistExt) ]
-  where un = UnQual (HsIdent (baseName (descName di)))
-        deflistExt = F.foldr ((:) . defX) end (fields di)
-        end = if hasExt di then [pvar "defaultValue"] else []
-
--- "Nothing" means no value specified
--- A failure to parse a provided value will result in an error at the moment
-parseDefaultValue :: D.FieldDescriptorProto -> Maybe HsDefault
-parseDefaultValue d@(D.FieldDescriptorProto.FieldDescriptorProto
-                     { D.FieldDescriptorProto.type' = type'
-                     , D.FieldDescriptorProto.default_value = mayDef })
-    = do bs <- mayDef
-         t <- type'
-         todo <- case t of
-                   TYPE_MESSAGE -> Nothing
-                   TYPE_ENUM    -> Nothing
-                   TYPE_GROUP   -> Nothing
-                   TYPE_BOOL    -> return parseDefBool
-                   TYPE_BYTES   -> return parseDefBytes
-                   TYPE_DOUBLE  -> return parseDefDouble
-                   TYPE_FLOAT   -> return parseDefFloat
-                   TYPE_STRING  -> return parseDefString
-                   _            -> return parseDefInteger
-         case todo (utf8 bs) of
-           Nothing -> error ("Could not parse the default value for "++show d)
-           Just value -> return value
-
-defX :: FieldInfo -> HsExp
-defX fi | isRequired fi || canRepeat fi = dv
-        | otherwise = HsParen $ HsCon (private "Just") $$ dv
-  where dv = maybe (pvar "defaultValue") defToSyntax (hsDefault fi)
-
-defToSyntax :: HsDefault -> HsExp
-defToSyntax x = HsParen $
-  case x of
-    HsDef'Bool b -> HsCon (private (show b))
-    HsDef'ByteString bs -> pvar "pack" $$ HsLit (HsString (BSC.unpack bs))
-    HsDef'Rational r -> HsLit (HsFrac r)
-    HsDef'Integer i -> HsLit (HsInt i)
 
 instanceMergeable :: DescriptorInfo -> HsDecl
 instanceMergeable di
@@ -548,12 +490,26 @@ instanceMergeable di
             where inf = map (\n -> lvar ("y'" ++ show n)) [1..]
         append x y = HsParen $ pvar "mergeAppend" $$ x $$ y
 
+instanceDefault :: DescriptorInfo -> HsDecl
+instanceDefault di
+    = HsInstDecl src [] (private "Default") [HsTyCon un]
+        [ inst "defaultValue" [] (foldl' HsApp (HsCon un) deflistExt) ]
+  where un = UnQual (HsIdent (baseName (descName di)))
+        deflistExt = F.foldr ((:) . defX) end (fields di)
+        end = if hasExt di then [pvar "defaultValue"] else []
+
+        defX :: FieldInfo -> HsExp
+        defX fi | isRequired fi || canRepeat fi = dv
+                | otherwise = HsParen $ HsCon (private "Just") $$ dv
+          where dv = maybe (pvar "defaultValue") defToSyntax (hsDefault fi)
+
 mkOp s a b = HsInfixApp a (HsQVarOp (UnQual (HsSymbol s))) b
 
-instanceWireDescriptor :: Bool -> DescriptorInfo -> HsDecl
-instanceWireDescriptor isGroup d@(DescriptorInfo { descName = protoName
-                                                 , fields = fieldInfos
-                                                 , extRanges = allowedExts })
+instanceWireDescriptor :: DescriptorInfo -> HsDecl
+instanceWireDescriptor d@(DescriptorInfo { descName = protoName
+                                         , isGroup = isGroup
+                                         , fields = fieldInfos
+                                         , extRanges = allowedExts })
   = let typeInt = toInteger . fromEnum $ if isGroup then TYPE_GROUP else TYPE_MESSAGE
         myPType = HsPLit (HsInt typeInt)
         myType= HsLit (HsInt typeInt)
@@ -621,6 +577,14 @@ instanceWireDescriptor isGroup d@(DescriptorInfo { descName = protoName
                                         lvar "update'Self")) whereUpdateSelf])
         ]
 
+instanceReflectDescriptor :: DescriptorInfo -> HsDecl
+instanceReflectDescriptor di
+    = HsInstDecl src [] (private "ReflectDescriptor") [HsTyCon (UnQual (HsIdent (baseName (descName di))))]
+        [ inst "reflectDescriptorInfo" [ HsPWildCard ] rdi ]
+  where -- massive shortcut through show and read
+        rdi :: HsExp
+        rdi = pvar "read" $$ HsLit (HsString (show di))
+
 ------------------------------------------------------------------
 
 derives,derivesEnum :: [HsQName]
@@ -647,15 +611,15 @@ useType TYPE_MESSAGE  = Nothing
 useType TYPE_ENUM     = Nothing
 useType TYPE_GROUP    = Nothing
 
-noWhere = [] -- YYY noWhere = (HsBDecls [])
 
-test = putStrLn . prettyPrint . descriptorModule False "Text" $ d
+-----------------------
+
+test = putStrLn . prettyPrint . descriptorModule False "Text" $ d'
 
 testDesc =  putStrLn . prettyPrint . descriptorModule False "Text" $ genFieldOptions
 
 testLabel = putStrLn . prettyPrint $ enumModule "Text" labelTest
 testType = putStrLn . prettyPrint $ enumModule "Text" t
-
 
 -- testing
 utf8FromString = Utf8 . U.fromString
@@ -685,8 +649,8 @@ genFieldOptions =
   }
 
 -- test several features
-d :: D.DescriptorProto.DescriptorProto
-d = defaultValue
+d' :: D.DescriptorProto.DescriptorProto
+d' = defaultValue
     { D.DescriptorProto.name = Just (utf8FromString "SomeMod.ServiceOptions") 
     , D.DescriptorProto.field = Seq.fromList
        [ defaultValue

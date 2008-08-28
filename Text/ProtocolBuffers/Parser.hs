@@ -37,7 +37,7 @@ import Data.Maybe(fromMaybe)
 import Data.Sequence((|>))
 import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName
                                     ,getInput,setInput,getPosition,setPosition,getState,setState
-                                    ,(<?>),(<|>),option,token,choice,between,eof,unexpected)
+                                    ,(<?>),(<|>),option,token,choice,between,eof,unexpected,skipMany)
 import Text.ParserCombinators.Parsec.Pos(newPos)
 
 type P = GenParser Lexed
@@ -81,6 +81,9 @@ pChar c = tok (\l-> case l of L _ x -> if (x==c) then return () else Nothing
 
 eol :: P s ()
 eol = pChar ';'
+
+eols :: P s ()
+eols = skipMany eol
 
 pName :: ByteString -> P s Utf8
 pName name = tok (\l-> case l of L_Name _ x -> if (x==name) then return (Utf8 x) else Nothing
@@ -224,9 +227,15 @@ extend :: (D.DescriptorProto -> P s ()) -> (D.FieldDescriptorProto -> P s ())
        -> P s ()
 extend upGroup upField = pName (U.fromString "extend") >> do
   typeExtendee <- ident
+  pChar '{'
+  let rest = (field upGroup (Just typeExtendee) >>= upField) >> eols >> (pChar '}' <|> rest)
+  eols >> rest
+   
+{-
   let first = (eol >> first) <|> ((field upGroup (Just typeExtendee) >>= upField)  >> rest)
       rest = pChar '}' <|> ((eol <|> (field upGroup (Just typeExtendee) >>= upField)) >> rest)
   pChar '{' >> first
+-}
   
 field :: (D.DescriptorProto -> P s ()) -> Maybe Utf8
       -> P s D.FieldDescriptorProto
@@ -354,10 +363,21 @@ enum up = pName (U.fromString "enum") >> do
   self <- ident1
   up =<< subParser (pChar '{' >> subEnum) (mergeEmpty {D.EnumDescriptorProto.name=Just self})
 
-subEnum = first
-  where first = (eol >> first) <|> ((enumVal <|> (pOption >>= setOption)) >> rest)
+
+enumOption = pOption >>= setOption >>= \p -> eol >> update' (\s -> s {D.EnumDescriptorProto.options=Just p})
+  where
+    setOption optName = do
+      old <- fmap (maybe mergeEmpty id . D.EnumDescriptorProto.options) getState
+      case optName of
+        s -> unexpected $ "There are no options for enumerations (when this parser was written): "++s
+
+subEnum = eols >> rest 
+  where rest = (enumVal <|> enumOption) >> eols >> (pChar '}' <|> rest)
+{-
+        first = (eol >> first) <|> ((enumVal <|> (pOption >>= setOption)) >> rest)
         rest = pChar '}' <|> ((eol <|> enumVal <|> (pOption >>= setOption)) >> rest)
         setOption = fail "There are no options for enumerations (when this parser was written)"
+-}
         enumVal :: P D.EnumDescriptorProto ()
         enumVal = do
           name <- ident1

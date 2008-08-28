@@ -19,18 +19,13 @@ module Text.ProtocolBuffers.Reflections(ProtoName(..),DescriptorInfo(..),FieldIn
 import Text.ProtocolBuffers.Basic
 
 import qualified Data.ByteString.Lazy.UTF8 as U(toString,fromString)
-import Numeric(readHex,readOct,readDec,showOct)
-import Data.Char(ord,chr,isHexDigit,isOctDigit,toLower)
-import Data.List(sort,unfoldr)
+import Numeric(readHex,readOct,readDec)
+import Data.List(sort)
 import qualified Data.Foldable as F(toList)
-import Data.Bits(Bits((.|.),shiftL))
-import Data.Word(Word8)
 import Data.Set(Set)
 import qualified Data.Set as Set(fromDistinctAscList)
 import Data.Generics(Data)
 import Data.Typeable(Typeable)
-import Test.QuickCheck(quickCheck)
-import Codec.Binary.UTF8.String(encode)
 
 data ProtoName = ProtoName { haskellPrefix :: String  -- Haskell specific prefix to module hierarchy (e.g. Text)
                            , parentModule :: String   -- Proto specified namespace (like java)
@@ -39,6 +34,7 @@ data ProtoName = ProtoName { haskellPrefix :: String  -- Haskell specific prefix
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
+                                     , isGroup :: Bool
                                      , fields :: Seq FieldInfo 
                                      , keys :: Seq KeyInfo
                                      , extRanges :: [(FieldId,FieldId)]
@@ -75,7 +71,7 @@ data HsDefault = HsDef'Bool Bool
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data EnumInfo = EnumInfo { enumName :: ProtoName
-                         , enumItems :: [(EnumCode,String)]
+                         , enumValues :: [(EnumCode,String)]
                          }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
@@ -138,6 +134,7 @@ parseDefBool bs | bs == U.fromString "true" = Just (HsDef'Bool True)
                 | otherwise = Nothing
 
 -- The Numeric.readSigned does not handle '+' for some odd reason
+readSigned' :: (Num a) => ([Char] -> [(a, t)]) -> [Char] -> [(a, t)]
 readSigned' f ('-':xs) = map (\(v,s) -> (-v,s)) . f $ xs
 readSigned' f ('+':xs) = f xs
 readSigned' f xs = f xs

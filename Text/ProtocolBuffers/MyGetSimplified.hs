@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP,MagicHash,ScopedTypeVariables,FlexibleInstances,MultiParamTypeClasses,TypeSynonymInstances,RankNTypes #-}
+{-# LANGUAGE CPP,MagicHash,ScopedTypeVariables,FlexibleInstances,RankNTypes #-}
 --
 -- By Chris Kuklewicz, drawing heavily from binary and binary-strict,
 -- but all the bugs are my own.
@@ -67,14 +67,14 @@ import Control.Monad.Error.Class(MonadError(throwError,catchError),Error(strMsg)
 
 -- implementation imports
 import Control.Monad(ap)                             -- instead of Functor.fmap; ap for Applicative
-import Control.Monad(replicateM,(>=>))               -- XXX testing
+--import Control.Monad(replicateM,(>=>))               -- XXX testing
 import Data.Bits(Bits((.|.)))
 import qualified Data.ByteString as S(concat,length,null,splitAt)
-import qualified Data.ByteString as S(unpack) -- XXX testing
+--import qualified Data.ByteString as S(unpack) -- XXX testing
 import qualified Data.ByteString.Internal as S(ByteString,toForeignPtr,inlinePerformIO)
 import qualified Data.ByteString.Unsafe as S(unsafeIndex)
 import qualified Data.ByteString.Lazy as L(take,drop,length,span,toChunks,fromChunks,null)
-import qualified Data.ByteString.Lazy as L(pack) -- XXX testing
+--import qualified Data.ByteString.Lazy as L(pack) -- XXX testing
 import qualified Data.ByteString.Lazy.Internal as L(ByteString(..),chunk)
 import qualified Data.Foldable as F(foldr,foldr1)    -- used with Seq
 import Data.Int(Int64)                               -- index type for L.ByteString
@@ -139,7 +139,7 @@ newtype Get a = Get {
 setCheckpoint,useCheckpoint,clearCheckpoint :: Get ()
 setCheckpoint = Get $ \ sc s pc -> sc () s (FutureFrame s mempty pc)
 useCheckpoint = Get $ \ sc (S _ _ _) (FutureFrame s future pc) ->
-  let (S ss bs n) = collect s future
+  let (S {top=ss, current=bs, consumed=n}) = collect s future
   in sc () (S ss bs n) pc
 clearCheckpoint = Get $ \ sc s (FutureFrame _s _future pc) -> sc () s pc
 

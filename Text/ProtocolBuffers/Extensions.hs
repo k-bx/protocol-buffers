@@ -18,7 +18,7 @@ import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Default
 import Text.ProtocolBuffers.WireMessage
 import Text.ProtocolBuffers.Reflections
-import Text.ProtocolBuffers.MyGetSimplified as Get (Get,runGet,Result(..),lookAhead,getLazyByteString,spanOf,skip,bytesRead)
+import Text.ProtocolBuffers.Get as Get (Get,runGet,Result(..),lookAhead,getLazyByteString,spanOf,skip,bytesRead)
 
 err msg = error $ "Text.ProtocolBuffers.Extensions error\n"++msg
 
