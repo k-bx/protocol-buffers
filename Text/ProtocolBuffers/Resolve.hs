@@ -68,7 +68,7 @@ encodeModuleNames [] = Utf8 mempty
 encodeModuleNames xs = Utf8 . U.fromString . foldr1 (\a b -> a ++ '.':b) $ xs
 
 mangleModuleNames :: Utf8 -> [String]
-mangleModuleNames bs = map mangleModuleName . splitDot . toString $ bs 
+mangleModuleNames bs = map mangleModuleName . splitDot . toString $ bs
 
 mangleCap :: Maybe Utf8 -> [String]
 mangleCap = mangleModuleNames . fromMaybe (Utf8 mempty)
@@ -169,7 +169,7 @@ loadProto protoDir protoFile = fmap answer $ execStateT (load (Set.singleton pro
         liftIO . print $ "Loading filepath "++toRead
         proto <- liftIO $ LC.readFile toRead
         parsed <- either (loadFailed toRead . show) return (parseProto toRead proto)
-        let (context,imports) = toContext parsed
+        let (context,imports,_) = toContext parsed
         when (not (Set.null (Set.intersection parents imports)))
              (loadFailed toRead (unlines ["imports failed: recursive loop detected",unlines . map show . M.assocs $ built
                                          ,show parents,show imports]))
@@ -194,11 +194,11 @@ withPackage [] (D.FileDescriptorProto {D.FileDescriptorProto.name=n}) =  err $
   "withPackage given an empty context"
 
 resolveFDP fdpIn =
-  let context = fst (toContext fdpIn)
+  let context = (\(x,_,_) -> x) (toContext fdpIn)
   in resolveWithContext context fdpIn
   
 -- process to get top level context for FDP and list of its imports
-toContext :: D.FileDescriptorProto -> (Context,Set.Set FilePath)
+toContext :: D.FileDescriptorProto -> (Context,Set.Set FilePath,[String])
 toContext protoIn =
   let prefix :: [String]
       prefix = mangleCap . msum $
@@ -236,6 +236,7 @@ toContext protoIn =
                                                             _ -> nss) [nameSpace] prefix
   in ( protoContext
      , Set.fromList (map toString (F.toList (D.FileDescriptorProto.dependency protoIn)))
+     , prefix
      )
 
 resolveWithContext :: Context -> D.FileDescriptorProto -> D.FileDescriptorProto
@@ -251,14 +252,14 @@ resolveWithContext protoContext protoIn =
           x -> rerr $ "*** Name resolution failed when descending:\n"++unlines (mangled : show x : "KNOWN NAMES" : seeContext cx)
        where mangled = mangleCap1 name
       resolve :: Context -> Maybe Utf8 -> Maybe Utf8
-      resolve context bsIn = fmap fst (resolve2 context bsIn)
-      resolve2 :: Context -> Maybe Utf8 -> Maybe (Utf8,NameType)
-      resolve2 context Nothing = Nothing
-      resolve2 context bsIn =
-        let nameIn = mangleCap bsIn
+      resolve context Nothing = Nothing
+      resolve context (Just bs) = fmap fst (resolveWithNameType context bs)
+      resolveWithNameType :: Context -> Utf8 -> Maybe (Utf8,NameType)
+      resolveWithNameType context bsIn =
+        let nameIn = mangleCap (Just bsIn)
             errMsg = "*** Name resolution failed:\n"++unlines [show bsIn,show nameIn,"KNOWN NAMES"]
                      ++ unlines (seeContext context)
-            resolver [] (NameSpace cx) = rerr $ "Impossible case in Text.ProtocolBuffers.Resolve.resolve2.resolver []\n" ++ errMsg
+            resolver [] (NameSpace cx) = rerr $ "Impossible case in Text.ProtocolBuffers.Resolve.resolveWithNameType.resolver []\n" ++ errMsg
             resolver [name] (NameSpace cx) = case M.lookup name cx of
                                                Nothing -> Nothing
                                                Just (fqName,nameType,_) -> Just (encodeModuleNames fqName,nameType)
@@ -284,17 +285,21 @@ resolveWithContext protoContext protoIn =
              self = resolve cx (D.DescriptorProto.name msg)
       processFLD cx mp f = f { D.FieldDescriptorProto.name          = mangleFieldName (D.FieldDescriptorProto.name f)
                              , D.FieldDescriptorProto.type'         = new_type'
-                             , D.FieldDescriptorProto.type_name     = checkSelf mp (fmap fst r2)
+                             , D.FieldDescriptorProto.type_name     = fmap fst r2
                              , D.FieldDescriptorProto.default_value = checkEnumDefault
-                             , D.FieldDescriptorProto.extendee      = newExt }
+                             , D.FieldDescriptorProto.extendee      = fmap newExt (D.FieldDescriptorProto.extendee f)}
 --                             , D.FieldDescriptorProto.extendee      = checkSelf mp (resolve cx (D.FieldDescriptorProto.extendee f)) }
-       where e2 = resolve2 cx (D.FieldDescriptorProto.extendee f)
-             validExt = case (e2,D.FieldDescriptorProto.number f) of
-                          (Just (_,Message ers),Just fid) -> if checkER ers fid then Nothing else Just (fid,ers)
-                          _ -> Nothing
-             newExt = case validExt of Nothing -> checkSelf mp (fmap fst e2)
-                                       Just (fid,ers) -> rerr $ "*** Name resolution found extension field out of extension range: "++show f ++ "\n has a number "++ show fid ++" not in one of the valid ranges : " ++ show ers
-             r2 = resolve2 cx (D.FieldDescriptorProto.type_name f)
+       where newExt :: Utf8 -> Utf8
+             newExt orig = let e2 = resolveWithNameType cx orig
+                           in case (e2,D.FieldDescriptorProto.number f) of
+                                (Just (newName,Message ers),Just fid) ->
+                                  if checkER ers fid then newName
+                                    else rerr $ "*** Name resolution found extension field out of extension range: "++show f ++ "\n has a number "++ show fid ++" not in one of the valid ranges : " ++ show ers
+                                (Nothing,_) -> rerr $ "*** Name resolution failed for extendee of "++show f
+                                (_,Nothing) -> rerr $ "*** No field id number for extension field "++show f
+             r2 = fmap (fromMaybe (rerr $ "*** Name resolution failed for type_name of "++show f)
+                         . (resolveWithNameType cx))
+                       (D.FieldDescriptorProto.type_name f)
              t (Message {}) = TYPE_MESSAGE
              t (Enumeration {}) = TYPE_ENUM
              t Void = rerr $ unlines [ "processFLD cannot resolve type_name to Void"

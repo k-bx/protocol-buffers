@@ -1,4 +1,5 @@
-module Text.ProtocolBuffers.Extensions(getExt,putExt,wireSizeExtField,wirePutExtField,GPB,getMessageExt,Key(..),ExtField,ExtendMessage(..)
+module Text.ProtocolBuffers.Extensions(ExtKey(..),MessageAPI(..),defaultKeyValue,wireSizeExtField
+                                      ,wirePutExtField,GPB,getMessageExt,Key(..),ExtField,ExtendMessage(..)
                                       ) where
 
 import Data.Map(Map)
@@ -82,6 +83,9 @@ class ExtKey c where
   getExt :: Key c msg v -> msg -> Either String (c v) -- might fail with String
   clearExt :: Key c msg v -> msg -> msg -- always works
   parseWireExt :: Key c msg v -> WireType -> Seq ByteString -> Either String (FieldId,ExtFieldValue) -- might fail with String
+
+defaultKeyValue :: Key c msg v -> v
+defaultKeyValue (Key _ _ md) = maybe defaultValue id md
 
 -- | The Key and GPWitness GADTs use GPB as a shorthand for many classes
 class (Mergeable a,Default a,Wire a,Show a,Typeable a,Eq a,Ord a) => GPB a 
@@ -372,6 +376,45 @@ wireGetFromWire fi wt = getLazyByteString =<< calcLen where
         | otherwise -> return ()
       5 -> skip 4 >> skipGroup
 
+class MessageAPI msg a b | msg a -> b where
+  getVal :: msg -> a -> b
+  isSet :: msg -> a -> Bool
+  isSet _ _ = True
+
+instance (Default msg) => MessageAPI msg (msg -> Maybe a) a where
+  getVal m f | Just v <- f m = v
+          | Just v <- f defaultValue = v
+          | otherwise = error "Text.ProtocolBuffers.MessageAPI.get: Impossible? defaultValue was Nothing"
+  isSet m f = maybe False (const True) (f m)
+
+instance MessageAPI msg (msg -> (Seq a)) (Seq a) where
+  getVal m f = f m
+  isSet m f = not (Seq.null (f m))
+
+instance (Default v) => MessageAPI msg (Key Maybe msg v) v where
+  getVal m k@(Key _ _ md) = case getExt k m of
+                           Right (Just v) -> v
+                           _ -> maybe defaultValue id md
+  isSet m (Key fid _ _) = let (ExtField x) = getExtField m
+                          in M.member fid x
+
+instance (Default v) => MessageAPI msg (Key Seq msg v) (Seq v) where
+  getVal m k@(Key _ _ md) = case getExt k m of
+                           Right s -> s
+                           _ -> Seq.empty
+  isSet m (Key fid _ _) = let (ExtField x) = getExtField m
+                          in M.member fid x
+
+instance MessageAPI msg (msg -> ByteString) ByteString where getVal m f = f m
+instance MessageAPI msg (msg -> Utf8) Utf8 where getVal m f = f m
+instance MessageAPI msg (msg -> Double) Double where getVal m f = f m
+instance MessageAPI msg (msg -> Float) Float where getVal m f = f m
+instance MessageAPI msg (msg -> Int32) Int32 where getVal m f = f m
+instance MessageAPI msg (msg -> Int64) Int64 where getVal m f = f m
+instance MessageAPI msg (msg -> Word32) Word32 where getVal m f = f m
+instance MessageAPI msg (msg -> Word64) Word64 where getVal m f = f m
+
+{-
 data Testmsg = Testmsg { name :: String
                        , child :: Maybe Testmsg
                        , e'f :: ExtField}
@@ -401,4 +444,5 @@ testKey =
       m3 = m2 { child = Just m1 }
   in m3
 
+-}
 -}

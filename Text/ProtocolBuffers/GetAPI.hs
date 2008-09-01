@@ -1,6 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances
   , TypeSynonymInstances, PatternGuards #-}
-module Text.ProtocolBuffers.Get where
+module Text.ProtocolBuffers.GetAPI where
 
 --import Text.ProtocolBuffers.Basic
 import Data.ByteString.Lazy(ByteString,empty)

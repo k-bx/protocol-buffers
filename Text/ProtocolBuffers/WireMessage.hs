@@ -12,8 +12,8 @@
  -}
 module Text.ProtocolBuffers.WireMessage
     ( messageSize,messagePut,messageGet,messagePutM,messageGetM
-    , runGetOnLazy,runPut,size'Varint,toWireType,toWireTag,mkWireTag
-    , Wire(..),WireSize,Put
+    , runGet,runGetOnLazy,runPut,size'Varint,toWireType,toWireTag,mkWireTag
+    , Wire(..),WireSize,Put,Get
     , putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep

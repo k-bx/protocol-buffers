@@ -7,7 +7,7 @@
 -- This prevents me hitting any circular dependencies.
 --
 -- 
-module Text.ProtocolBuffers.Reflections(ProtoName(..),DescriptorInfo(..),FieldInfo(..),KeyInfo
+module Text.ProtocolBuffers.Reflections(ProtoName(..),ProtoInfo(..),DescriptorInfo(..),FieldInfo(..),KeyInfo
                                        ,HsDefault(..),EnumInfo(..),EnumInfoApp
                                        ,ReflectDescriptor(..),ReflectEnum(..),GetMessageInfo(..)
                                        ,parseDefDouble,parseDefFloat
@@ -32,6 +32,10 @@ data ProtoName = ProtoName { haskellPrefix :: String  -- Haskell specific prefix
                            , baseName :: String       -- unqualfied name of this thing
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
+
+data ProtoInfo = ProtoInfo { protoMod :: ProtoName
+                           , extensionKeys :: Seq KeyInfo
+                           }
 
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , isGroup :: Bool
