@@ -31,6 +31,9 @@ instance P'.Wire OptimizeMode where
  
 instance P'.GPB OptimizeMode
  
+instance P'.MessageAPI msg' (msg' -> OptimizeMode) OptimizeMode where
+  getVal m' f' = f' m'
+ 
 instance P'.ReflectEnum OptimizeMode where
   reflectEnum = [(1, "SPEED", SPEED), (2, "CODE_SIZE", CODE_SIZE)]
   reflectEnumInfo _

@@ -111,6 +111,9 @@ instance P'.Wire Type where
  
 instance P'.GPB Type
  
+instance P'.MessageAPI msg' (msg' -> Type) Type where
+  getVal m' f' = f' m'
+ 
 instance P'.ReflectEnum Type where
   reflectEnum
     = [(1, "TYPE_DOUBLE", TYPE_DOUBLE), (2, "TYPE_FLOAT", TYPE_FLOAT), (3, "TYPE_INT64", TYPE_INT64),

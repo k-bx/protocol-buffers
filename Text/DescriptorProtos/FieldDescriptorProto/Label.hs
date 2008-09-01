@@ -36,6 +36,9 @@ instance P'.Wire Label where
  
 instance P'.GPB Label
  
+instance P'.MessageAPI msg' (msg' -> Label) Label where
+  getVal m' f' = f' m'
+ 
 instance P'.ReflectEnum Label where
   reflectEnum
     = [(1, "LABEL_OPTIONAL", LABEL_OPTIONAL), (2, "LABEL_REQUIRED", LABEL_REQUIRED), (3, "LABEL_REPEATED", LABEL_REPEATED)]

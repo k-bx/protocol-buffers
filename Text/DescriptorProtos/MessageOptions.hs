@@ -11,7 +11,7 @@ instance P'.Mergeable MessageOptions where
   mergeAppend (MessageOptions x'1) (MessageOptions y'1) = MessageOptions (P'.mergeAppend x'1 y'1)
  
 instance P'.Default MessageOptions where
-  defaultValue = MessageOptions (P'.Just (P'.False))
+  defaultValue = MessageOptions (P'.Just P'.False)
  
 instance P'.Wire MessageOptions where
   wireSize 11 (MessageOptions x'1) = (P'.wireSizeOpt 1 8 x'1)

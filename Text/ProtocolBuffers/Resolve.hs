@@ -257,9 +257,12 @@ resolveWithContext protoContext protoIn =
       resolveWithNameType :: Context -> Utf8 -> Maybe (Utf8,NameType)
       resolveWithNameType context bsIn =
         let nameIn = mangleCap (Just bsIn)
-            errMsg = "*** Name resolution failed:\n"++unlines [show bsIn,show nameIn,"KNOWN NAMES"]
+            errMsg = "*** Name resolution failed:\n"
+                     ++unlines ["Unmangled name: "++show bsIn
+                               ,"Mangled name: "++show nameIn
+                               ,"List of known names:"]
                      ++ unlines (seeContext context)
-            resolver [] (NameSpace cx) = rerr $ "Impossible case in Text.ProtocolBuffers.Resolve.resolveWithNameType.resolver []\n" ++ errMsg
+            resolver [] (NameSpace cx) = rerr $ "Impossible? case in Text.ProtocolBuffers.Resolve.resolveWithNameType.resolver []\n" ++ errMsg
             resolver [name] (NameSpace cx) = case M.lookup name cx of
                                                Nothing -> Nothing
                                                Just (fqName,nameType,_) -> Just (encodeModuleNames fqName,nameType)
@@ -288,21 +291,20 @@ resolveWithContext protoContext protoIn =
                              , D.FieldDescriptorProto.type_name     = fmap fst r2
                              , D.FieldDescriptorProto.default_value = checkEnumDefault
                              , D.FieldDescriptorProto.extendee      = fmap newExt (D.FieldDescriptorProto.extendee f)}
---                             , D.FieldDescriptorProto.extendee      = checkSelf mp (resolve cx (D.FieldDescriptorProto.extendee f)) }
        where newExt :: Utf8 -> Utf8
              newExt orig = let e2 = resolveWithNameType cx orig
                            in case (e2,D.FieldDescriptorProto.number f) of
                                 (Just (newName,Message ers),Just fid) ->
                                   if checkER ers fid then newName
-                                    else rerr $ "*** Name resolution found extension field out of extension range: "++show f ++ "\n has a number "++ show fid ++" not in one of the valid ranges : " ++ show ers
-                                (Nothing,_) -> rerr $ "*** Name resolution failed for extendee of "++show f
-                                (_,Nothing) -> rerr $ "*** No field id number for extension field "++show f
-             r2 = fmap (fromMaybe (rerr $ "*** Name resolution failed for type_name of "++show f)
+                                    else rerr $ "*** Name resolution found an extension field that is out of the allowed extension ranges: "++show f ++ "\n has a number "++ show fid ++" not in one of the valid ranges: " ++ show ers
+                                (Nothing,_) -> rerr $ "*** Name resolution failed for the extendee: "++show f
+                                (_,Nothing) -> rerr $ "*** No field id number for the extension field: "++show f
+             r2 = fmap (fromMaybe (rerr $ "*** Name resolution failed for the type_name of extension field: "++show f)
                          . (resolveWithNameType cx))
                        (D.FieldDescriptorProto.type_name f)
              t (Message {}) = TYPE_MESSAGE
              t (Enumeration {}) = TYPE_ENUM
-             t Void = rerr $ unlines [ "processFLD cannot resolve type_name to Void"
+             t Void = rerr $ unlines [ "Problem found: processFLD cannot resolve type_name to Void"
                                      , "  The parent message is "++maybe "<no message>" toString mp
                                      , "  The field name is "++maybe "<no field name>" toString (D.FieldDescriptorProto.name f)]
              checkSelf (Just parent) x@(Just name) = if parent==name then (D.FieldDescriptorProto.type_name f) else x
@@ -310,12 +312,15 @@ resolveWithContext protoContext protoIn =
              new_type' = (D.FieldDescriptorProto.type' f) `mplus` (fmap (t.snd) r2)
              checkEnumDefault = case (D.FieldDescriptorProto.default_value f,fmap snd r2) of
                                   (Just name,Just (Enumeration values)) | name  `notElem` values ->
-                                      rerr $ unlines ["default enumeration value not recognized:"
+                                      rerr $ unlines ["Problem found: default enumeration value not recognized:"
                                                      ,"  The parent message is "++maybe "<no message>" toString mp
                                                      ,"  field name is "++maybe "" toString (D.FieldDescriptorProto.name f)
                                                      ,"  bad enum name is "++show (toString name)
                                                      ,"  possible enum values are "++show (map toString values)]
-                                  (def,_) -> def
+                                  (Just def,_) | new_type' == Just TYPE_MESSAGE
+                                                 || new_type' == Just TYPE_GROUP ->
+                                    rerr $ "Problem found: You set a default value for a MESSAGE or GROUP: "++unlines [show def,show f]
+                                  (maybeDef,_) -> maybeDef
       processENM cx e = e { D.EnumDescriptorProto.name = resolve cx (D.EnumDescriptorProto.name e) }
       processSRV cx s = s { D.ServiceDescriptorProto.name   = resolve cx (D.ServiceDescriptorProto.name s)
                           , D.ServiceDescriptorProto.method = fmap (processMTD cx) (D.ServiceDescriptorProto.method s) }

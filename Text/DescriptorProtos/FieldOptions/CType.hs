@@ -31,6 +31,9 @@ instance P'.Wire CType where
  
 instance P'.GPB CType
  
+instance P'.MessageAPI msg' (msg' -> CType) CType where
+  getVal m' f' = f' m'
+ 
 instance P'.ReflectEnum CType where
   reflectEnum = [(1, "CORD", CORD), (2, "STRING_PIECE", STRING_PIECE)]
   reflectEnumInfo _ = P'.EnumInfo (P'.ProtoName "Text" "DescriptorProtos.FieldOptions" "CType") [(1, "CORD"), (2, "STRING_PIECE")]

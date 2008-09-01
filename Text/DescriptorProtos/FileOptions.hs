@@ -15,7 +15,7 @@ instance P'.Mergeable FileOptions where
     = FileOptions (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
  
 instance P'.Default FileOptions where
-  defaultValue = FileOptions (P'.Just P'.defaultValue) (P'.Just P'.defaultValue) (P'.Just (P'.False)) (P'.Just P'.defaultValue)
+  defaultValue = FileOptions (P'.Just P'.defaultValue) (P'.Just P'.defaultValue) (P'.Just P'.False) (P'.Just P'.defaultValue)
  
 instance P'.Wire FileOptions where
   wireSize 11 (FileOptions x'1 x'2 x'3 x'4)

@@ -164,14 +164,14 @@ qualName :: ProtoName -> HsQName
 qualName (ProtoName prefix "" base) = UnQual (HsIdent base)
 qualName (ProtoName prefix parent base) = Qual (Module parent) (HsIdent base)
 
+unqualName :: ProtoName -> HsQName
+unqualName (ProtoName _prefix _parent base) = UnQual (HsIdent base)
+
 toProtoName :: String -> Utf8 -> ProtoName
 toProtoName prefix rawName =
   case splitMod rawName of
     Left (m,b) -> ProtoName prefix (toString m) (toString b)
     Right b    -> ProtoName prefix ""           (toString b)
-
-unqualName :: ProtoName -> HsQName
-unqualName (ProtoName _prefix _parent base) = UnQual (HsIdent base)
 
 --------------------------------------------
 -- EnumDescriptorProto module creation
@@ -315,7 +315,9 @@ makeDescriptorInfo prefix isGroup d@(D.DescriptorProto.DescriptorProto
                                       { D.DescriptorProto.name = Just rawName
                                       , D.DescriptorProto.field = rawFields
                                       , D.DescriptorProto.extension_range = extension_range })
-    = DescriptorInfo protoName isGroup fieldInfos keyInfos extRangeList
+    = let di = DescriptorInfo protoName isGroup fieldInfos keyInfos extRangeList
+      in -- trace ("\n\n\n"++show di) $ 
+         di
   where protoName = toProtoName prefix rawName
         (fields,keys) = partition (\ f -> Nothing == (D.FieldDescriptorProto.extendee f)) . F.toList $ rawFields
         fieldInfos = Seq.fromList . map (toFieldInfo prefix) $ fields
@@ -333,8 +335,7 @@ makeDescriptorInfo prefix isGroup d@(D.DescriptorProto.DescriptorProto
 keyNameOf prefix f
     = case D.FieldDescriptorProto.extendee f of
         Nothing -> error "Impossible? keyNameOf expected Just but found Nothing"
-        Just extName -> trace (show ("keyNameOf Just",extName,f)) $
-                        toProtoName prefix extName
+        Just extName -> toProtoName prefix extName
 
 toFieldInfo :: String ->  D.FieldDescriptorProto -> FieldInfo
 toFieldInfo prefix
@@ -390,7 +391,7 @@ protoModule pi@(ProtoInfo protoName keyInfos)
   = let self = UnQual . HsIdent . baseName $ protoName
         exportKeys = map (HsEVar . UnQual . HsIdent . fieldName . snd) (F.toList keyInfos)
         imports = standardImports (not (Seq.null keyInfos)) ++ map formatImport (protoImport pi)
-    in HsModule src (Module (fqName protoName)) (Just exportKeys) imports (keysX keyInfos)
+    in HsModule src (Module (fqName protoName)) (Just exportKeys) imports (keysX protoName keyInfos)
   where formatImport (m,t) = HsImportDecl src (Module (dotPre (haskellPrefix protoName) (dotPre m t))) True
                                (Just (Module m)) (Just (False,[HsIAbs (HsIdent t)]))
 
@@ -412,12 +413,12 @@ descriptorModule isGroup prefix
                     { D.DescriptorProto.name = Just rawName })
     = let di = makeDescriptorInfo prefix isGroup d
           protoName = descName di
-          self = UnQual . HsIdent . baseName $ protoName
+          un = UnQual . HsIdent . baseName $ protoName
           imports = standardImports (hasExt di) ++ map formatImport (toImport di)
           exportKeys = map (HsEVar . UnQual . HsIdent . fieldName . snd) (F.toList (keys di))
       in HsModule src (Module (fqName protoName))
-           (Just (HsEThingAll self : exportKeys))
-           imports (descriptorX di : (keysX (keys di) ++ instancesDescriptor di))
+           (Just (HsEThingAll un : exportKeys))
+           imports (descriptorX di : (keysX protoName (keys di) ++ instancesDescriptor di))
   where formatImport (m,t) = HsImportDecl src (Module (dotPre prefix (dotPre m t))) True
                                (Just (Module m)) (Just (False,[HsIAbs (HsIdent t)]))
 
@@ -441,13 +442,15 @@ toImport di
         keyNames = F.foldr (\(e,fi) rest -> e : addName fi rest) [] (keys di)
         addName fi rest = maybe rest (:rest) (typeName fi)
 
-keysX ::  Seq KeyInfo -> [HsDecl]
-keysX i = concatMap makeKey . F.toList $ i
+keysX :: ProtoName -> Seq KeyInfo -> [HsDecl]
+keysX self i = concatMap (makeKey self) . F.toList $ i
 
-makeKey :: KeyInfo -> [HsDecl]
-makeKey (extendee,f) = [ keyType, keyVal ]
-  where keyType = HsTypeSig src [ HsIdent (fieldName f) ] (HsQualType [] (foldl1 HsTyApp . map HsTyCon $ --YYY  where keyType = HsTypeSig src [ HsIdent (fieldName f) ] (foldl1 HsTyApp . map HsTyCon $
-                    [ private "Key", private labeled, qualName extendee, typeQName ]))
+makeKey :: ProtoName -> KeyInfo -> [HsDecl]
+makeKey self (extendee,f) = [ keyType, keyVal ]
+  where keyType = HsTypeSig src [ HsIdent (fieldName f) ] (HsQualType [] (foldl1 HsTyApp . map HsTyCon $
+                    [ private "Key", private labeled
+                    , if extendee /= self then qualName extendee else unqualName extendee
+                    , typeQName ]))
         labeled | canRepeat f = "Seq"
                 | otherwise = "Maybe"
         typeNumber = getFieldType . typeCode $ f
@@ -455,18 +458,21 @@ makeKey (extendee,f) = [ keyType, keyVal ]
         typeQName = case useType . toEnum $ typeNumber of
                       Just s -> private s
                       Nothing -> case typeName f of
-                                   Just s -> qualName s
+                                   Just s | self /= s -> qualName s
+                                          | otherwise -> unqualName s
                                    Nothing -> error $  "No Name for Field!\n" ++ show f
         keyVal = HsPatBind src (HsPApp (UnQual (HsIdent (fieldName f))) []) (HsUnGuardedRhs
                    (pvar "Key" $$ litInt (getFieldId (fieldNumber f))
                                $$ litInt typeNumber
-                               $$ maybe (pvar "Nothing") (HsParen . (pvar "Just" $$) . defToSyntax) (hsDefault f))) noWhere
+                               $$ maybe (pvar "Nothing") (HsParen . (pvar "Just" $$) . (defToSyntax (typeCode f))) (hsDefault f)
+                   )) noWhere
 
-defToSyntax :: HsDefault -> HsExp
-defToSyntax x =
+defToSyntax :: FieldType -> HsDefault -> HsExp
+defToSyntax tc x =
   case x of
     HsDef'Bool b -> HsCon (private (show b))
-    HsDef'ByteString bs ->  HsParen $ pvar "pack" $$ HsLit (HsString (BSC.unpack bs))
+    HsDef'ByteString bs -> (if tc == 9 then (\x -> HsParen (pvar "Utf8" $$ x)) else id) $
+                           (HsParen $ pvar "pack" $$ HsLit (HsString (BSC.unpack bs)))
     HsDef'Rational r | r < 0 -> HsParen $ HsLit (HsFrac r)
                      | otherwise -> HsLit (HsFrac r)
     HsDef'Integer i | i < 0 -> HsParen $ HsLit (HsInt i)
@@ -474,24 +480,26 @@ defToSyntax x =
        
 descriptorX :: DescriptorInfo -> HsDecl
 descriptorX di = HsDataDecl src [] name [] [con] derives --YYY descriptorX di = HsDataDecl src DataType [] name [] [con] derives
-  where name = HsIdent (baseName (descName di))
+  where self = descName di
+        name = HsIdent (baseName self)
         con = HsRecDecl src name eFields -- YYY con = HsQualConDecl src [] [] (HsRecDecl name eFields)
                 where eFields = F.foldr ((:) . fieldX) end (fields di)
                       end = if hasExt di then [extfield] else []
         extfield :: ([HsName],HsBangType)
         extfield = ([HsIdent "ext'field"],HsUnBangedTy (HsTyCon (Qual (Module "P'") (HsIdent "ExtField"))))
 
-fieldX :: FieldInfo -> ([HsName],HsBangType)
-fieldX fi = ([HsIdent (fieldName fi)],HsUnBangedTy (labeled (HsTyCon typed)))
-  where labeled | canRepeat fi = typeApp "Seq"
-                | isRequired fi = id
-                | otherwise = typeApp "Maybe"
-        typed :: HsQName
-        typed = case useType (toEnum (getFieldType (typeCode fi))) of
-                  Just s -> private s
-                  Nothing -> case typeName fi of
-                               Just s -> qualName s
-                               Nothing -> error $  "No Name for Field!\n" ++ show fi
+        fieldX :: FieldInfo -> ([HsName],HsBangType)
+        fieldX fi = ([HsIdent (fieldName fi)],HsUnBangedTy (labeled (HsTyCon typed)))
+          where labeled | canRepeat fi = typeApp "Seq"
+                        | isRequired fi = id
+                        | otherwise = typeApp "Maybe"
+                typed :: HsQName
+                typed = case useType (toEnum (getFieldType (typeCode fi))) of
+                          Just s -> private s
+                          Nothing -> case typeName fi of
+                                       Just s | self /= s -> qualName s
+                                              | otherwise -> unqualName s
+                                       Nothing -> error $  "No Name for Field!\n" ++ show fi
 
 instancesDescriptor :: DescriptorInfo -> [HsDecl]
 instancesDescriptor di = map ($ di) $
@@ -545,13 +553,13 @@ instanceDefault di
         defX :: FieldInfo -> HsExp
         defX fi | isRequired fi || canRepeat fi = dv
                 | otherwise = HsParen $ HsCon (private "Just") $$ dv
-          where dv = maybe (pvar "defaultValue") defToSyntax (hsDefault fi)
+          where dv = maybe (pvar "defaultValue") (defToSyntax (typeCode fi)) (hsDefault fi)
 
 instanceMessageAPI :: ProtoName -> HsDecl
-instanceMessageAPI protName
+instanceMessageAPI protoName
     = HsInstDecl src [] (private "MessageAPI") [HsTyVar (HsIdent "msg'"), HsTyFun (HsTyVar (HsIdent "msg'")) (HsTyCon un),  (HsTyCon un)]
         [ inst "getVal" [HsPVar (HsIdent "m'"),HsPVar (HsIdent "f'")] (HsApp (lvar "f'" ) (lvar "m'")) ]
-  where un = UnQual (HsIdent (baseName protName))
+  where un = UnQual (HsIdent (baseName protoName))
 
 mkOp s a b = HsInfixApp a (HsQVarOp (UnQual (HsSymbol s))) b
 
