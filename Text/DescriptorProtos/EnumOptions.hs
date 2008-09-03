@@ -33,4 +33,4 @@ instance P'.GPB EnumOptions
 instance P'.ReflectDescriptor EnumOptions where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"EnumOptions\"}, isGroup = False, fields = fromList [], keys = fromList [], extRanges = []}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"EnumOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"EnumOptions.hs\"], isGroup = False, fields = fromList [], keys = fromList [], extRanges = [], knownKeys = fromList []}"

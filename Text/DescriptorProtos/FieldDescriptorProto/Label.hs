@@ -44,4 +44,5 @@ instance P'.ReflectEnum Label where
     = [(1, "LABEL_OPTIONAL", LABEL_OPTIONAL), (2, "LABEL_REQUIRED", LABEL_REQUIRED), (3, "LABEL_REPEATED", LABEL_REPEATED)]
   reflectEnumInfo _
     = P'.EnumInfo (P'.ProtoName "Text" "DescriptorProtos.FieldDescriptorProto" "Label")
+        ["Text", "DescriptorProtos", "FieldDescriptorProto", "Label.hs"]
         [(1, "LABEL_OPTIONAL"), (2, "LABEL_REQUIRED"), (3, "LABEL_REPEATED")]

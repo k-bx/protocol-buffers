@@ -83,6 +83,7 @@ class ExtKey c where
   getExt :: Key c msg v -> msg -> Either String (c v) -- might fail with String
   clearExt :: Key c msg v -> msg -> msg -- always works
   parseWireExt :: Key c msg v -> WireType -> Seq ByteString -> Either String (FieldId,ExtFieldValue) -- might fail with String
+  wireGetKey :: Key c msg v -> msg -> Get msg
 
 defaultKeyValue :: Key c msg v -> v
 defaultKeyValue (Key _ _ md) = maybe defaultValue id md
@@ -210,13 +211,13 @@ showGPDynSeq (GPDynSeq GPWitness s) = show s
 --
 
 wireSizeGPDyn :: FieldType -> GPDyn -> WireSize
-wireSizeGPDyn f (GPDyn GPWitness a) = wireSize f a 
+wireSizeGPDyn ft (GPDyn GPWitness a) = wireSize ft a 
 
 wirePutGPDyn :: FieldType -> GPDyn -> Put
-wirePutGPDyn f (GPDyn GPWitness a) = wirePut f a 
+wirePutGPDyn ft (GPDyn GPWitness a) = wirePut ft a 
 
 wireGetGPDyn :: forall a. GPWitness a -> FieldType -> Get GPDyn
-wireGetGPDyn GPWitness f = fmap (GPDyn GPWitness) (wireGet f :: Get a)
+wireGetGPDyn GPWitness ft = fmap (GPDyn GPWitness) (wireGet ft :: Get a)
 
 getWitness :: (GPB a) => GPDyn -> Maybe (GPWitness a)
 getWitness (GPDyn x@GPWitness _) = cast x
@@ -230,8 +231,9 @@ instance ExtKey Maybe where
   putExt key Nothing msg = clearExt key msg
   putExt (Key i t _) (Just v) msg =
     let (ExtField ef) = getExtField msg
-        ef' = M.insert i (ExtOptional t (GPDyn GPWitness v)) ef
-    in seq ef' (putExtField (ExtField ef') msg)
+        v' = ExtOptional t (GPDyn GPWitness v)
+        ef' = M.insert i v' ef
+    in seq v' $ seq ef' (putExtField (ExtField ef') msg)
   clearExt (Key i _ _ ) msg =
     let (ExtField ef) = getExtField msg
         ef' = M.delete i ef
@@ -259,6 +261,14 @@ instance ExtKey Maybe where
         errs = [ m | Left m <- parsed ]
     if null errs then Right (fi,(ExtOptional ft (GPDyn witness (mergeConcat [ a | Right a <- parsed ]))))
       else Left (unlines errs)
+  wireGetKey (Key i t mv) msg = do
+    let myCast :: Maybe a -> Get a
+        myCast = undefined
+    v <- wireGet t `asTypeOf` (myCast mv)
+    let (ExtField ef) = getExtField msg
+        v' = ExtOptional t (GPDyn GPWitness v)
+        ef' = M.insert i v' ef
+    seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
 
 applyGet :: Get.Get r -> ByteString -> Either String r
 applyGet g bs = resolveEOF (runGet g bs) where
@@ -271,8 +281,9 @@ applyGet g bs = resolveEOF (runGet g bs) where
 instance ExtKey Seq where
   putExt (Key i t _) s msg =
       let (ExtField ef) = getExtField msg
-          ef' = M.insert i (ExtRepeated t (GPDynSeq GPWitness s)) ef
-      in seq ef' (putExtField (ExtField ef') msg)
+          v' = ExtRepeated t (GPDynSeq GPWitness s)
+          ef' = M.insert i v' ef
+      in seq v' $ seq ef' (putExtField (ExtField ef') msg)
   clearExt (Key i _ _ ) msg =
     let (ExtField ef) = getExtField msg
         ef' = M.delete i ef
@@ -289,16 +300,37 @@ instance ExtKey Seq where
            case cast s of
              Nothing -> Left $ "getExt Seq: Key's Seq value cast failed: "++show (k,typeOf s)
              Just s' -> Right s'
-  parseWireExt k@(Key fi ft mv)  wt raw | wt /= toWireType ft =
-    Left $ "parseWireExt Maybe: Key's FieldType does not match ExtField's wire type: "++show (k,toWireType ft,wt)
+  parseWireExt k@(Key i t mv)  wt raw | wt /= toWireType t =
+    Left $ "parseWireExt Maybe: Key's FieldType does not match ExtField's wire type: "++show (k,toWireType t,wt)
                                         | otherwise = do
     let mkWitType :: Maybe a -> GPWitness a
         mkWitType = undefined
         witness = GPWitness `asTypeOf` (mkWitType mv)
-        parsed = map (applyGet (wireGet ft)) . F.toList $ raw
+        parsed = map (applyGet (wireGet t)) . F.toList $ raw
         errs = [ m | Left m <- parsed ]
-    if null errs then Right (fi,(ExtRepeated ft (GPDynSeq witness (Seq.fromList [ a | Right a <- parsed ]))))
+    if null errs then Right (i,(ExtRepeated t (GPDynSeq witness (Seq.fromList [ a | Right a <- parsed ]))))
       else Left (unlines errs)
+  wireGetKey k@(Key i t mv) msg = do
+    let myCast :: Maybe a -> Get a
+        myCast = undefined
+    v <- wireGet t `asTypeOf` (myCast mv)
+    let (ExtField ef) = getExtField msg
+    v' <- case M.lookup i ef of
+            Nothing -> return $ ExtRepeated t (GPDynSeq GPWitness (Seq.singleton v))
+            Just (ExtRepeated wt (GPDynSeq GPWitness s)) ->
+              case cast s of
+                Nothing -> fail $ "wireGetExt Seq: previous Seq value cast failed: "++show (k,typeOf s)
+                Just s' -> return (ExtRepeated wt (GPDynSeq GPWitness (s' |> v)))
+            Just (ExtFromWire wt raw) ->
+              case parseWireExt k wt raw of
+                Left errMsg -> fail $ "wireGetExt Seq: Could not parseWireExt:\n"++errMsg
+                Right (_,ExtRepeated wt (GPDynSeq GPWitness s)) ->
+                  case cast s of
+                    Nothing -> fail $ "wireGetExt Seq: previous Seq value cast failed: "++show (k,typeOf s)
+                    Just s' -> return $ ExtRepeated wt (GPDynSeq GPWitness (s' |> v))
+                wtf -> fail $ "wireGetExt Seq: Weird parseWireExt return value: "++show wtf
+    let ef' = M.insert i v' ef
+    seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
 
 wireSizeExtField (ExtField m) = F.foldl' aSize 0 (M.assocs m)  where
     aSize old (fi,(ExtFromWire wt bs)) = old +
@@ -331,23 +363,27 @@ extension fieldId wireType msg = do
   case M.lookup fieldId ef of
     Nothing -> do
        bs <- wireGetFromWire fieldId wireType
-       let ef' = ExtField $ M.insert fieldId (ExtFromWire wireType (Seq.singleton bs)) ef
-       return $ putExtField ef' msg
+       let v' = ExtFromWire wireType (Seq.singleton bs)
+           ef' = M.insert fieldId v' ef
+       seq v' $ seq ef' $ return $ putExtField (ExtField ef') msg
     Just (ExtFromWire wt raw) | wt /= wireType -> badwt wt
                               | otherwise -> do
       bs <- wireGetFromWire fieldId wireType
-      let ef' = ExtField $ M.insert fieldId (ExtFromWire wt (raw |> bs)) ef
-      return $ putExtField ef' msg
+      let v' = ExtFromWire wt (raw |> bs)
+          ef' = M.insert fieldId v' ef
+      seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
     Just (ExtOptional ft (GPDyn x@GPWitness a)) | toWireType ft /= wireType -> badwt (toWireType ft)
                                                 | otherwise -> do
       b <- wireGet ft
-      let ef' = ExtField $ M.insert fieldId (ExtOptional ft (GPDyn x (mergeAppend a b))) ef
-      return $ putExtField ef' msg
+      let v' = ExtOptional ft (GPDyn x (mergeAppend a b))
+          ef' = M.insert fieldId v' ef
+      seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
     Just (ExtRepeated ft (GPDynSeq x@GPWitness s)) | toWireType ft /= wireType -> badwt (toWireType ft)
                                                    | otherwise -> do
       a <- wireGet ft
-      let ef' = ExtField $ M.insert fieldId (ExtRepeated ft (GPDynSeq x (s |> a))) ef
-      return $ putExtField ef' msg
+      let v' = ExtRepeated ft (GPDynSeq x (s |> a))
+          ef' = M.insert fieldId v' ef
+      seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
 
 wireGetFromWire :: FieldId -> WireType -> Get.Get ByteString
 wireGetFromWire fi wt = getLazyByteString =<< calcLen where

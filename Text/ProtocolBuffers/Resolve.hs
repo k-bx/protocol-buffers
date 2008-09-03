@@ -194,8 +194,8 @@ withPackage [] (D.FileDescriptorProto {D.FileDescriptorProto.name=n}) =  err $
   "withPackage given an empty context"
 
 resolveFDP fdpIn =
-  let context = (\(x,_,_) -> x) (toContext fdpIn)
-  in resolveWithContext context fdpIn
+  let (context,_,names) = toContext fdpIn
+  in (resolveWithContext context fdpIn,names)
   
 -- process to get top level context for FDP and list of its imports
 toContext :: D.FileDescriptorProto -> (Context,Set.Set FilePath,[String])
