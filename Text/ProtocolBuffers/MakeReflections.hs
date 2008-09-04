@@ -1,3 +1,19 @@
+-- | The 'MakeReflections' module takes the 'FileDescriptorProto'
+-- output from 'Resolve' and produces a 'ProtoInfo' from
+-- 'Reflections'.  This also takes a Haskell module prefix and the
+-- proto's package namespace as input.  The output is suitable
+-- for passing to the 'Gen' module to produce the files.
+--
+-- This acheives several things: It moves the data from a nested tree
+-- to flat lists and maps. It moves the group information from the
+-- parent Descriptor to the actual Descriptor.  It moves the data out
+-- of Maybe types.  It converts Utf8 to String.  Keys known to extend
+-- a Descriptor are listed in that Descriptor.
+-- 
+-- In building the reflection info new things are computed. It changes
+-- dotted names to ProtoName with the outer prefix.  It parses the
+-- default value from the ByteString to a Haskell type.  The value of
+-- the tag on the wire is computed and so is its size on the wire.
 module Text.ProtocolBuffers.MakeReflections(makeProtoInfo,makeEnumInfo,makeDescriptorInfo) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
@@ -45,6 +61,8 @@ import qualified Data.Map as M(empty,fromListWith,lookup)
 import Data.Maybe(fromMaybe,catMaybes)
 import System.FilePath
 
+import Debug.Trace (trace)
+
 spanEndL f bs = let (a,b) = SC.spanEnd f (S.concat . LC.toChunks $ bs)
                 in (LC.fromChunks [a],LC.fromChunks [b])
 
@@ -80,7 +98,6 @@ dotPre s x@('.':xs)  | '.' == last s = s ++ xs
 dotPre s x | '.' == last s = s++x
            | otherwise = s++('.':x)
 
-
 makeProtoInfo :: String -> [String] -> D.FileDescriptorProto -> ProtoInfo
 makeProtoInfo prefix names
               fdp@(D.FileDescriptorProto
@@ -101,7 +118,7 @@ makeProtoInfo prefix names
   processMSG isGroup msg = 
     let getKnownKeys protoName = fromMaybe Seq.empty (M.lookup protoName allKeys)
         groups = collectedGroups msg
-        checkGroup x = elem (fromMaybe (error $ "no message name:\n"++show msg)
+        checkGroup x = elem (fromMaybe (error $ "Impossible? no message name in makeProtoInfo.processMSG.checkGroup:\n"++show msg)
                                        (D.DescriptorProto.name x))
                             groups
     in makeDescriptorInfo getKnownKeys prefix isGroup msg
@@ -142,7 +159,7 @@ makeDescriptorInfo getKnownKeys prefix isGroup
                        , D.DescriptorProto.extension_range = extension_range })
     = let di = DescriptorInfo protoName (toPath prefix rawName) isGroup
                               fieldInfos keyInfos extRangeList (getKnownKeys protoName)
-      in di
+      in di -- trace (toString rawName ++ "\n" ++ show di ++ "\n\n") $ di
   where protoName = toProtoName prefix rawName
         (fields,keys) = partition (\ f -> Nothing == (D.FieldDescriptorProto.extendee f)) . F.toList $ rawFields
         fieldInfos = Seq.fromList . map (toFieldInfo protoName) $ fields
@@ -193,7 +210,7 @@ toFieldInfo (ProtoName prefix mod parent)
 -- "Nothing" means no value specified
 -- A failure to parse a provided value will result in an error at the moment
 parseDefaultValue :: D.FieldDescriptorProto -> Maybe HsDefault
-parseDefaultValue d@(D.FieldDescriptorProto.FieldDescriptorProto
+parseDefaultValue f@(D.FieldDescriptorProto.FieldDescriptorProto
                      { D.FieldDescriptorProto.type' = type'
                      , D.FieldDescriptorProto.default_value = mayDef })
     = do bs <- mayDef
@@ -209,7 +226,7 @@ parseDefaultValue d@(D.FieldDescriptorProto.FieldDescriptorProto
                    TYPE_STRING  -> Just parseDefString
                    _            -> Just parseDefInteger
          case todo (utf8 bs) of
-           Nothing -> error ("Could not parse the default value for "++show d)
+           Nothing -> error $ "Could not parse as type "++ show t ++"the default value "++ show mayDef ++" for field "++show f
            Just value -> return value
 
 --- From here down is code used to parse the format of the default values in the .proto files

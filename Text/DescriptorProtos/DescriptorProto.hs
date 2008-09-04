@@ -2,10 +2,10 @@ module Text.DescriptorProtos.DescriptorProto (DescriptorProto(..)) where
 import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
+import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as DescriptorProtos.DescriptorProto (ExtensionRange)
 import qualified Text.DescriptorProtos.EnumDescriptorProto as DescriptorProtos (EnumDescriptorProto)
 import qualified Text.DescriptorProtos.FieldDescriptorProto as DescriptorProtos (FieldDescriptorProto)
 import qualified Text.DescriptorProtos.MessageOptions as DescriptorProtos (MessageOptions)
-import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as DescriptorProtos.DescriptorProto (ExtensionRange)
  
 data DescriptorProto = DescriptorProto{name :: P'.Maybe P'.Utf8, field :: P'.Seq DescriptorProtos.FieldDescriptorProto,
                                        extension :: P'.Seq DescriptorProtos.FieldDescriptorProto,

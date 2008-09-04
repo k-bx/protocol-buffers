@@ -35,6 +35,7 @@ data ProtoInfo = ProtoInfo { protoMod :: ProtoName
                            , enums :: [EnumInfo]
                            , knownKeyMap :: Map ProtoName (Seq FieldInfo)
                            }
+  deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , descFilePath :: [FilePath]
@@ -97,7 +98,9 @@ class ReflectDescriptor m where
           makeMessageInfo di = GetMessageInfo { requiredTags = Set.fromDistinctAscList . sort $
                                                   [ wireTag f | f <- F.toList (fields di), isRequired f]
                                               , allowedTags = Set.fromDistinctAscList . sort $
-                                                  [ wireTag f | f <- F.toList (fields di)] }
+                                                  [ wireTag f | f <- F.toList (fields di)] ++
+                                                  [ wireTag f | f <- F.toList (knownKeys di)]
+                                              }
   reflectDescriptorInfo :: m -> DescriptorInfo    -- Must not inspect argument
   parentOfDescriptor :: m -> Maybe DescriptorInfo -- Must not inspect argument
   parentOfDescriptor _ = Nothing

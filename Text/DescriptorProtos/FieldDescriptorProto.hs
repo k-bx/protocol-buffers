@@ -2,9 +2,9 @@ module Text.DescriptorProtos.FieldDescriptorProto (FieldDescriptorProto(..)) whe
 import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
-import qualified Text.DescriptorProtos.FieldOptions as DescriptorProtos (FieldOptions)
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Label as DescriptorProtos.FieldDescriptorProto (Label)
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type as DescriptorProtos.FieldDescriptorProto (Type)
+import qualified Text.DescriptorProtos.FieldOptions as DescriptorProtos (FieldOptions)
  
 data FieldDescriptorProto = FieldDescriptorProto{name :: P'.Maybe P'.Utf8, number :: P'.Maybe P'.Int32,
                                                  label :: P'.Maybe DescriptorProtos.FieldDescriptorProto.Label,

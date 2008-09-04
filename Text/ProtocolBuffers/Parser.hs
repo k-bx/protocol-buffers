@@ -204,7 +204,7 @@ message up = pName (U.fromString "message") >> do
   up =<< subParser (pChar '{' >> subMessage) (mergeEmpty {D.DescriptorProto.name=Just self})
 
 -- subMessage is also used to parse group declarations
-subMessage = (pChar '}') <|> (choice [ eol 
+subMessage = (pChar '}') <|> (choice [ eol
                                      , field upNestedMsg Nothing >>= upMsgField
                                      , message upNestedMsg
                                      , enum upNestedEnum
@@ -230,7 +230,7 @@ extend upGroup upField = pName (U.fromString "extend") >> do
   pChar '{'
   let rest = (field upGroup (Just typeExtendee) >>= upField) >> eols >> (pChar '}' <|> rest)
   eols >> rest
-   
+
 {-
   let first = (eol >> first) <|> ((field upGroup (Just typeExtendee) >>= upField)  >> rest)
       rest = pChar '}' <|> ((eol <|> (field upGroup (Just typeExtendee) >>= upField)) >> rest)
@@ -367,7 +367,7 @@ enum up = pName (U.fromString "enum") >> do
 enumOption = pOption >>= setOption >>= \p -> eol >> update' (\s -> s {D.EnumDescriptorProto.options=Just p})
   where
     setOption optName = do
-      old <- fmap (maybe mergeEmpty id . D.EnumDescriptorProto.options) getState
+      -- old <- fmap (maybe mergeEmpty id . D.EnumDescriptorProto.options) getState
       case optName of
         s -> unexpected $ "There are no options for enumerations (when this parser was written): "++s
 
@@ -405,7 +405,10 @@ service = pName (U.fromString "service") >> do
   f <- subParser (pChar '{' >> subRpc) (mergeEmpty {D.ServiceDescriptorProto.name=Just name})
   update' (\s -> s {D.FileDescriptorProto.service=D.FileDescriptorProto.service s |> f})
        
- where subRpc = pChar '}' <|> ((eol <|> rpc <|> (pOption >>= setOption)) >> subRpc)
+ where subRpc = pChar '}' <|> (choice [ eol
+                                      , rpc
+                                      , pOption >>= setOption
+                                      ] >> subRpc)
        rpc = pName (U.fromString "rpc") >> do
                name <- ident1
                input <- between (pChar '(') (pChar ')') ident1
@@ -419,4 +422,7 @@ service = pName (U.fromString "service") >> do
                          , D.MethodDescriptorProto.options=Nothing
                          }
                update' (\s -> s {D.ServiceDescriptorProto.method=D.ServiceDescriptorProto.method s |> m})
-       setOption = fail "There are no options for services (when this parser was written)"
+       setOption optName = do
+         -- old <- fmap (maybe mergeEmpty id . D.ServiceDescriptorProto.options) getState
+         case optName of
+           s -> unexpected $ "There are no options for services (when this parser was written): "++s
