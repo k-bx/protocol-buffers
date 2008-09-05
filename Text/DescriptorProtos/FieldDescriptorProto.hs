@@ -34,23 +34,39 @@ instance P'.Default FieldDescriptorProto where
         (P'.Just P'.defaultValue)
  
 instance P'.Wire FieldDescriptorProto where
-  wireSize 11 (FieldDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
-    = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 5 x'2 + P'.wireSizeOpt 1 14 x'3 + P'.wireSizeOpt 1 14 x'4 + P'.wireSizeOpt 1 9 x'5
-         + P'.wireSizeOpt 1 9 x'6
-         + P'.wireSizeOpt 1 9 x'7
-         + P'.wireSizeOpt 1 11 x'8)
-  wirePut 11 self'@(FieldDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
-    = do
-        P'.putSize (P'.wireSize 11 self')
-        P'.wirePutOpt 10 9 x'1
-        P'.wirePutOpt 24 5 x'2
-        P'.wirePutOpt 32 14 x'3
-        P'.wirePutOpt 40 14 x'4
-        P'.wirePutOpt 50 9 x'5
-        P'.wirePutOpt 18 9 x'6
-        P'.wirePutOpt 58 9 x'7
-        P'.wirePutOpt 66 11 x'8
-  wireGet 11 = P'.getMessage update'Self
+  wireSize ft' (FieldDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
+    = case ft' of
+        10 -> calc'Size
+        11 -> calc'Size
+    where
+        calc'Size
+          = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 5 x'2 + P'.wireSizeOpt 1 14 x'3 + P'.wireSizeOpt 1 14 x'4 +
+               P'.wireSizeOpt 1 9 x'5
+               + P'.wireSizeOpt 1 9 x'6
+               + P'.wireSizeOpt 1 9 x'7
+               + P'.wireSizeOpt 1 11 x'8)
+  wirePut ft' self'@(FieldDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
+    = case ft' of
+        10 -> put'Fields
+        11
+          -> do
+               P'.putSize (P'.wireSize 11 self')
+               put'Fields
+    where
+        put'Fields
+          = do
+              P'.wirePutOpt 10 9 x'1
+              P'.wirePutOpt 24 5 x'2
+              P'.wirePutOpt 32 14 x'3
+              P'.wirePutOpt 40 14 x'4
+              P'.wirePutOpt 50 9 x'5
+              P'.wirePutOpt 18 9 x'6
+              P'.wirePutOpt 58 9 x'7
+              P'.wirePutOpt 66 11 x'8
+  wireGet ft'
+    = case ft' of
+        10 -> P'.getBareMessage update'Self
+        11 -> P'.getMessage update'Self
     where
         update'Self field'Number old'Self
           = case field'Number of

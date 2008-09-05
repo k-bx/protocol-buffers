@@ -14,12 +14,27 @@ instance P'.Default ServiceOptions where
   defaultValue = ServiceOptions
  
 instance P'.Wire ServiceOptions where
-  wireSize 11 (ServiceOptions) = 0
-  wirePut 11 self'@(ServiceOptions)
-    = do
-        P'.putSize (P'.wireSize 11 self')
-        P'.return ()
-  wireGet 11 = P'.getMessage update'Self
+  wireSize ft' (ServiceOptions)
+    = case ft' of
+        10 -> calc'Size
+        11 -> calc'Size
+    where
+        calc'Size = 0
+  wirePut ft' self'@(ServiceOptions)
+    = case ft' of
+        10 -> put'Fields
+        11
+          -> do
+               P'.putSize (P'.wireSize 11 self')
+               put'Fields
+    where
+        put'Fields
+          = do
+              P'.return ()
+  wireGet ft'
+    = case ft' of
+        10 -> P'.getBareMessage update'Self
+        11 -> P'.getMessage update'Self
     where
         update'Self field'Number old'Self
           = case field'Number of

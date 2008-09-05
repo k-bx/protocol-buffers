@@ -15,13 +15,28 @@ instance P'.Default FieldOptions where
   defaultValue = FieldOptions (P'.Just P'.defaultValue) (P'.Just P'.defaultValue)
  
 instance P'.Wire FieldOptions where
-  wireSize 11 (FieldOptions x'1 x'2) = (P'.wireSizeOpt 1 14 x'1 + P'.wireSizeOpt 1 9 x'2)
-  wirePut 11 self'@(FieldOptions x'1 x'2)
-    = do
-        P'.putSize (P'.wireSize 11 self')
-        P'.wirePutOpt 8 14 x'1
-        P'.wirePutOpt 74 9 x'2
-  wireGet 11 = P'.getMessage update'Self
+  wireSize ft' (FieldOptions x'1 x'2)
+    = case ft' of
+        10 -> calc'Size
+        11 -> calc'Size
+    where
+        calc'Size = (P'.wireSizeOpt 1 14 x'1 + P'.wireSizeOpt 1 9 x'2)
+  wirePut ft' self'@(FieldOptions x'1 x'2)
+    = case ft' of
+        10 -> put'Fields
+        11
+          -> do
+               P'.putSize (P'.wireSize 11 self')
+               put'Fields
+    where
+        put'Fields
+          = do
+              P'.wirePutOpt 8 14 x'1
+              P'.wirePutOpt 74 9 x'2
+  wireGet ft'
+    = case ft' of
+        10 -> P'.getBareMessage update'Self
+        11 -> P'.getMessage update'Self
     where
         update'Self field'Number old'Self
           = case field'Number of

@@ -101,8 +101,7 @@ mangleFieldName = fmap (Utf8 . U.fromString . fixname . toString)
         fixname xs = xs
 
 reserved :: [String]
-reserved = ["case","class","data","default","deriving","do","else"
-           ,"foreign"
+reserved = ["case","class","data","default","deriving","do","else","foreign"
            ,"if","import","in","infix","infixl","infixr","instance"
            ,"let","module","newtype","of","then","type","where"] -- also reserved is "_"
 
@@ -141,7 +140,7 @@ test = do
 toString = U.toString . utf8
 
 -- loadProto is a slight kludge.  It takes a single search directory
--- and an initial .proto file path raltive to this directory.  It
+-- and an initial .proto file path relative to this directory.  It
 -- loads this file and then chases the imports.  If an import loop is
 -- detected then it aborts.  A state monad is used to memorize
 -- previous invocations of 'load'.  A progress message of the filepath
@@ -151,35 +150,42 @@ toString = U.toString . utf8
 -- contain duplicates: File A imports B and C, and File B imports C
 -- will cause the context for C to be included twice in contexts.
 --
--- The result of load works, but may be changed in the future.  It returns
--- a map from the files (without the search directory) to a pair of the
--- resolved descriptor and a set of directly imported files.  The dependency
--- tree is thus explicit, and no duplication is possible in the Maps or Sets.
+-- The result type of loadProto is enough for now, but may be changed
+-- in the future.  It returns a map from the files (relative to the
+-- search directory) to a pair of the resolved descriptor and a set of
+-- directly imported files.  The dependency tree is thus implicit.
 loadProto :: FilePath -> FilePath -> IO (Map FilePath (D.FileDescriptorProto,Set.Set FilePath))
-loadProto protoDir protoFile = fmap answer $ execStateT (load (Set.singleton protoFile) protoFile) mempty where
-  answer built = fmap snd built
+loadProto protoDir protoFile = fmap answer $ execStateT (load Set.empty protoFile) mempty where
+  answer built = fmap snd built -- drop the fst Context from the pair in the memorized map
   loadFailed f msg = fail . unlines $ ["Parsing proto:",f,"has failed with message",msg]
-  load :: Set.Set FilePath -> FilePath -> StateT (Map FilePath (Context,(D.FileDescriptorProto,Set.Set FilePath)))
-                                                            IO (Context,(D.FileDescriptorProto,Set.Set FilePath))
-  load parents file = do
-    built <- get -- check memorized results
+  load :: Set.Set FilePath  -- set of "parents" that is used by load to detect an import loop. Not memorized.
+       -> FilePath          -- the FilePath to load and resolve (may used memorized result of load)
+       -> StateT (Map FilePath (Context,(D.FileDescriptorProto,Set.Set FilePath))) -- memorized results of load
+                 IO (Context  -- Only used during load. This is the view of the file as an imported namespace.
+                    ,(D.FileDescriptorProto  -- This is the resolved version of the FileDescriptorProto
+                     ,Set.Set FilePath))  -- This is the list of file directly imported by the FilePath argument
+  load parentsIn file = do
+    let toRead = combine protoDir file
+    built <- get -- to check memorized results
+    when (Set.member file parentsIn)
+         (loadFailed toRead (unlines ["imports failed: recursive loop detected"
+                                     ,unlines . map show . M.assocs $ built,show parentsIn]))
+    let parents = Set.insert file parentsIn
     case M.lookup file built of
       Just result -> return result
       Nothing -> do
-        let toRead = combine protoDir file
-        liftIO . print $ "Loading filepath "++toRead
-        proto <- liftIO $ LC.readFile toRead
+        proto <- liftIO $ do print ("Loading filepath: "++toRead)
+                             LC.readFile toRead
         parsed <- either (loadFailed toRead . show) return (parseProto toRead proto)
         let (context,imports,_) = toContext parsed
-        when (not (Set.null (Set.intersection parents imports)))
-             (loadFailed toRead (unlines ["imports failed: recursive loop detected",unlines . map show . M.assocs $ built
-                                         ,show parents,show imports]))
-        let parents' = Set.union parents imports
-        contexts <- fmap (concatMap fst) . mapM (load parents') . Set.toList $ imports
+        contexts <- fmap (concatMap fst)    -- keep only the fst Context's
+                    . mapM (load parents)   -- recursively chase imports
+                    . Set.toList $ imports
         let result = ( withPackage context parsed ++ contexts
                      , ( resolveWithContext (context++contexts) parsed
                        , imports ) )
-        modify (\built' -> M.insert file result built') -- add to memorized results
+        -- add to memorized results, the "load" above may have updated/invalidated the "built <- get" state above
+        modify (\built' -> M.insert file result built')
         return result
 
 -- Imported names must be fully qualified in the .proto file by the

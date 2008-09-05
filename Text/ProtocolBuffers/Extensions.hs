@@ -1,5 +1,5 @@
 module Text.ProtocolBuffers.Extensions(ExtKey(..),MessageAPI(..),defaultKeyValue,wireSizeExtField
-                                      ,wirePutExtField,GPB,getMessageExt,Key(..),ExtField,ExtendMessage(..)
+                                      ,wirePutExtField,GPB,getMessageExt,getBareMessageExt,Key(..),ExtField,ExtendMessage(..)
                                       ) where
 
 import Data.Map(Map)
@@ -352,6 +352,11 @@ getMessageExt :: (Mergeable message, ReflectDescriptor message,Typeable message,
               => (FieldId -> message -> Get message)           -- handles "allowed" wireTags
               -> Get message
 getMessageExt = getMessageWith extension
+
+getBareMessageExt :: (Mergeable message, ReflectDescriptor message,Typeable message,ExtendMessage message)
+                  => (FieldId -> message -> Get message)           -- handles "allowed" wireTags
+                  -> Get message
+getBareMessageExt = getBareMessageWith extension
 
 -- get a value from the wire into the message's ExtField
 -- no validity check is performed on FieldId versus any range

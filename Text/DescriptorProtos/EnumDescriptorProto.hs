@@ -18,14 +18,29 @@ instance P'.Default EnumDescriptorProto where
   defaultValue = EnumDescriptorProto (P'.Just P'.defaultValue) P'.defaultValue (P'.Just P'.defaultValue)
  
 instance P'.Wire EnumDescriptorProto where
-  wireSize 11 (EnumDescriptorProto x'1 x'2 x'3) = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeRep 1 11 x'2 + P'.wireSizeOpt 1 11 x'3)
-  wirePut 11 self'@(EnumDescriptorProto x'1 x'2 x'3)
-    = do
-        P'.putSize (P'.wireSize 11 self')
-        P'.wirePutOpt 10 9 x'1
-        P'.wirePutRep 18 11 x'2
-        P'.wirePutOpt 26 11 x'3
-  wireGet 11 = P'.getMessage update'Self
+  wireSize ft' (EnumDescriptorProto x'1 x'2 x'3)
+    = case ft' of
+        10 -> calc'Size
+        11 -> calc'Size
+    where
+        calc'Size = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeRep 1 11 x'2 + P'.wireSizeOpt 1 11 x'3)
+  wirePut ft' self'@(EnumDescriptorProto x'1 x'2 x'3)
+    = case ft' of
+        10 -> put'Fields
+        11
+          -> do
+               P'.putSize (P'.wireSize 11 self')
+               put'Fields
+    where
+        put'Fields
+          = do
+              P'.wirePutOpt 10 9 x'1
+              P'.wirePutRep 18 11 x'2
+              P'.wirePutOpt 26 11 x'3
+  wireGet ft'
+    = case ft' of
+        10 -> P'.getBareMessage update'Self
+        11 -> P'.getMessage update'Self
     where
         update'Self field'Number old'Self
           = case field'Number of

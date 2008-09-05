@@ -30,6 +30,7 @@ data ProtoName = ProtoName { haskellPrefix :: String  -- Haskell specific prefix
 
 data ProtoInfo = ProtoInfo { protoMod :: ProtoName
                            , protoFilePath :: [FilePath]
+                           , protoSource :: String
                            , extensionKeys :: Seq KeyInfo
                            , messages :: [DescriptorInfo]
                            , enums :: [EnumInfo]
@@ -102,6 +103,3 @@ class ReflectDescriptor m where
                                                   [ wireTag f | f <- F.toList (knownKeys di)]
                                               }
   reflectDescriptorInfo :: m -> DescriptorInfo    -- Must not inspect argument
-  parentOfDescriptor :: m -> Maybe DescriptorInfo -- Must not inspect argument
-  parentOfDescriptor _ = Nothing
-

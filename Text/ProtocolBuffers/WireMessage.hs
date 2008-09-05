@@ -12,12 +12,13 @@
  -}
 module Text.ProtocolBuffers.WireMessage
     ( messageSize,messagePut,messageGet,messagePutM,messageGetM
-    , runGet,runGetOnLazy,runPut,size'Varint,toWireType,toWireTag,mkWireTag
+    , bareMessageSize,bareMessagePut,bareMessageGet,bareMessagePutM,bareMessageGetM
+    , runGet,runGetOnLazy,getFromBS,runPut,size'Varint,toWireType,toWireTag,mkWireTag
     , Wire(..),WireSize,Put,Get
     , putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep
-    , getMessage,getBareMessage,getMessageWith
+    , getMessage,getBareMessage,getMessageWith,getBareMessageWith
     , unknownField
     , castWord64ToDouble,castWord32ToFloat,castDoubleToWord64,castFloatToWord32
     , zzEncode64,zzEncode32,zzDecode64,zzDecode32
@@ -49,6 +50,11 @@ import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,lookAhead,spanOf,s
 -- import qualified Data.ByteString.Lazy as BS (unpack)
 -- import Numeric
 
+getFromBS :: Get r -> ByteString -> r
+getFromBS parser bs = case resolve (Get.runGet parser bs) of
+                        Left msg -> error msg
+                        Right (r,_) -> r
+
 runGetOnLazy :: Get r -> ByteString -> Either String (r,ByteString)
 runGetOnLazy parser bs = resolve (Get.runGet parser bs)
 
@@ -57,36 +63,37 @@ resolve (Get.Failed i s) = Left ("Failed at "++show i++" : "++s)
 resolve (Get.Finished bs _i r) = Right (r,bs)
 resolve (Get.Partial {}) = Left ("Not enough input")
 
--- Make IncrementalGet run on the Lazy ByteStrings
-{-
-data LazyResult r = Failed String
-                  | Finished ByteString r
-                  | Partial (ByteString -> LazyResult r)
-
-runGetOnLazy :: Get r r -> ByteString -> Either String (r,ByteString)
-runGetOnLazy parser (BS.Chunk x rest) = resolve rest $ Get.runGet parser x
-runGetOnLazy parser BS.Empty = resolve BS.Empty $ Get.runGet parser mempty
-
-resolve :: ByteString -> Get.Result r -> Either String (r,ByteString)
-resolve _rest (Get.Failed s)              = Left s
-resolve rest (Get.Finished b s)           = Right (s,(BS.chunk b rest))
-resolve (BS.Chunk x rest) (Get.Partial f) = resolve rest (f x)
-resolve BS.Empty (Get.Partial f)          = Left "Insufficient input"
--}
 prependMessageSize :: WireSize -> WireSize
 prependMessageSize n = n + size'Varint n
+
+-- External user API for writing and reading messages
+
+bareMessageSize :: (ReflectDescriptor msg,Wire msg) => msg -> WireSize
+bareMessageSize msg = wireSize 10 msg
 
 messageSize :: (ReflectDescriptor msg,Wire msg) => msg -> WireSize
 messageSize msg = prependMessageSize (wireSize 11 msg)
 
+bareMessagePut :: (ReflectDescriptor msg, Wire msg) => msg -> ByteString
+bareMessagePut msg = runPut (bareMessagePutM msg)
+
 messagePut :: (ReflectDescriptor msg, Wire msg) => msg -> ByteString
-messagePut msg = runPut (wirePut 11 msg)
+messagePut msg = runPut (messagePutM msg)
+
+bareMessagePutM :: (ReflectDescriptor msg, Wire msg) => msg -> Put
+bareMessagePutM msg = wirePut 10 msg
 
 messagePutM :: (ReflectDescriptor msg, Wire msg) => msg -> Put
 messagePutM msg = wirePut 11 msg
 
+bareMessageGet :: (ReflectDescriptor msg, Wire msg) => ByteString -> Either String (msg,ByteString)
+bareMessageGet bs = runGetOnLazy (bareMessageGetM) bs
+
 messageGet :: (ReflectDescriptor msg, Wire msg) => ByteString -> Either String (msg,ByteString)
-messageGet bs = runGetOnLazy (wireGet 11) bs
+messageGet bs = runGetOnLazy (messageGetM) bs
+
+bareMessageGetM :: (ReflectDescriptor msg, Wire msg) => Get msg
+bareMessageGetM = wireGet 10
 
 messageGetM :: (ReflectDescriptor msg, Wire msg) => Get msg
 messageGetM = wireGet 11
@@ -148,7 +155,7 @@ getMessage = getMessageWith unknown
 -- getMessage assumes that it still needs to read the Varint encoded length of the message.
 getMessageWith :: forall message. (Mergeable message, ReflectDescriptor message)
                => (FieldId -> WireType -> message -> Get message) -- handle wireTags that updater cannot
-               -> (FieldId -> message -> Get message)           -- handles "allowed" wireTags
+               -> (FieldId -> message -> Get message)             -- handles "allowed" wireTags
                -> Get message
 getMessageWith punt updater = do
   messageLength <- getVarInt
@@ -193,7 +200,7 @@ getMessageWith punt updater = do
 unknown :: (Typeable a,ReflectDescriptor a) => FieldId -> WireType -> a -> Get a
 unknown fieldId wireType initialMessage = do
   here <- bytesRead
-  fail ("Text.ProtocolBuffers.WireMessage.getMessage: Unknown wire tag read (type,fieldId,wireType,here) == "
+  fail ("Text.ProtocolBuffers.WireMessage.unkown: Unknown wire tag read (type,fieldId,wireType,here) == "
         ++ show (typeOf initialMessage,fieldId,wireType,here) ++ " when processing "
         ++ (show . descName . reflectDescriptorInfo $ initialMessage))
 
@@ -202,10 +209,16 @@ unknown fieldId wireType initialMessage = do
 -- getBareMessage assumes that it does needs to read the Varint encoded length of the message.
 -- getBareMessage will consume the entire ByteString it is operating on, or until it
 -- finds any STOP_GROUP tag
-getBareMessage :: forall message. (Mergeable message, ReflectDescriptor message)
-           => (FieldId -> message -> Get message)
-           -> Get message
-getBareMessage updater = go required initialMessage
+getBareMessage :: forall message. (Typeable message, Mergeable message, ReflectDescriptor message)
+               => (FieldId -> message -> Get message)             -- handles "allowed" wireTags
+               -> Get message
+getBareMessage = getBareMessageWith unknown
+
+getBareMessageWith :: forall message. (Mergeable message, ReflectDescriptor message)
+                   => (FieldId -> WireType -> message -> Get message) -- handle wireTags that updater cannot
+                   -> (FieldId -> message -> Get message)             -- handles "allowed" wireTags
+                   -> Get message
+getBareMessageWith punt updater = go required initialMessage
  where
   go reqs message | Set.null reqs = go' message
                   | otherwise = do
@@ -215,7 +228,7 @@ getBareMessage updater = go required initialMessage
         wireTag <- fmap WireTag getWord32be -- get tag off wire
         let (fieldId,wireType) = splitWireTag wireTag
         if wireType == 4 then notEnoughData -- END_GROUP too soon
-          else if Set.notMember wireTag allowed then go'unknown fieldId wireTag
+          else if Set.notMember wireTag allowed then punt fieldId wireType message
                  else let reqs' = Set.delete wireTag reqs
                       in updater fieldId message >>= go reqs'
   go' message = do
@@ -225,13 +238,10 @@ getBareMessage updater = go required initialMessage
         wireTag <- fmap WireTag getWord32be -- get tag off wire
         let (fieldId,wireType) = splitWireTag wireTag -- WIRETYPE_END_GROUP
         if wireType == 4 then return message
-          else if Set.notMember wireTag allowed then go'unknown fieldId wireType
+          else if Set.notMember wireTag allowed then punt fieldId wireType message
                  else updater fieldId message >>= go'
   initialMessage = mergeEmpty
   (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
-  go'unknown fieldId wireType = fail ("Text.ProtocolBuffers.WireMessage.getBareMessage: Unknown wire tag read: "
-                                   ++ show (fieldId,wireType) ++ " when processing "
-                                   ++ (show . descName . reflectDescriptorInfo $ initialMessage))
   notEnoughData = fail ("Text.ProtocolBuffers.WireMessage.getBareMessage: Required fields missing when processing "
                         ++ (show . descName . reflectDescriptorInfo $ initialMessage))
 

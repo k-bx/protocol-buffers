@@ -35,23 +35,39 @@ instance P'.Default FileDescriptorProto where
         (P'.Just P'.defaultValue)
  
 instance P'.Wire FileDescriptorProto where
-  wireSize 11 (FileDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
-    = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 9 x'2 + P'.wireSizeRep 1 9 x'3 + P'.wireSizeRep 1 11 x'4 + P'.wireSizeRep 1 11 x'5
-         + P'.wireSizeRep 1 11 x'6
-         + P'.wireSizeRep 1 11 x'7
-         + P'.wireSizeOpt 1 11 x'8)
-  wirePut 11 self'@(FileDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
-    = do
-        P'.putSize (P'.wireSize 11 self')
-        P'.wirePutOpt 10 9 x'1
-        P'.wirePutOpt 18 9 x'2
-        P'.wirePutRep 26 9 x'3
-        P'.wirePutRep 34 11 x'4
-        P'.wirePutRep 42 11 x'5
-        P'.wirePutRep 50 11 x'6
-        P'.wirePutRep 58 11 x'7
-        P'.wirePutOpt 66 11 x'8
-  wireGet 11 = P'.getMessage update'Self
+  wireSize ft' (FileDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
+    = case ft' of
+        10 -> calc'Size
+        11 -> calc'Size
+    where
+        calc'Size
+          = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 9 x'2 + P'.wireSizeRep 1 9 x'3 + P'.wireSizeRep 1 11 x'4 +
+               P'.wireSizeRep 1 11 x'5
+               + P'.wireSizeRep 1 11 x'6
+               + P'.wireSizeRep 1 11 x'7
+               + P'.wireSizeOpt 1 11 x'8)
+  wirePut ft' self'@(FileDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
+    = case ft' of
+        10 -> put'Fields
+        11
+          -> do
+               P'.putSize (P'.wireSize 11 self')
+               put'Fields
+    where
+        put'Fields
+          = do
+              P'.wirePutOpt 10 9 x'1
+              P'.wirePutOpt 18 9 x'2
+              P'.wirePutRep 26 9 x'3
+              P'.wirePutRep 34 11 x'4
+              P'.wirePutRep 42 11 x'5
+              P'.wirePutRep 50 11 x'6
+              P'.wirePutRep 58 11 x'7
+              P'.wirePutOpt 66 11 x'8
+  wireGet ft'
+    = case ft' of
+        10 -> P'.getBareMessage update'Self
+        11 -> P'.getMessage update'Self
     where
         update'Self field'Number old'Self
           = case field'Number of

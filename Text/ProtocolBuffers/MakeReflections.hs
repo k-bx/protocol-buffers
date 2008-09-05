@@ -14,7 +14,7 @@
 -- dotted names to ProtoName with the outer prefix.  It parses the
 -- default value from the ByteString to a Haskell type.  The value of
 -- the tag on the wire is computed and so is its size on the wire.
-module Text.ProtocolBuffers.MakeReflections(makeProtoInfo,makeEnumInfo,makeDescriptorInfo) where
+module Text.ProtocolBuffers.MakeReflections(makeProtoInfo,makeEnumInfo,makeDescriptorInfo,serializeFDP) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
@@ -44,7 +44,7 @@ import qualified Text.DescriptorProtos.FileOptions                    as D.FileO
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Reflections
 import Text.ProtocolBuffers.Extensions
-import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag)
+import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag,runPut)
 
 import qualified Data.Foldable as F(foldr,toList)
 import qualified Data.ByteString as S(concat)
@@ -84,11 +84,15 @@ toPath :: String -> Utf8 -> [FilePath]
 toPath prefix name = splitDirectories (combine a b)
   where a = joinPath . splitDot $ prefix
         b = flip addExtension "hs" . joinPath . splitDot . U.toString . utf8 $ name
-        splitDot :: String -> [FilePath]
-        splitDot = unfoldr s where
-            s ('.':xs) = s xs
-            s [] = Nothing
-            s xs = Just (span ('.'/=) xs)
+
+splitDot :: String -> [FilePath]
+splitDot = unfoldr s where
+    s ('.':xs) = s xs
+    s [] = Nothing
+    s xs = Just (span ('.'/=) xs)
+
+pnPath :: ProtoName -> [FilePath]
+pnPath (ProtoName a b c) = splitDirectories .flip addExtension "hs" . joinPath . splitDot $ dotPre a (dotPre b c)
 
 dotPre :: String -> String -> String
 dotPre "" x = x
@@ -98,11 +102,14 @@ dotPre s x@('.':xs)  | '.' == last s = s ++ xs
 dotPre s x | '.' == last s = s++x
            | otherwise = s++('.':x)
 
+serializeFDP :: D.FileDescriptorProto -> ByteString
+serializeFDP fdp = runPut (wirePut 11 fdp)
+
 makeProtoInfo :: String -> [String] -> D.FileDescriptorProto -> ProtoInfo
 makeProtoInfo prefix names
               fdp@(D.FileDescriptorProto
                     { D.FileDescriptorProto.name = Just rawName })
-     = ProtoInfo protoName (toPath prefix rawName) keyInfos allMessages allEnums allKeys where
+     = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allKeys where
   protoName = case names of
                 [] -> ProtoName prefix "" ""
                 [name] -> ProtoName prefix "" name

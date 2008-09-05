@@ -14,12 +14,27 @@ instance P'.Default MethodOptions where
   defaultValue = MethodOptions
  
 instance P'.Wire MethodOptions where
-  wireSize 11 (MethodOptions) = 0
-  wirePut 11 self'@(MethodOptions)
-    = do
-        P'.putSize (P'.wireSize 11 self')
-        P'.return ()
-  wireGet 11 = P'.getMessage update'Self
+  wireSize ft' (MethodOptions)
+    = case ft' of
+        10 -> calc'Size
+        11 -> calc'Size
+    where
+        calc'Size = 0
+  wirePut ft' self'@(MethodOptions)
+    = case ft' of
+        10 -> put'Fields
+        11
+          -> do
+               P'.putSize (P'.wireSize 11 self')
+               put'Fields
+    where
+        put'Fields
+          = do
+              P'.return ()
+  wireGet ft'
+    = case ft' of
+        10 -> P'.getBareMessage update'Self
+        11 -> P'.getMessage update'Self
     where
         update'Self field'Number old'Self
           = case field'Number of
