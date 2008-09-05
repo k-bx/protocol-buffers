@@ -221,14 +221,13 @@ protoModule pri@(ProtoInfo protoName _ _ keyInfos _ _ _) fdpBS
         exportNames = map (HsEVar . UnQual . HsIdent) ["protoInfo","fileDescriptorProto"]
         imports = protoImports ++ map formatImport (protoImport pri)
     in HsModule src (Module (fqName protoName)) (Just (exportKeys++exportNames)) imports (keysX protoName keyInfos ++ embed'ProtoInfo pri ++ embed'fdpBS fdpBS)
-  where protoImports = [ HsImportDecl src (Module "Text.DescriptorProtos.FileDescriptorProto") False Nothing
+  where protoImports = standardImports (not . Seq.null . extensionKeys $ pri) ++
+                       [ HsImportDecl src (Module "Text.DescriptorProtos.FileDescriptorProto") False Nothing
                            (Just (False,[HsIAbs (HsIdent "FileDescriptorProto")]))
                        , HsImportDecl src (Module "Text.ProtocolBuffers.Reflections") False Nothing
                            (Just (False,[HsIAbs (HsIdent "ProtoInfo")]))
-                       , HsImportDecl src (Module "Text.ProtocolBuffers.WireMessage") False Nothing
+                       , HsImportDecl src (Module "Text.ProtocolBuffers.WireMessage") True (Just (Module "P'"))
                            (Just (False,[HsIVar (HsIdent "wireGet,getFromBS")]))
-                       , HsImportDecl src (Module "Data.ByteString.Lazy.Char8") False Nothing
-                           (Just (False,[HsIAbs (HsIdent "pack")]))
                        ]
         formatImport (m,t) = HsImportDecl src (Module (dotPre (haskellPrefix protoName) (dotPre m t))) True
                                (Just (Module m)) (Just (False,[HsIAbs (HsIdent t)]))
@@ -249,15 +248,15 @@ embed'ProtoInfo :: ProtoInfo -> [HsDecl]
 embed'ProtoInfo pri = [ myType, myValue ]
   where myType = HsTypeSig src [ HsIdent "protoInfo" ] (HsQualType [] (HsTyCon (UnQual (HsIdent "ProtoInfo"))))
         myValue = HsPatBind src (HsPApp (UnQual (HsIdent "protoInfo")) []) (HsUnGuardedRhs $
-                    lvar "read" $$ HsLit (HsString (show pri))) noWhere
+                    pvar "read" $$ HsLit (HsString (show pri))) noWhere
 
 embed'fdpBS :: ByteString -> [HsDecl]
 embed'fdpBS bs = [ myType, myValue ]
   where myType = HsTypeSig src [ HsIdent "fileDescriptorProto" ] (HsQualType [] (HsTyCon (UnQual (HsIdent "FileDescriptorProto"))))
         myValue = HsPatBind src (HsPApp (UnQual (HsIdent "fileDescriptorProto")) []) (HsUnGuardedRhs $
-                    lvar "getFromBS" $$
-                      HsParen (lvar "wireGet" $$ litInt 11) $$ 
-                      HsParen (lvar "pack" $$ HsLit (HsString (LC.unpack bs)))) noWhere
+                    pvar "getFromBS" $$
+                      HsParen (pvar "wireGet" $$ litInt 11) $$ 
+                      HsParen (pvar "pack" $$ HsLit (HsString (LC.unpack bs)))) noWhere
 
 descriptorModule :: DescriptorInfo -> HsModule
 descriptorModule di
