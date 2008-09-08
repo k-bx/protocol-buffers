@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        0.2.0
+version:        0.2.1
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -25,7 +25,7 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Library
-  ghc-options:  -fvia-C
+  ghc-options:  -fvia-C -O2
   exposed-modules: Text.DescriptorProtos
                    Text.DescriptorProtos.DescriptorProto.ExtensionRange
                    Text.DescriptorProtos.DescriptorProto
@@ -87,7 +87,21 @@ Library
                    MultiParamTypeClasses,
                    FunctionalDependencies
 
--- executable:
+Executable hprotoc
+  Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
+  build-depends: protocol-buffers >= 0.2.0
+  extensions:      DeriveDataTypeable,
+                   EmptyDataDecls,
+                   FlexibleInstances,
+                   GADTs,
+                   GeneralizedNewtypeDeriving,
+                   MagicHash,
+                   PatternGuards,
+                   RankNTypes,
+                   ScopedTypeVariables,
+                   TypeSynonymInstances,
+                   MultiParamTypeClasses,
+                   FunctionalDependencies
 --   main-is: Text.ProtocolBuffers.ProtoCompile
---  build-depends: protocol-buffers > 0.2.0
+
 
