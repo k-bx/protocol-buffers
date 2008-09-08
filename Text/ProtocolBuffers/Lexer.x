@@ -54,7 +54,7 @@ $special    = [=\(\)\,\;\[\]\{\}]
 
 {
 line :: AlexPosn -> Int
-line (AlexPn _byte line' _col) = line'
+line (AlexPn _byte lineNum _col) = lineNum
 {-# INLINE line #-}
 
 data Lexed = L_Integer !Int !Integer
@@ -75,8 +75,8 @@ getLinePos x = case x of
                  L_Error   i _ -> i
 
 -- 'errAt' is the only access to L_Error, so I can see where it is created with pos
-errAt pos msg =  L_Error (line' pos) $ "Lexical error (in Text.ProtocolBuffers.Lexer): "++ msg ++ ", at "++see pos where
-  see (AlexPn char line' col) = "character "++show char++" line' "++show line'++" column "++show col++"."
+errAt pos msg =  L_Error (line pos) $ "Lexical error (in Text.ProtocolBuffers.Lexer): "++ msg ++ ", at "++see pos where
+  see (AlexPn char line col) = "character "++show char++" line "++show line++" column "++show col++"."
 dieAt msg pos _s = errAt pos msg
 wtfAt pos s = errAt pos $ "unknown character "++show c++" (decimal "++show (ord c)++")"
   where (c:_) = ByteString.unpack s
@@ -185,24 +185,3 @@ sDecode = op one where
     where maxChar = toInteger (fromEnum (maxBound ::Char)) -- 0x10FFFF
 
 }
-
-
-{-
--- see google's stubs/strutil.cc lines 398-449/1121 and C99 specification
--- This mainly targets three digit octal codes
-cEncode :: [Word8] -> [Char]
-cEncode = concatMap one where
-  one :: Word8 -> [Char]
-  one x | (32 <= x) && (x < 127) = [toEnum .  fromEnum $  x]  -- main case of unescaped value
-  one 9 = sl  't'
-  one 10 = sl 'n'
-  one 13 = sl 'r'
-  one 34 = sl '"'
-  one 39 = sl '\''
-  one 92 = sl '\\'
-  one 0 = '\\':"000"
-  one x | x < 8 = '\\':'0':'0':(showOct x "")
-        | x < 64 = '\\':'0':(showOct x "")
-        | otherwise = '\\':(showOct x "")
-  sl c = ['\\',c]
--}

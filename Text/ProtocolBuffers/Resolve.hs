@@ -139,6 +139,16 @@ test = do
 -}
 toString = U.toString . utf8
 
+findFile :: [FilePath] -> FilePath -> IO (Maybe FilePath)
+findFile paths target = do
+  let test [] = return Nothing
+      test (path:rest) = do
+        let fullname = combine path target
+        found <- doesFileExist fullname
+        if found then return (Just fullname)
+          else test rest
+  test paths
+
 -- loadProto is a slight kludge.  It takes a single search directory
 -- and an initial .proto file path relative to this directory.  It
 -- loads this file and then chases the imports.  If an import loop is
@@ -154,36 +164,42 @@ toString = U.toString . utf8
 -- in the future.  It returns a map from the files (relative to the
 -- search directory) to a pair of the resolved descriptor and a set of
 -- directly imported files.  The dependency tree is thus implicit.
-loadProto :: FilePath -> FilePath -> IO (Map FilePath (D.FileDescriptorProto,Set.Set FilePath))
-loadProto protoDir protoFile = fmap answer $ execStateT (load Set.empty protoFile) mempty where
+loadProto :: [FilePath] -> FilePath -> IO (Map FilePath (D.FileDescriptorProto,Set.Set FilePath,[String]))
+loadProto protoDirs protoFile = fmap answer $ execStateT (load Set.empty protoFile) mempty where
   answer built = fmap snd built -- drop the fst Context from the pair in the memorized map
   loadFailed f msg = fail . unlines $ ["Parsing proto:",f,"has failed with message",msg]
   load :: Set.Set FilePath  -- set of "parents" that is used by load to detect an import loop. Not memorized.
        -> FilePath          -- the FilePath to load and resolve (may used memorized result of load)
-       -> StateT (Map FilePath (Context,(D.FileDescriptorProto,Set.Set FilePath))) -- memorized results of load
+       -> StateT (Map FilePath (Context,(D.FileDescriptorProto,Set.Set FilePath,[String]))) -- memorized results of load
                  IO (Context  -- Only used during load. This is the view of the file as an imported namespace.
                     ,(D.FileDescriptorProto  -- This is the resolved version of the FileDescriptorProto
-                     ,Set.Set FilePath))  -- This is the list of file directly imported by the FilePath argument
+                     ,Set.Set FilePath
+                     ,[String]))  -- This is the list of file directly imported by the FilePath argument
   load parentsIn file = do
-    let toRead = combine protoDir file
     built <- get -- to check memorized results
     when (Set.member file parentsIn)
-         (loadFailed toRead (unlines ["imports failed: recursive loop detected"
-                                     ,unlines . map show . M.assocs $ built,show parentsIn]))
+         (loadFailed file (unlines ["imports failed: recursive loop detected"
+                                   ,unlines . map show . M.assocs $ built,show parentsIn]))
     let parents = Set.insert file parentsIn
     case M.lookup file built of
       Just result -> return result
       Nothing -> do
+        mayToRead <- liftIO $ findFile protoDirs file
+        when (Nothing == mayToRead) $
+           loadFailed file (unlines (["loading failed, could not find file: "++show file
+                                     ,"Searched paths were:"] ++ map ("  "++) protoDirs))
+        let (Just toRead) = mayToRead
         proto <- liftIO $ do print ("Loading filepath: "++toRead)
                              LC.readFile toRead
         parsed <- either (loadFailed toRead . show) return (parseProto toRead proto)
-        let (context,imports,_) = toContext parsed
+        let (context,imports,names) = toContext parsed
         contexts <- fmap (concatMap fst)    -- keep only the fst Context's
                     . mapM (load parents)   -- recursively chase imports
                     . Set.toList $ imports
         let result = ( withPackage context parsed ++ contexts
                      , ( resolveWithContext (context++contexts) parsed
-                       , imports ) )
+                       , imports
+                       , names ) )
         -- add to memorized results, the "load" above may have updated/invalidated the "built <- get" state above
         modify (\built' -> M.insert file result built')
         return result
@@ -295,7 +311,9 @@ resolveWithContext protoContext protoIn =
              self = resolve cx (D.DescriptorProto.name msg)
       processFLD cx mp f = f { D.FieldDescriptorProto.name          = mangleFieldName (D.FieldDescriptorProto.name f)
                              , D.FieldDescriptorProto.type'         = new_type'
-                             , D.FieldDescriptorProto.type_name     = fmap fst r2
+                             , D.FieldDescriptorProto.type_name     = if new_type' == Just TYPE_GROUP
+                                                                        then groupName
+                                                                        else fmap fst r2
                              , D.FieldDescriptorProto.default_value = checkEnumDefault
                              , D.FieldDescriptorProto.extendee      = fmap newExt (D.FieldDescriptorProto.extendee f)}
        where newExt :: Utf8 -> Utf8
@@ -328,6 +346,12 @@ resolveWithContext protoContext protoIn =
                                                  || new_type' == Just TYPE_GROUP ->
                                     rerr $ "Problem found: You set a default value for a MESSAGE or GROUP: "++unlines [show def,show f]
                                   (maybeDef,_) -> maybeDef
+  
+             groupName = case mp of
+                           Nothing -> resolve cx (D.FieldDescriptorProto.name f)
+                           Just p -> do n <- D.FieldDescriptorProto.name f
+                                        return (Utf8 . U.fromString . (toString p++) . ('.':) . mangleModuleName . toString $ n)
+
       processENM cx e = e { D.EnumDescriptorProto.name = resolve cx (D.EnumDescriptorProto.name e) }
       processSRV cx s = s { D.ServiceDescriptorProto.name   = resolve cx (D.ServiceDescriptorProto.name s)
                           , D.ServiceDescriptorProto.method = fmap (processMTD cx) (D.ServiceDescriptorProto.method s) }

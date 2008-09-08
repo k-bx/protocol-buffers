@@ -32,7 +32,8 @@ import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),DescriptorInfo(..)
 import qualified Data.ByteString.Lazy.Char8 as LC(unpack)
 import Data.Char(isUpper)
 import qualified Data.Foldable as F(foldr,toList)
-import Data.List(sort,group,foldl',foldl1')
+import Data.List(sort,sortBy,group,foldl',foldl1')
+import Data.Function(on)
 import Language.Haskell.Pretty(prettyPrint)
 import Language.Haskell.Syntax
 import qualified Data.Map as M
@@ -448,8 +449,8 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
         mine = HsPApp me . take len . map (\n -> HsPVar (HsIdent ("x'" ++ show n))) $ [1..]
         vars = take len . map (\n -> lvar ("x'" ++ show n)) $ [1..]
 
-        cases g m = HsCase (lvar "ft'") [ HsAlt src (litIntP 10) (HsUnGuardedAlt g) noWhere
-                                        , HsAlt src (litIntP 11) (HsUnGuardedAlt m) noWhere]
+        cases g m = HsCase (lvar "ft'") [ HsAlt src (litIntP 10) (HsUnGuardedAlt g) noWhere  -- groups
+                                        , HsAlt src (litIntP 11) (HsUnGuardedAlt m) noWhere] -- messages
 
         sizeCases = HsUnGuardedRhs (cases (lvar "calc'Size") (lvar "calc'Size"))
         whereCalcSize = [HsFunBind [HsMatch src (HsIdent "calc'Size") [] (HsUnGuardedRhs sizes) noWhere]]
@@ -474,8 +475,12 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
         putStmts = putStmtsContent
           where putStmtsContent | null putStmtsListExt = [HsQualifier $ pvar "return" $$ HsCon (Special HsUnitCon)]
                                 | otherwise = putStmtsListExt
-                putStmtsListExt | extensible = putStmtsList ++ [ HsQualifier $ pvar "wirePutExtField" $$ last vars ]
-                                | otherwise = putStmtsList
+                putStmtsListExt | extensible = sortedPutStmtsList ++ [ HsQualifier $ pvar "wirePutExtField" $$ last vars ]
+                                | otherwise = sortedPutStmtsList
+                sortedPutStmtsList = map snd                                          -- remove number
+                                     . sortBy (compare `on` fst)                      -- sort by number
+                                     . zip (map fieldNumber . F.toList $ fieldInfos)  -- add number as fst
+                                     $ putStmtsList
                 putStmtsList = zipWith toPut vars . F.toList $ fieldInfos
         toPut var fi = let f = if isRequired fi then "wirePutReq"
                                  else if canRepeat fi then "wirePutRep"

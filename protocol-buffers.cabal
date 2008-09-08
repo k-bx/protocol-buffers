@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        0.1.5
+version:        0.2.0
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -25,6 +25,7 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Library
+  ghc-options:  -fvia-C
   exposed-modules: Text.DescriptorProtos
                    Text.DescriptorProtos.DescriptorProto.ExtensionRange
                    Text.DescriptorProtos.DescriptorProto
@@ -45,18 +46,20 @@ Library
                    Text.DescriptorProtos.MethodOptions
                    Text.DescriptorProtos.ServiceDescriptorProto
                    Text.DescriptorProtos.ServiceOptions
+                   Text.ProtocolBuffers.Get
                    Text.ProtocolBuffers.Basic
-                   Text.ProtocolBuffers.BootStrap
                    Text.ProtocolBuffers.Default
+                   Text.ProtocolBuffers.Mergeable
+                   Text.ProtocolBuffers.Reflections
+                   Text.ProtocolBuffers.WireMessage
                    Text.ProtocolBuffers.Gen
                    Text.ProtocolBuffers.Header
                    Text.ProtocolBuffers.Instances
                    Text.ProtocolBuffers.Lexer
-                   Text.ProtocolBuffers.Mergeable
                    Text.ProtocolBuffers.Parser
-                   Text.ProtocolBuffers.Reflections
                    Text.ProtocolBuffers.Resolve
-                   Text.ProtocolBuffers.WireMessage
+                   Text.ProtocolBuffers.Extensions
+                   Text.ProtocolBuffers.MakeReflections
 
   if flag(small_base)
         build-depends: base >= 3,
@@ -79,5 +82,12 @@ Library
                    MagicHash,
                    PatternGuards,
                    RankNTypes,
-                   ScopedTypeVariables
+                   ScopedTypeVariables,
+                   TypeSynonymInstances,
+                   MultiParamTypeClasses,
+                   FunctionalDependencies
+
+-- executable:
+--   main-is: Text.ProtocolBuffers.ProtoCompile
+--  build-depends: protocol-buffers > 0.2.0
 
