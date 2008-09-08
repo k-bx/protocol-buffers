@@ -41,7 +41,7 @@
 -- The three 'lookAhead' and 'lookAheadM' and 'lookAheadE' functions are
 -- the same as the ones in binary's Data.Binary.Get.
 --
-module Text.ProtocolBuffers.MyGetSimplified
+module Text.ProtocolBuffers.Get
     (Get,runGet,Result(..)
      -- main primitives
     ,ensureBytes,getStorable,getLazyByteString,suspendUntilComplete
@@ -114,7 +114,6 @@ data FrameStack b = ErrorFrame (String -> S -> Result b) -- top level handler
                                  S  -- stored state to pass to handler
                                  (Seq L.ByteString)  -- additional input to hass to handler
                                  (FrameStack b)  -- earlier/deeper/outer handlers
-                  | FutureFrame S (Seq L.ByteString) (FrameStack b) -- for look ahead
 
 type Success b a = (a -> S -> FrameStack b -> Result b)
 
@@ -137,11 +136,11 @@ newtype Get a = Get {
 --
 -- IMPORTANT: Any FutureFrame at the top level(s) is discarded by throwError.
 setCheckpoint,useCheckpoint,clearCheckpoint :: Get ()
-setCheckpoint = Get $ \ sc s pc -> sc () s (FutureFrame s mempty pc)
-useCheckpoint = Get $ \ sc (S _ _ _) (FutureFrame s future pc) ->
+setCheckpoint = Get $ \ sc s pc -> sc () s (HandlerFrame Nothing s mempty pc)
+useCheckpoint = Get $ \ sc (S _ _ _) (HandlerFrame Nothing s future pc) ->
   let (S {top=ss, current=bs, consumed=n}) = collect s future
   in sc () (S ss bs n) pc
-clearCheckpoint = Get $ \ sc s (FutureFrame _s _future pc) -> sc () s pc
+clearCheckpoint = Get $ \ sc s (HandlerFrame Nothing _s _future pc) -> sc () s pc
 
 -- | 'lookAhead' runs the @todo@ action and then rewinds only the
 -- BinaryParser state.  Any new input from 'suspend' or changes from
@@ -204,9 +203,6 @@ instance Show (FrameStack b) where
   showsPrec _ (HandlerFrame _ s future pc) = ("(HandlerFrame <> ("++)
                                      . shows s . (") ("++) . shows future . (") ("++)
                                      . shows pc . (")"++)
-  showsPrec _ (FutureFrame s future pc) =  ("(FutureFrame <s->FrameStack b e s m->e->m b> ("++)
-                                     . shows s . (") ("++) . shows future . (") ("++)
-                                     . shows pc . (")"++)
 
 -- | 'runGet' is the simple executor
 runGet :: Get a -> L.ByteString -> Result a
@@ -238,15 +234,6 @@ putAvailable bsNew = Get $ \ sc (S _ss _bs n) pc ->
               whole | balance < 0 = error "Impossible? Cannot rebuild HandlerFrame in MyGet.putAvailable: balance is negative!"
                     | otherwise = L.take balance $ L.chunk ss1 bs1 `mappend` F.foldr mappend mempty future
               sNew | balance /= L.length whole = error "Impossible? MyGet.putAvailable.rebuild.sNew HandlerFrame assertion failed."
-                   | otherwise = case mappend whole bsNew of
-                                   L.Empty -> S mempty mempty n1
-                                   L.Chunk ss2 bs2 -> S ss2 bs2 n1
-      rebuild (FutureFrame (S ss1 bs1 n1) future pc') =
-               FutureFrame sNew mempty (rebuild pc')
-        where balance = n - n1
-              whole | balance < 0 = error "Impossible? Cannot rebuild FutureFrame in MyGet.putAvailable: balance is negative!"
-                    | otherwise = L.take balance $ L.chunk ss1 bs1 `mappend` F.foldr mappend mempty future
-              sNew | balance /= L.length whole = error "Impossible? MyGet.putAvailable.rebuild.sNew FutureFrame assertion failed."
                    | otherwise = case mappend whole bsNew of
                                    L.Empty -> S mempty mempty n1
                                    L.Chunk ss2 bs2 -> S ss2 bs2 n1
@@ -331,18 +318,13 @@ instance MonadSuspend Get where
            -- addFuture puts the new data in 'future' where throwError's collect can find and use it
            addFuture bs (HandlerFrame catcher s future pc) =
                          HandlerFrame catcher s (future |> bs) (addFuture bs pc)
-           addFuture bs (FutureFrame s future pc) =
-                         FutureFrame s (future |> bs) (addFuture bs pc)
            addFuture _bs x@(ErrorFrame {}) = x
            -- Once suspend is given Nothing, it remembers this and always returns False
            checkBool (ErrorFrame _ b) = b
            checkBool (HandlerFrame _ _ _ pc) = checkBool pc
-           checkBool (FutureFrame _ _ pc) = checkBool pc
            rememberFalse (ErrorFrame ec _) = ErrorFrame ec False
            rememberFalse (HandlerFrame catcher s future pc) =
                           HandlerFrame catcher s future (rememberFalse pc)
-           rememberFalse (FutureFrame s future pc) =
-                          FutureFrame s future (rememberFalse pc)
           
 -- A unique sort of command...
 
@@ -356,7 +338,6 @@ discardInnerHandler :: Get ()
 discardInnerHandler = Get $ \ sc s pcIn ->
   let pcOut = case pcIn of ErrorFrame {} -> pcIn
                            HandlerFrame _ _ _ pc' -> pc'
-                           FutureFrame _ _ pc' -> pc'
   in sc () s pcOut
 {-# INLINE discardInnerHandler #-}
 
@@ -372,7 +353,6 @@ discardAllHandlers :: Get ()
 discardAllHandlers = Get $ \ sc s pcIn ->
   let base pc@(ErrorFrame {}) = pc
       base (HandlerFrame _ _ _ pc) = base pc
-      base (FutureFrame _ _ pc) = base pc
   in sc () s (base pcIn)
 {-# INLINE discardAllHandlers #-}
 -}
@@ -546,7 +526,7 @@ instance MonadError String Get where
   throwError msg = Get $ \_sc  s pcIn ->
     let go (ErrorFrame ec _) = ec msg s
         go (HandlerFrame (Just catcher) s1 future pc1) = catcher (collect s1 future) pc1 msg
-        go (FutureFrame _ _ pc1) = go pc1 -- discard FutureFrame(s) between inner scope and a handler or error frame
+        go (HandlerFrame Nothing _s1 _future pc1) = go pc1
     in go pcIn
 
   catchError mayFail handler = Get $ \sc s pc ->
@@ -658,7 +638,6 @@ countPC :: ({-Show user,-} Monad m) => Get Int
 countPC = Get $ \ sc s pc ->
   let go (ErrorFrame {}) i = i
       go (HandlerFrame _ _ _ pc') i = go pc' $! succ i
-      go (FutureFrame _ _ pc') i = go pc' $! succ i
   in sc (go pc 0) s pc
 
 {- testDepth result on my machine:
