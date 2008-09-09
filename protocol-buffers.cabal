@@ -50,20 +50,21 @@ Library
                    Text.DescriptorProtos.MethodOptions
                    Text.DescriptorProtos.ServiceDescriptorProto
                    Text.DescriptorProtos.ServiceOptions
-                   Text.ProtocolBuffers.Basic
-                   Text.ProtocolBuffers.Default
-                   Text.ProtocolBuffers.Extensions
+                   Text.ProtocolBuffers
+                   Text.ProtocolBuffers.Basic;
+                   Text.ProtocolBuffers.Default;
+                   Text.ProtocolBuffers.Extensions;
                    Text.ProtocolBuffers.Gen
-                   Text.ProtocolBuffers.Get
-                   Text.ProtocolBuffers.Header
+                   Text.ProtocolBuffers.Get;
+                   Text.ProtocolBuffers.Header;
                    Text.ProtocolBuffers.Instances
                    Text.ProtocolBuffers.Lexer
                    Text.ProtocolBuffers.MakeReflections
-                   Text.ProtocolBuffers.Mergeable
+                   Text.ProtocolBuffers.Mergeable;
                    Text.ProtocolBuffers.Parser
-                   Text.ProtocolBuffers.Reflections
+                   Text.ProtocolBuffers.Reflections;
                    Text.ProtocolBuffers.Resolve
-                   Text.ProtocolBuffers.WireMessage
+                   Text.ProtocolBuffers.WireMessage;
 
   if flag(small_base)
         build-depends: base >= 3,
