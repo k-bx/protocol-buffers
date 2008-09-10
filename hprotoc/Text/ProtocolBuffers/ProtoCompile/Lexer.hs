@@ -1,7 +1,7 @@
 {-# OPTIONS -cpp #-}
 {-# LINE 1 "Text/ProtocolBuffers/Lexer.x" #-}
 
-module Text.ProtocolBuffers.Lexer (Lexed(..), alexScanTokens,getLinePos)  where
+module Text.ProtocolBuffers.ProtoCompile.Lexer (Lexed(..), alexScanTokens,getLinePos)  where
 
 import Control.Monad.Error()
 import Codec.Binary.UTF8.String(encode)

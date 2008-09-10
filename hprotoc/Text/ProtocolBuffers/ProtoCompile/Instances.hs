@@ -1,4 +1,4 @@
-module Text.ProtocolBuffers.Instances(showsType,parseType,showsLabel,parseLabel) where
+module Text.ProtocolBuffers.ProtoCompile.Instances(showsType,parseType,showsLabel,parseLabel) where
 
 import Text.ParserCombinators.ReadP
 import Text.DescriptorProtos.FieldDescriptorProto.Type(Type(..))

@@ -3,16 +3,17 @@ module Main where
 
 import qualified Data.Map as M
 import Data.Version
+import Language.Haskell.Pretty(prettyPrintStyleMode,Style(..),Mode(..),PPHsMode(..),PPLayout(..),defaultMode)
 import System.Console.GetOpt
 import System.Environment
 import System.Directory
 import System.FilePath
 
-import Text.ProtocolBuffers.Gen(protoModule,descriptorModule,enumModule)
-import Text.ProtocolBuffers.Resolve(loadProto)
 import Text.ProtocolBuffers.Reflections(ProtoInfo(..),DescriptorInfo(..),EnumInfo(..))
-import Text.ProtocolBuffers.MakeReflections(makeProtoInfo,serializeFDP)
-import Language.Haskell.Pretty(prettyPrintStyleMode,Style(..),Mode(..),PPHsMode(..),PPLayout(..),defaultMode)
+
+import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModule,enumModule)
+import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto)
+import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 
 -- | Version of protocol-buffers.
 -- The version tags that I have used are ["unreleased"]

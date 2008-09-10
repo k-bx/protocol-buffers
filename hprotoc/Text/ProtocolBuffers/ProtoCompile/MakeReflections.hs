@@ -14,7 +14,7 @@
 -- dotted names to ProtoName with the outer prefix.  It parses the
 -- default value from the ByteString to a Haskell type.  The value of
 -- the tag on the wire is computed and so is its size on the wire.
-module Text.ProtocolBuffers.MakeReflections(makeProtoInfo,makeEnumInfo,makeDescriptorInfo,serializeFDP) where
+module Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,makeEnumInfo,makeDescriptorInfo,serializeFDP) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))

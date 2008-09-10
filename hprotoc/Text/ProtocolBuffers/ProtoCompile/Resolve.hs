@@ -12,7 +12,7 @@
 -- TODO: treat names with leading "." as already "fully-qualified"
 --       make sure the optional fields that will be needed are not Nothing (or punt to Reflections.hs)
 --       look for repeated use of the same name (before and after mangling)
-module Text.ProtocolBuffers.Resolve(loadProto,resolveFDP) where
+module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,resolveFDP) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
@@ -37,7 +37,7 @@ import qualified Text.DescriptorProtos.MethodDescriptorProto          as D.Metho
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D.ServiceDescriptorProto(ServiceDescriptorProto(..))
 
 import Text.ProtocolBuffers.Header
-import Text.ProtocolBuffers.Parser
+import Text.ProtocolBuffers.ProtoCompile.Parser
 
 import Control.Monad
 import Control.Monad.State

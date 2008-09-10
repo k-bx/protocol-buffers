@@ -24,7 +24,7 @@
   // TODO(kenton):  Base-64 encode?
   optional string default_value = 7;
 -}
-module Text.ProtocolBuffers.Gen(protoModule,descriptorModule,enumModule,prettyPrint) where
+module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModule,enumModule,prettyPrint) where
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),DescriptorInfo(..),ProtoInfo(..),EnumInfo(..),ProtoName(..),FieldInfo(..))

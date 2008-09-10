@@ -225,7 +225,7 @@ getBareMessageWith punt updater = go required initialMessage
     done <- isEmpty
     if done then notEnoughData
       else do
-        wireTag <- fmap WireTag getWord32be -- get tag off wire
+        wireTag <- fmap WireTag getVarInt -- get tag off wire
         let (fieldId,wireType) = splitWireTag wireTag
         if wireType == 4 then notEnoughData -- END_GROUP too soon
           else if Set.notMember wireTag allowed then punt fieldId wireType message
@@ -235,7 +235,7 @@ getBareMessageWith punt updater = go required initialMessage
     done <- isEmpty
     if done then return message
       else do
-        wireTag <- fmap WireTag getWord32be -- get tag off wire
+        wireTag <- fmap WireTag getVarInt -- get tag off wire
         let (fieldId,wireType) = splitWireTag wireTag -- WIRETYPE_END_GROUP
         if wireType == 4 then return message
           else if Set.notMember wireTag allowed then punt fieldId wireType message

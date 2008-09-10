@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        0.2.1
+version:        0.2.3
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -11,16 +11,16 @@ stability:      Experimental
 homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
 package-url:    http://darcs.haskell.org/packages/protocol-buffers2/
 synopsis:       Parse Google Protocol Buffer specifications
-description:    Parse http://code.google.com/apis/protocolbuffers/docs/proto.html
-  and perhaps general haskell code to use them
+description:    Parse <http://code.google.com/apis/protocolbuffers/docs/proto.html> and generate Haskell code.
 category:       Text
-Tested-With: GHC ==6.8.3
-data-files:     descriptor.proto
+Tested-With:    GHC ==6.8.3
+--data-files:     
 extra-source-files: Setup.hs
                     doc.txt
                     TODO
                     README
                     Skeleton.hs-boot
+                    descriptor.proto
                     google/protobuf/unittest.proto
                     google/protobuf/unittest_import.proto
 -- extra-tmp-files:
@@ -29,42 +29,17 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Library
+-- fvia-C is needed on OS X powerPC (G4) with WireMessage.hs to prevent a GHC crash
   ghc-options:  -fvia-C -O2
-  exposed-modules: Text.DescriptorProtos
-                   Text.DescriptorProtos.DescriptorProto
-                   Text.DescriptorProtos.DescriptorProto.ExtensionRange
-                   Text.DescriptorProtos.EnumDescriptorProto
-                   Text.DescriptorProtos.EnumOptions
-                   Text.DescriptorProtos.EnumValueDescriptorProto
-                   Text.DescriptorProtos.EnumValueOptions
-                   Text.DescriptorProtos.FieldDescriptorProto
-                   Text.DescriptorProtos.FieldDescriptorProto.Label
-                   Text.DescriptorProtos.FieldDescriptorProto.Type
-                   Text.DescriptorProtos.FieldOptions
-                   Text.DescriptorProtos.FieldOptions.CType
-                   Text.DescriptorProtos.FileDescriptorProto
-                   Text.DescriptorProtos.FileOptions
-                   Text.DescriptorProtos.FileOptions.OptimizeMode
-                   Text.DescriptorProtos.MessageOptions
-                   Text.DescriptorProtos.MethodDescriptorProto
-                   Text.DescriptorProtos.MethodOptions
-                   Text.DescriptorProtos.ServiceDescriptorProto
-                   Text.DescriptorProtos.ServiceOptions
-                   Text.ProtocolBuffers
-                   Text.ProtocolBuffers.Basic;
-                   Text.ProtocolBuffers.Default;
-                   Text.ProtocolBuffers.Extensions;
-                   Text.ProtocolBuffers.Gen
-                   Text.ProtocolBuffers.Get;
-                   Text.ProtocolBuffers.Header;
-                   Text.ProtocolBuffers.Instances
-                   Text.ProtocolBuffers.Lexer
-                   Text.ProtocolBuffers.MakeReflections
-                   Text.ProtocolBuffers.Mergeable;
-                   Text.ProtocolBuffers.Parser
-                   Text.ProtocolBuffers.Reflections;
-                   Text.ProtocolBuffers.Resolve
-                   Text.ProtocolBuffers.WireMessage;
+  exposed-modules: Text.ProtocolBuffers
+                   Text.ProtocolBuffers.Basic
+                   Text.ProtocolBuffers.Default
+                   Text.ProtocolBuffers.Extensions
+                   Text.ProtocolBuffers.Get
+                   Text.ProtocolBuffers.Header
+                   Text.ProtocolBuffers.Mergeable
+                   Text.ProtocolBuffers.Reflections
+                   Text.ProtocolBuffers.WireMessage
 
   if flag(small_base)
         build-depends: base >= 3,
@@ -79,6 +54,7 @@ Library
         build-depends: base < 3
 
   build-depends:   binary, parsec, utf8-string, haskell-src
+-- Most of these are needed for protocol-buffers (Get and WireMessage.hs)
   extensions:      DeriveDataTypeable,
                    EmptyDataDecls,
                    FlexibleInstances,

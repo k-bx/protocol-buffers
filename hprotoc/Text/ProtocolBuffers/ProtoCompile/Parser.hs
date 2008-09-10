@@ -1,4 +1,4 @@
-module Text.ProtocolBuffers.Parser(pbParse,parseProto,filename1,filename2) where
+module Text.ProtocolBuffers.ProtoCompile.Parser(pbParse,parseProto,filename1,filename2) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
@@ -23,10 +23,12 @@ import qualified Text.DescriptorProtos.MethodDescriptorProto          as D.Metho
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D.ServiceDescriptorProto(ServiceDescriptorProto(..))
 
 import Text.ProtocolBuffers.Basic
-import Text.ProtocolBuffers.Lexer(Lexed(..),alexScanTokens,getLinePos)
 import Text.ProtocolBuffers.Header(ByteString,Int32,Int64,Word32,Word64
                                   ,mergeEmpty,ReflectEnum(reflectEnumInfo),enumName)
-import Text.ProtocolBuffers.Instances(parseLabel,parseType)
+
+import Text.ProtocolBuffers.ProtoCompile.Lexer(Lexed(..),alexScanTokens,getLinePos)
+import Text.ProtocolBuffers.ProtoCompile.Instances(parseLabel,parseType)
+
 import Control.Monad(when,liftM3)
 import qualified Data.ByteString.Lazy as L(unpack)
 import qualified Data.ByteString.Lazy.Char8 as LC(notElem,head,readFile)

@@ -1,5 +1,11 @@
--- | This exposes the client API
-module Text.ProtocolBuffers where
+-- | "Text.ProtocolBuffers" exposes the client API.  This merely re-exports parts of the
+-- other modules in protocol-buffers.
+module Text.ProtocolBuffers(
+    module Text.ProtocolBuffers.Basic
+  , module Text.ProtocolBuffers.Extensions
+  , module Text.ProtocolBuffers.Reflections
+  , module Text.ProtocolBuffers.WireMessage
+  ) where
 
 import Text.ProtocolBuffers.Basic(Seq,Utf8(..),ByteString,Int32,Int64,Word32,Word64
                                  ,WireTag,FieldId,WireType,FieldType,EnumCode,WireSize
