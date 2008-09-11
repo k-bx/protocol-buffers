@@ -8,7 +8,7 @@
 -- descriptor.proto running.
 --
 -- Mangling: For the current moment, assume the mangling is done in a prior pass:
---   (*) Uppercase all module names and type names
+--   (*) Uppercase all module names and type names and enum constants
 --   (*) lowercase all field names
 --   (*) add a prime after all field names than conflict with reserved words
 --
@@ -345,7 +345,8 @@ defToSyntax tc x =
                      | otherwise -> HsLit (HsFrac r)
     HsDef'Integer i | i < 0 -> HsParen $ HsLit (HsInt i)
                     | otherwise -> HsLit (HsInt i)
-       
+    HsDef'Enum s -> HsParen $ pvar "read" $$ HsLit (HsString s)
+
 descriptorX :: DescriptorInfo -> HsDecl
 descriptorX di = HsDataDecl src [] name [] [con] derives
   where self = descName di

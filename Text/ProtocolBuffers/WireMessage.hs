@@ -12,7 +12,7 @@
  -}
 module Text.ProtocolBuffers.WireMessage
     ( messageSize,messagePut,messageGet,messagePutM,messageGetM
-    , bareMessageSize,bareMessagePut,bareMessageGet,bareMessagePutM,bareMessageGetM
+    , messageWithLengthSize,messageWithLengthPut,messageWithLengthGet,messageWithLengthPutM,messageWithLengthGetM
     , runGet,runGetOnLazy,getFromBS,runPut,size'Varint,toWireType,toWireTag,mkWireTag
     , Wire(..),WireSize,Put,Get
     , putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag
@@ -68,39 +68,38 @@ prependMessageSize n = n + size'Varint n
 
 -- External user API for writing and reading messages
 
-bareMessageSize :: (ReflectDescriptor msg,Wire msg) => msg -> WireSize
-bareMessageSize msg = wireSize 10 msg
-
 messageSize :: (ReflectDescriptor msg,Wire msg) => msg -> WireSize
-messageSize msg = prependMessageSize (wireSize 11 msg)
+messageSize msg = wireSize 10 msg
 
-bareMessagePut :: (ReflectDescriptor msg, Wire msg) => msg -> ByteString
-bareMessagePut msg = runPut (bareMessagePutM msg)
+messageWithLengthSize :: (ReflectDescriptor msg,Wire msg) => msg -> WireSize
+messageWithLengthSize msg = prependMessageSize (wireSize 11 msg) -- XXX todo: change semantics of wireSize 11
 
 messagePut :: (ReflectDescriptor msg, Wire msg) => msg -> ByteString
 messagePut msg = runPut (messagePutM msg)
 
-bareMessagePutM :: (ReflectDescriptor msg, Wire msg) => msg -> Put
-bareMessagePutM msg = wirePut 10 msg
+messageWithLengthPut :: (ReflectDescriptor msg, Wire msg) => msg -> ByteString
+messageWithLengthPut msg = runPut (messageWithLengthPutM msg)
 
 messagePutM :: (ReflectDescriptor msg, Wire msg) => msg -> Put
-messagePutM msg = wirePut 11 msg
+messagePutM msg = wirePut 10 msg
 
-bareMessageGet :: (ReflectDescriptor msg, Wire msg) => ByteString -> Either String (msg,ByteString)
-bareMessageGet bs = runGetOnLazy (bareMessageGetM) bs
+messageWithLengthPutM :: (ReflectDescriptor msg, Wire msg) => msg -> Put
+messageWithLengthPutM msg = wirePut 11 msg
 
 messageGet :: (ReflectDescriptor msg, Wire msg) => ByteString -> Either String (msg,ByteString)
 messageGet bs = runGetOnLazy (messageGetM) bs
 
-bareMessageGetM :: (ReflectDescriptor msg, Wire msg) => Get msg
-bareMessageGetM = wireGet 10
+messageWithLengthGet :: (ReflectDescriptor msg, Wire msg) => ByteString -> Either String (msg,ByteString)
+messageWithLengthGet bs = runGetOnLazy (messageWithLengthGetM) bs
 
 messageGetM :: (ReflectDescriptor msg, Wire msg) => Get msg
-messageGetM = wireGet 11
+messageGetM = wireGet 10
+
+messageWithLengthGetM :: (ReflectDescriptor msg, Wire msg) => Get msg
+messageWithLengthGetM = wireGet 11
 
 {-# INLINE wirePutReq #-}
 wirePutReq :: Wire b => WireTag -> FieldType -> b -> Put
--- -- -- wirePutReq wireTag 11 b = putVarUInt (getWireTag wireTag) >> putVarUInt (wireSize 11 b) >> wirePut 11 b
 wirePutReq wireTag 10 b = let startTag = getWireTag wireTag
                               endTag = succ startTag
                           in putVarUInt startTag >> wirePut 10 b >> putVarUInt endTag
@@ -117,9 +116,8 @@ wirePutRep wireTag fieldType bs = F.forM_ bs (\b -> wirePutReq wireTag fieldType
 
 {-# INLINE wireSizeReq #-}
 wireSizeReq :: Wire b => Int64 -> FieldType -> b -> Int64
--- -- -- wireSizeReq tagSize 11 v = tagSize + prependMessageSize (wireSize 11 v)
 wireSizeReq tagSize 10 v = tagSize + wireSize 10 v + tagSize
-wireSizeReq tagSize 11 v = tagSize + prependMessageSize (wireSize 11 v)
+wireSizeReq tagSize 11 v = tagSize + prependMessageSize (wireSize 11 v)  -- XXX todo: change semantics of wireSize 11
 wireSizeReq tagSize  i v = tagSize + wireSize i v
 
 {-# INLINE wireSizeOpt #-}

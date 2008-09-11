@@ -58,32 +58,33 @@ import System.FilePath
 err s = error $ "Text.ProtocolBuffers.Resolve fatal error encountered, message:\n"++indent s
   where indent = unlines . map (\s -> ' ':' ':s) . lines
 
-newlineBefore s = go where
-  go [] = []
-  go (x:xs) | x `elem` s = '\n':x:go xs
-            | otherwise = x:go xs
-
 encodeModuleNames :: [String] -> Utf8
 encodeModuleNames [] = Utf8 mempty
 encodeModuleNames xs = Utf8 . U.fromString . foldr1 (\a b -> a ++ '.':b) $ xs
 
-mangleModuleNames :: Utf8 -> [String]
-mangleModuleNames bs = map mangleModuleName . splitDot . toString $ bs
-
 mangleCap :: Maybe Utf8 -> [String]
 mangleCap = mangleModuleNames . fromMaybe (Utf8 mempty)
+  where mangleModuleNames :: Utf8 -> [String]
+        mangleModuleNames bs = map mangleModuleName . splitDot . toString $ bs
+        splitDot :: String -> [String]
+        splitDot = unfoldr s where
+          s ('.':xs) = s xs
+          s [] = Nothing
+          s xs = Just (span ('.'/=) xs)
 
 mangleCap1 :: Maybe Utf8 -> String
-mangleCap1 = mangleModuleName . toString . fromMaybe (Utf8 mempty)
+mangleCap1 Nothing = ""
+mangleCap1 (Just u) = mangleModuleName . toString $ u
 
-splitDot :: String -> [String]
-splitDot = unfoldr s where
-  s ('.':xs) = s xs
-  s [] = Nothing
-  s xs = Just (span ('.'/=) xs)
+mangleEnums :: Seq D.EnumValueDescriptorProto -> Seq D.EnumValueDescriptorProto
+mangleEnums s =  fmap fixEnum s
+  where fixEnum v = v { D.EnumValueDescriptorProto.name = mangleEnum (D.EnumValueDescriptorProto.name v)}
+
+mangleEnum :: Maybe Utf8 -> Maybe Utf8
+mangleEnum = fmap (Utf8 . U.fromString . mangleModuleName . toString)
 
 mangleModuleName :: String -> String
-mangleModuleName [] = "Empty'Name"
+mangleModuleName [] = "Empty'Name" -- XXX
 mangleModuleName ('_':xs) = "U'"++xs
 mangleModuleName (x:xs) | isLower x = let x' = toUpper x
                                       in if isLower x' then err ("subborn lower case"++show (x:xs))
@@ -92,18 +93,17 @@ mangleModuleName xs = xs
 
 mangleFieldName :: Maybe Utf8 -> Maybe Utf8
 mangleFieldName = fmap (Utf8 . U.fromString . fixname . toString)
-  where fixname [] = "empty'name"
+  where fixname [] = "empty'name" -- XXX
         fixname ('_':xs) = "u'"++xs
         fixname (x:xs) | isUpper x = let x' = toLower x
                                      in if isUpper x' then err ("stubborn upper case: "++show (x:xs))
                                           else fixname (x':xs)
         fixname xs | xs `elem` reserved = xs ++ "'"
         fixname xs = xs
-
-reserved :: [String]
-reserved = ["case","class","data","default","deriving","do","else","foreign"
-           ,"if","import","in","infix","infixl","infixr","instance"
-           ,"let","module","newtype","of","then","type","where"] -- also reserved is "_"
+        reserved :: [String]
+        reserved = ["case","class","data","default","deriving","do","else","foreign"
+                   ,"if","import","in","infix","infixl","infixr","instance"
+                   ,"let","module","newtype","of","then","type","where"] -- also reserved is "_"
 
 checkER :: [(Int32,Int32)] -> Int32 -> Bool
 checkER ers fid = any (`inRange` fid) ers
@@ -130,13 +130,6 @@ type Resolver = Context -> ByteString -> ByteString
 seeContext :: Context -> [String] 
 seeContext cx = map ((++"[]") . concatMap (\k -> show k ++ ", ") . M.keys . unNameSpace) cx
 
-{-
-data Box a = Box a
-instance Show (Box a) where show (Box {}) = "Box"
-test = do
-  (Right fdp) <- pbParse filename2
-  return (Box (fdp,resolveFDP fdp))
--}
 toString = U.toString . utf8
 
 findFile :: [FilePath] -> FilePath -> IO (Maybe FilePath)
@@ -244,7 +237,7 @@ toContext protoIn =
                             dMsgs = F.foldr ((:) . msgNames ss') dEnums (D.DescriptorProto.nested_type dIn)
                             dEnums = F.foldr ((:) . enumNames ss') [] (D.DescriptorProto.enum_type dIn)
                         in ( s1 , (ss',Message (extRangeList dIn),dNames) )
-                      enumNames context eIn =
+                      enumNames context eIn = -- XXX todo mangle enum names ? No
                         let s1 = mangleCap1 (D.EnumDescriptorProto.name eIn)
                             values :: [Utf8]
                             values = catMaybes $ map D.EnumValueDescriptorProto.name (F.toList (D.EnumDescriptorProto.value eIn))
@@ -267,13 +260,13 @@ resolveWithContext protoContext protoIn =
   let rerr msg = err $ "Failure while resolving file descriptor proto whose name is "
                        ++ maybe "<empty name>" toString (D.FileDescriptorProto.name protoIn)++"\n"
                        ++ msg
-      descend :: Context -> Maybe Utf8 -> Context
+      descend :: Context -> Maybe Utf8 -> Context -- XXX todo take away the maybe 
       descend cx@(NameSpace n:_) name =
         case M.lookup mangled n of
           Just (_,_,Nothing) -> cx
           Just (_,_,Just ns1) -> ns1:cx
           x -> rerr $ "*** Name resolution failed when descending:\n"++unlines (mangled : show x : "KNOWN NAMES" : seeContext cx)
-       where mangled = mangleCap1 name
+       where mangled = mangleCap1 name -- XXX empty on nothing?
       resolve :: Context -> Maybe Utf8 -> Maybe Utf8
       resolve context Nothing = Nothing
       resolve context (Just bs) = fmap fst (resolveWithNameType context bs)
@@ -336,7 +329,8 @@ resolveWithContext protoContext protoIn =
              checkSelf _ x = x
              new_type' = (D.FieldDescriptorProto.type' f) `mplus` (fmap (t.snd) r2)
              checkEnumDefault = case (D.FieldDescriptorProto.default_value f,fmap snd r2) of
-                                  (Just name,Just (Enumeration values)) | name  `notElem` values ->
+                                  (Just name,Just (Enumeration values)) | name  `elem` values -> mangleEnum (Just name)
+                                                                        | otherwise ->
                                       rerr $ unlines ["Problem found: default enumeration value not recognized:"
                                                      ,"  The parent message is "++maybe "<no message>" toString mp
                                                      ,"  field name is "++maybe "" toString (D.FieldDescriptorProto.name f)
@@ -352,7 +346,8 @@ resolveWithContext protoContext protoIn =
                            Just p -> do n <- D.FieldDescriptorProto.name f
                                         return (Utf8 . U.fromString . (toString p++) . ('.':) . mangleModuleName . toString $ n)
 
-      processENM cx e = e { D.EnumDescriptorProto.name = resolve cx (D.EnumDescriptorProto.name e) }
+      processENM cx e = e { D.EnumDescriptorProto.name = resolve cx (D.EnumDescriptorProto.name e)
+                          , D.EnumDescriptorProto.value = mangleEnums (D.EnumDescriptorProto.value e) }
       processSRV cx s = s { D.ServiceDescriptorProto.name   = resolve cx (D.ServiceDescriptorProto.name s)
                           , D.ServiceDescriptorProto.method = fmap (processMTD cx) (D.ServiceDescriptorProto.method s) }
       processMTD cx m = m { D.MethodDescriptorProto.name        = mangleFieldName (D.MethodDescriptorProto.name m)

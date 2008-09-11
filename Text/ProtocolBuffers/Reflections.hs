@@ -75,6 +75,7 @@ data HsDefault = HsDef'Bool Bool
                | HsDef'ByteString ByteString
                | HsDef'Rational Rational
                | HsDef'Integer Integer
+               | HsDef'Enum String
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data EnumInfo = EnumInfo { enumName :: ProtoName

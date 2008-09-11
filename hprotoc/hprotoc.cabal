@@ -1,5 +1,5 @@
 name:           hprotoc
-version:        0.2.3
+version:        0.2.4
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -24,7 +24,7 @@ Executable hprotoc
   Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
   build-tools:     alex
   ghc-options:     -O2
-  build-depends:   protocol-buffers == 0.2.3, descriptor == 0.2.3
+  build-depends:   protocol-buffers == 0.2.4, protocol-buffers-descriptor == 0.2.4
   build-depends:   binary, utf8-string
   build-depends:   parsec, haskell-src
   if flag(small_base)

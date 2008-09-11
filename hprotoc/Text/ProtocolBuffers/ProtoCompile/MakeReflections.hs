@@ -219,13 +219,13 @@ toFieldInfo (ProtoName prefix mod parent)
 parseDefaultValue :: D.FieldDescriptorProto -> Maybe HsDefault
 parseDefaultValue f@(D.FieldDescriptorProto.FieldDescriptorProto
                      { D.FieldDescriptorProto.type' = type'
-                     , D.FieldDescriptorProto.default_value = mayDef })
-    = do bs <- mayDef
+                     , D.FieldDescriptorProto.default_value = mayRawDef })
+    = do bs <- mayRawDef
          t <- type'
          todo <- case t of
                    TYPE_MESSAGE -> Nothing
-                   TYPE_ENUM    -> Nothing
                    TYPE_GROUP   -> Nothing
+                   TYPE_ENUM    -> Just parseDefEnum
                    TYPE_BOOL    -> Just parseDefBool
                    TYPE_BYTES   -> Just parseDefBytes
                    TYPE_DOUBLE  -> Just parseDefDouble
@@ -233,10 +233,13 @@ parseDefaultValue f@(D.FieldDescriptorProto.FieldDescriptorProto
                    TYPE_STRING  -> Just parseDefString
                    _            -> Just parseDefInteger
          case todo (utf8 bs) of
-           Nothing -> error $ "Could not parse as type "++ show t ++"the default value "++ show mayDef ++" for field "++show f
+           Nothing -> error $ "Could not parse as type "++ show t ++"the default value "++ show mayRawDef ++" for field "++show f
            Just value -> return value
 
 --- From here down is code used to parse the format of the default values in the .proto files
+
+parseDefEnum :: ByteString -> Maybe HsDefault
+parseDefEnum = Just . HsDef'Enum . U.toString
 
 {-# INLINE mayRead #-}
 mayRead :: ReadS a -> String -> Maybe a

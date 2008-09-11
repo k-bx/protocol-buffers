@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        0.2.3
+version:        0.2.4
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -11,7 +11,7 @@ stability:      Experimental
 homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
 package-url:    http://darcs.haskell.org/packages/protocol-buffers2/
 synopsis:       Parse Google Protocol Buffer specifications
-description:    Parse <http://code.google.com/apis/protocolbuffers/docs/proto.html> and generate Haskell code.
+description:    Parse proto files and generate Haskell code.
 category:       Text
 Tested-With:    GHC ==6.8.3
 --data-files:     
