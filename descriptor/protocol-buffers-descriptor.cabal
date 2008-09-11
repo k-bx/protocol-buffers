@@ -1,0 +1,77 @@
+name:           protocol-buffers-descriptor
+version:        0.2.4
+cabal-version:  >= 1.2
+build-type:     Simple
+license:        BSD3
+license-file:   LICENSE
+copyright:      (c) 2008 Christopher Edward Kuklewicz
+author:         Christopher Edward Kuklewicz
+maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
+stability:      Experimental
+homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
+package-url:    http://darcs.haskell.org/packages/protocol-buffers2/
+synopsis:       Self-description of Google Protocol Buffer specifications
+description:    Uses protocol-buffers package
+category:       Text
+Tested-With:    GHC ==6.8.3
+data-files:     descriptor.proto
+extra-source-files: Setup.hs
+                    doc.txt
+                    TODO
+                    README
+                    Skeleton.hs-boot
+                    google/protobuf/unittest.proto
+                    google/protobuf/unittest_import.proto
+-- extra-tmp-files:
+
+flag small_base
+    description: Choose the new smaller, split-up base package.
+
+Library
+  ghc-options:  -O2
+  exposed-modules: Text.DescriptorProtos
+                   Text.DescriptorProtos.DescriptorProto
+                   Text.DescriptorProtos.DescriptorProto.ExtensionRange
+                   Text.DescriptorProtos.EnumDescriptorProto
+                   Text.DescriptorProtos.EnumOptions
+                   Text.DescriptorProtos.EnumValueDescriptorProto
+                   Text.DescriptorProtos.EnumValueOptions
+                   Text.DescriptorProtos.FieldDescriptorProto
+                   Text.DescriptorProtos.FieldDescriptorProto.Label
+                   Text.DescriptorProtos.FieldDescriptorProto.Type
+                   Text.DescriptorProtos.FieldOptions
+                   Text.DescriptorProtos.FieldOptions.CType
+                   Text.DescriptorProtos.FileDescriptorProto
+                   Text.DescriptorProtos.FileOptions
+                   Text.DescriptorProtos.FileOptions.OptimizeMode
+                   Text.DescriptorProtos.MessageOptions
+                   Text.DescriptorProtos.MethodDescriptorProto
+                   Text.DescriptorProtos.MethodOptions
+                   Text.DescriptorProtos.ServiceDescriptorProto
+                   Text.DescriptorProtos.ServiceOptions
+
+  if flag(small_base)
+        build-depends: base >= 3,
+                       containers,
+                       bytestring,
+                       array,
+                       filepath,
+                       directory,
+                       mtl,
+                       QuickCheck
+  else
+        build-depends: base < 3
+
+  build-depends:   protocol-buffers == 0.2.4
+  extensions:      DeriveDataTypeable,
+                   EmptyDataDecls,
+                   FlexibleInstances,
+                   GADTs,
+                   GeneralizedNewtypeDeriving,
+                   MagicHash,
+                   PatternGuards,
+                   RankNTypes,
+                   ScopedTypeVariables,
+                   TypeSynonymInstances,
+                   MultiParamTypeClasses,
+                   FunctionalDependencies
