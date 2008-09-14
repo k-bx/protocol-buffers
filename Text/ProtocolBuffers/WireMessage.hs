@@ -33,11 +33,8 @@ import Text.ProtocolBuffers.Mergeable(Mergeable(mergeEmpty))
 import Data.Bits (Bits(..))
 import Data.Typeable (Typeable(..))
 import Data.List (genericLength)
-import qualified Data.ByteString as Strict (ByteString)
-import qualified Data.ByteString.Lazy as BS (length,pack,fromChunks,toChunks,drop)
-import qualified Data.ByteString.Lazy.Internal as BS (ByteString(Empty,Chunk),chunk)
+import qualified Data.ByteString.Lazy as BS (length)
 import qualified Data.Foldable as F(foldl',forM_)
-import qualified Data.Sequence as Seq(length)
 import qualified Data.Set as Set(notMember,delete,null)
 -- GHC internals for getting at Double and Float representation as Word64 and Word32
 import GHC.Exts (Double(D#),Float(F#),unsafeCoerce#)
@@ -45,8 +42,8 @@ import GHC.Word (Word64(W64#),Word32(W32#))
 
 import Data.Binary.Put (Put,runPut,putWord8,putWord32be,putWord64be,putLazyByteString)
 --import Data.Binary.Builder (Builder)
-import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,lookAhead,spanOf,skip,bytesRead,isEmpty
-                                       ,getWord8,getWord32be,getWord64be,getLazyByteString,getByteString)
+import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,bytesRead,isEmpty
+                                       ,getWord8,getWord32be,getWord64be,getLazyByteString)
 
 -- import qualified Data.ByteString.Lazy as BS (unpack)
 -- import Numeric

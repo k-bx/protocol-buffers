@@ -18,9 +18,7 @@ module Text.ProtocolBuffers.Header
 import Control.Monad(ap)
 import Data.ByteString.Lazy(empty)
 import Data.ByteString.Lazy.Char8(pack)
-import Data.Dynamic(Dynamic)
 import Data.Generics(Data(..))
-import Data.Monoid(Monoid(..))
 import Data.Sequence((|>)) -- for append, see below
 import Data.Typeable(Typeable(..))
 

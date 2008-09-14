@@ -1,5 +1,3 @@
-Ack: fix wire size for messages (11) to be add header size.
-add validextrange check.
 Add the rest of the documentation for the public API.
 compile with -Wall -Werror
 
