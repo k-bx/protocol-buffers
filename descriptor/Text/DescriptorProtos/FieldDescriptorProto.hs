@@ -37,7 +37,7 @@ instance P'.Wire FieldDescriptorProto where
   wireSize ft' self'@(FieldDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
     = case ft' of
         10 -> calc'Size
-        11 -> calc'Size
+        11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
         calc'Size

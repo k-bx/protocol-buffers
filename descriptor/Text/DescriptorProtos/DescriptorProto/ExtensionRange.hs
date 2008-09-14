@@ -17,7 +17,7 @@ instance P'.Wire ExtensionRange where
   wireSize ft' self'@(ExtensionRange x'1 x'2)
     = case ft' of
         10 -> calc'Size
-        11 -> calc'Size
+        11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
         calc'Size = (P'.wireSizeOpt 1 5 x'1 + P'.wireSizeOpt 1 5 x'2)

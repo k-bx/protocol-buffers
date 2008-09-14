@@ -21,7 +21,7 @@ instance P'.Wire FileOptions where
   wireSize ft' self'@(FileOptions x'1 x'2 x'3 x'4)
     = case ft' of
         10 -> calc'Size
-        11 -> calc'Size
+        11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
         calc'Size = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 9 x'2 + P'.wireSizeOpt 1 8 x'3 + P'.wireSizeOpt 1 14 x'4)

@@ -6,6 +6,7 @@ module Text.ProtocolBuffers.Extensions(ExtKey(..),MessageAPI(..),defaultKeyValue
 import Data.Map(Map)
 import Data.Dynamic
 import Data.Generics
+import Data.Ix(inRange)
 import Data.List(intersperse,foldl')
 import Data.Maybe(catMaybes,fromMaybe,fromJust)
 import Data.Typeable
@@ -26,10 +27,18 @@ err msg = error $ "Text.ProtocolBuffers.Extensions error\n"++msg
 
 -- | A key type (opaque) that has a phantom type of Maybe or Seq that
 -- corresponds to Optional or Repated. And a second phantom type that
--- matches the message type it must be used with.  It also uses a GADT
--- to put all the needed class instances into scope.  The actual
--- content is the FieldId (that numeric key), the FieldType (for
--- sanity checks), and Maybe v (a non-standard default value).
+-- matches the message type it must be used with.  The third type parameters
+-- corresonds to the Haskell value type.
+--
+-- The Key is a GADT that puts all the needed class instances into
+-- scope.  The actual content is the FieldId (that numeric key), the
+-- FieldType (for sanity checks), and Maybe v (a non-standard default
+-- value).
+--
+-- When code is generated all of the known keys are taken into account
+-- in the deserialization from the wire.  Unknown extension fields are
+-- read as a collection of raw byte sequences.  If a key is then
+-- presented it will be used to parse the bytes.
 data Key c msg v where
   Key :: (ExtKey c,ExtendMessage msg,GPB v) => FieldId -> FieldType -> (Maybe v) -> Key c msg v
 
@@ -44,8 +53,8 @@ instance (Typeable1 c, Typeable msg, Typeable v) => Show (Key c msg v) where
            ,") :: ",show (typeOf key)
            ,")"]
 
--- | The GPWitness is an instance witness for the GPB classes.  This
--- exists mainly to be a part of GPDyn.
+-- | The GPWitness is an instance witness for the 'GPB' classes.  This
+-- exists mainly to be a part of 'GPDyn' or 'GPDynSeq'.
 data GPWitness a where GPWitness :: (GPB a) => GPWitness a
   deriving (Typeable)
 
@@ -72,30 +81,33 @@ data ExtFieldValue = ExtFromWire WireType (Seq ByteString)
 newtype ExtField = ExtField (Map FieldId ExtFieldValue)
   deriving (Typeable,Eq,Ord,Show)
 
+-- | 'ExtendMessage' abstracts the operations of storing and
+-- retrieving the 'ExtField' from the message, and provides the
+-- reflection needed to know the valid field numbers.
+--
+-- This only used internally.
 class Typeable msg => ExtendMessage msg where
   getExtField :: msg -> ExtField
   putExtField :: ExtField -> msg -> msg
   validExtRanges :: msg -> [(FieldId,FieldId)]
--- countExtField :: msg -> Int
--- hasFromWire :: msg -> Bool
 
 class ExtKey c where
   -- | Change or clear the value of a key in a message. Passing
-  -- 'Nothing' to a optional key or an empty sequence to a repeated
+  -- 'Nothing' with an optional key or an empty 'Seq' with a repeated
   -- key clears the value.  This function thus maintains the invariant
-  -- that have a field number in the extension map means that the
+  -- that having a field number in the extension map means that the
   -- field is set and not empty.
   putExt :: Key c msg v -> c v -> msg -> msg
   -- | Access the key in the message.  Optional have type @(Key Maybe
-  -- msg v)@ and return type @(Maybe v)@ while repeated fields have type
-  -- @(Key Seq msg v)@ and return type @(Seq v)@.
+  -- msg v)@ and return type @(Maybe v)@ while repeated fields have
+  -- type @(Key Seq msg v)@ and return type @(Seq v)@.
   --
   -- There are a few sources of errors with the lookup of the key:
-  --  * It may find unparsed bytes from loading the message. 'getExt' will attempt to parse the bytes as the key\'s value type, and may fail.  The parsing is done with the 'parseWireExt' method (not exported to user API).
-  --  * The wrong optional versus repeated type is a failure
+  --  * It may find unparsed bytes from loading the message. 'getExt' will attempt to parse the bytes as the key\'s value type, and may fail.  The parsing is done with the 'parseWireExt' method (which is not exported to user API).
+  --  * The wrong optional-key versus repeated-key type is a failure
   --  * The wrong type of the value might be found in the map and cause a failure
   --
-  -- All of the above should only happen if an incompatible key was used.
+  -- The failures above should only happen if two different keys are used with the same field number.
   getExt :: Key c msg v -> msg -> Either String (c v)
   clearExt :: Key c msg v -> msg -> msg
   parseWireExt :: Key c msg v -> WireType -> Seq ByteString -> Either String (FieldId,ExtFieldValue)
@@ -380,10 +392,14 @@ getBareMessageExt :: (Mergeable message, ReflectDescriptor message,Typeable mess
                   -> Get message
 getBareMessageExt = getBareMessageWith extension
 
+{-# INLINE isValidExt #-}
+isValidExt ::  ExtendMessage a => FieldId -> a -> Bool
+isValidExt fi msg = any (flip inRange fi) (validExtRanges msg)
+
 -- get a value from the wire into the message's ExtField
 -- no validity check is performed on FieldId versus any range
-extension :: ExtendMessage a => FieldId -> WireType -> a -> Get a
-extension fieldId wireType msg = do
+extension :: (ReflectDescriptor a, ExtendMessage a) => FieldId -> WireType -> a -> Get a
+extension fieldId wireType msg | isValidExt fieldId msg = do
   let (ExtField ef) = getExtField msg
       badwt wt = do here <- bytesRead
                     fail $ "Conflicting wire types at byte position "++show here ++ " for extension to message: "++show (typeOf msg,fieldId,wireType,wt)
@@ -411,6 +427,7 @@ extension fieldId wireType msg = do
       let v' = ExtRepeated ft (GPDynSeq x (s |> a))
           ef' = M.insert fieldId v' ef
       seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
+extension fieldId wireType msg = unknown fieldId wireType msg
 
 wireGetFromWire :: FieldId -> WireType -> Get.Get ByteString
 wireGetFromWire fi wt = getLazyByteString =<< calcLen where

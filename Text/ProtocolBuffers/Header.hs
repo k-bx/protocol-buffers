@@ -29,7 +29,7 @@ import Text.ProtocolBuffers.Default()
 import Text.ProtocolBuffers.Extensions(wireSizeExtField,wirePutExtField,GPB,getMessageExt,getBareMessageExt,Key(..),ExtField,ExtendMessage(..),MessageAPI(..),ExtKey(wireGetKey))
 import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(..),ReflectEnum(..),EnumInfo(..),ProtoName(..),DescriptorInfo(extRanges))
-import Text.ProtocolBuffers.WireMessage( putSize
+import Text.ProtocolBuffers.WireMessage( prependMessageSize,putSize
                                        , wireSizeReq,wireSizeOpt,wireSizeRep
                                        , wirePutReq,wirePutOpt,wirePutRep
                                        , getMessage,getBareMessage

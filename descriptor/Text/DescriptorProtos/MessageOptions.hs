@@ -17,7 +17,7 @@ instance P'.Wire MessageOptions where
   wireSize ft' self'@(MessageOptions x'1)
     = case ft' of
         10 -> calc'Size
-        11 -> calc'Size
+        11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
         calc'Size = (P'.wireSizeOpt 1 8 x'1)

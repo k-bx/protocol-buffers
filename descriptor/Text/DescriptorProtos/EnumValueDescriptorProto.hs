@@ -20,7 +20,7 @@ instance P'.Wire EnumValueDescriptorProto where
   wireSize ft' self'@(EnumValueDescriptorProto x'1 x'2 x'3)
     = case ft' of
         10 -> calc'Size
-        11 -> calc'Size
+        11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
         calc'Size = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 5 x'2 + P'.wireSizeOpt 1 11 x'3)

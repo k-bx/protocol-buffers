@@ -11,16 +11,16 @@
     WIRETYPE_FIXED32          = 5,
  -}
 module Text.ProtocolBuffers.WireMessage
-    ( messageSize,messagePut,messageGet,messagePutM,messageGetM
+    ( Wire(..),WireSize,Put,Get
+    , messageSize,messagePut,messageGet,messagePutM,messageGetM
     , messageWithLengthSize,messageWithLengthPut,messageWithLengthGet,messageWithLengthPutM,messageWithLengthGetM
     , runGet,runGetOnLazy,getFromBS,runPut,size'Varint,toWireType,toWireTag,mkWireTag
-    , Wire(..),WireSize,Put,Get
-    , putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag
+    , prependMessageSize,putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep
     , wireSizeErr,wirePutErr,wireGetErr
     , getMessage,getBareMessage,getMessageWith,getBareMessageWith
-    , unknownField
+    , unknownField,unknown
     , castWord64ToDouble,castWord32ToFloat,castDoubleToWord64,castFloatToWord32
     , zzEncode64,zzEncode32,zzDecode64,zzDecode32
     ) where
@@ -73,7 +73,7 @@ messageSize :: (ReflectDescriptor msg,Wire msg) => msg -> WireSize
 messageSize msg = wireSize 10 msg
 
 messageWithLengthSize :: (ReflectDescriptor msg,Wire msg) => msg -> WireSize
-messageWithLengthSize msg = prependMessageSize (wireSize 11 msg) -- XXX todo: change semantics of wireSize 11
+messageWithLengthSize msg = wireSize 11 msg
 
 messagePut :: (ReflectDescriptor msg, Wire msg) => msg -> ByteString
 messagePut msg = runPut (messagePutM msg)
@@ -118,7 +118,6 @@ wirePutRep wireTag fieldType bs = F.forM_ bs (\b -> wirePutReq wireTag fieldType
 {-# INLINE wireSizeReq #-}
 wireSizeReq :: Wire b => Int64 -> FieldType -> b -> Int64
 wireSizeReq tagSize 10 v = tagSize + wireSize 10 v + tagSize
-wireSizeReq tagSize 11 v = tagSize + prependMessageSize (wireSize 11 v)  -- XXX todo: change semantics of wireSize 11
 wireSizeReq tagSize  i v = tagSize + wireSize i v
 
 {-# INLINE wireSizeOpt #-}

@@ -17,7 +17,7 @@ instance P'.Wire ServiceOptions where
   wireSize ft' self'@(ServiceOptions)
     = case ft' of
         10 -> calc'Size
-        11 -> calc'Size
+        11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
         calc'Size = 0

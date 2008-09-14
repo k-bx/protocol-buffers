@@ -18,7 +18,7 @@ instance P'.Wire FieldOptions where
   wireSize ft' self'@(FieldOptions x'1 x'2)
     = case ft' of
         10 -> calc'Size
-        11 -> calc'Size
+        11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
         calc'Size = (P'.wireSizeOpt 1 14 x'1 + P'.wireSizeOpt 1 9 x'2)

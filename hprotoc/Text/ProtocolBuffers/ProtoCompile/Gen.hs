@@ -456,7 +456,7 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
                                           ]
 
         sizeCases = HsUnGuardedRhs $ cases (lvar "calc'Size") 
-                                           (lvar "calc'Size")
+                                           (pvar "prependMessageSize" $$ lvar "calc'Size")
                                            (pvar "wireSizeErr" $$ lvar "ft'" $$ lvar "self'")
         whereCalcSize = [HsFunBind [HsMatch src (HsIdent "calc'Size") [] (HsUnGuardedRhs sizes) noWhere]]
         sizes | null sizesListExt = HsLit (HsInt 0)
