@@ -450,10 +450,14 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
         mine = HsPApp me . take len . map (\n -> HsPVar (HsIdent ("x'" ++ show n))) $ [1..]
         vars = take len . map (\n -> lvar ("x'" ++ show n)) $ [1..]
 
-        cases g m = HsCase (lvar "ft'") [ HsAlt src (litIntP 10) (HsUnGuardedAlt g) noWhere  -- groups
-                                        , HsAlt src (litIntP 11) (HsUnGuardedAlt m) noWhere] -- messages
+        cases g m e = HsCase (lvar "ft'") [ HsAlt src (litIntP 10) (HsUnGuardedAlt g) noWhere
+                                          , HsAlt src (litIntP 11) (HsUnGuardedAlt m) noWhere
+                                          , HsAlt src HsPWildCard (HsUnGuardedAlt e) noWhere
+                                          ]
 
-        sizeCases = HsUnGuardedRhs (cases (lvar "calc'Size") (lvar "calc'Size"))
+        sizeCases = HsUnGuardedRhs $ cases (lvar "calc'Size") 
+                                           (lvar "calc'Size")
+                                           (pvar "wireSizeErr" $$ lvar "ft'" $$ lvar "self'")
         whereCalcSize = [HsFunBind [HsMatch src (HsIdent "calc'Size") [] (HsUnGuardedRhs sizes) noWhere]]
         sizes | null sizesListExt = HsLit (HsInt 0)
               | otherwise = HsParen (foldl1' (+!) sizesListExt)
@@ -468,10 +472,12 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
                                                  , litInt (getFieldType (typeCode fi))
                                                  , var]
 
-        putCases = HsUnGuardedRhs (cases (lvar "put'Fields") (HsDo 
-                    [ HsQualifier $ pvar "putSize" $$
-                        (HsParen $ foldl' HsApp (pvar "wireSize") [ litInt 11 , lvar "self'" ])
-                    , HsQualifier $ lvar "put'Fields" ]))
+        putCases = HsUnGuardedRhs $ cases
+          (lvar "put'Fields")
+          (HsDo [ HsQualifier $ pvar "putSize" $$
+                    (HsParen $ foldl' HsApp (pvar "wireSize") [ litInt 11 , lvar "self'" ])
+                , HsQualifier $ lvar "put'Fields" ])
+          (pvar "wirePutErr" $$ lvar "ft'" $$ lvar "self'")
         wherePutFields = [HsFunBind [HsMatch src (HsIdent "put'Fields") [] (HsUnGuardedRhs (HsDo putStmts)) noWhere]]
         putStmts = putStmtsContent
           where putStmtsContent | null putStmtsListExt = [HsQualifier $ pvar "return" $$ HsCon (Special HsUnitCon)]
@@ -491,8 +497,10 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
                                                 , litInt (getFieldType (typeCode fi))
                                                 , var]
 
-        getCases = HsUnGuardedRhs (cases (pvar (if extensible then "getBareMessageExt" else "getBareMessage") $$ lvar "update'Self")
-                                         (pvar (if extensible then "getMessageExt" else "getMessage") $$ lvar "update'Self"))
+        getCases = HsUnGuardedRhs $ cases
+          (pvar (if extensible then "getBareMessageExt" else "getBareMessage") $$ lvar "update'Self")
+          (pvar (if extensible then "getMessageExt" else "getMessage") $$ lvar "update'Self")
+          (pvar "wireGetErr" $$ lvar "ft'")
         whereUpdateSelf = [HsFunBind [HsMatch src (HsIdent "update'Self")
                             [HsPVar (HsIdent "field'Number") ,HsPVar (HsIdent "old'Self")]
                             (HsUnGuardedRhs (HsCase (lvar "field'Number") updateAlts)) noWhere]]
@@ -517,8 +525,8 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
                            | otherwise = x
          
     in HsInstDecl src [] (private "Wire") [HsTyCon me]
-        [ HsFunBind [HsMatch src (HsIdent "wireSize") [HsPVar (HsIdent "ft'"),(HsPParen mine)] sizeCases whereCalcSize]
-        , HsFunBind [HsMatch src (HsIdent "wirePut") [HsPVar (HsIdent "ft'"),HsPAsPat (HsIdent "self'") (HsPParen mine)] putCases wherePutFields]
+        [ HsFunBind [HsMatch src (HsIdent "wireSize") [HsPVar (HsIdent "ft'"),HsPAsPat (HsIdent "self'") (HsPParen mine)] sizeCases whereCalcSize]
+        , HsFunBind [HsMatch src (HsIdent "wirePut")  [HsPVar (HsIdent "ft'"),HsPAsPat (HsIdent "self'") (HsPParen mine)] putCases wherePutFields]
         , HsFunBind [HsMatch src (HsIdent "wireGet") [HsPVar (HsIdent "ft'")] getCases whereUpdateSelf]
         ]
 

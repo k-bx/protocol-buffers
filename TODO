@@ -1,3 +1,5 @@
+Ack: add error handling (calling fail) to the generated wire instances!
+
 Bext task: re-organize code
   Goals:
     1) A command-line code generation tool
@@ -9,3 +11,4 @@ Bext task: re-organize code
        a) Get/Set/Has/Ext/Default/Merge API
        b) Wire API
        c) Reflection API
+       d) API for extensions?

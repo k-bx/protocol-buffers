@@ -35,10 +35,11 @@ instance P'.Default FileDescriptorProto where
         (P'.Just P'.defaultValue)
  
 instance P'.Wire FileDescriptorProto where
-  wireSize ft' (FileDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
+  wireSize ft' self'@(FileDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
     = case ft' of
         10 -> calc'Size
         11 -> calc'Size
+        _ -> P'.wireSizeErr ft' self'
     where
         calc'Size
           = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 9 x'2 + P'.wireSizeRep 1 9 x'3 + P'.wireSizeRep 1 11 x'4 +
@@ -53,6 +54,7 @@ instance P'.Wire FileDescriptorProto where
           -> do
                P'.putSize (P'.wireSize 11 self')
                put'Fields
+        _ -> P'.wirePutErr ft' self'
     where
         put'Fields
           = do
@@ -68,6 +70,7 @@ instance P'.Wire FileDescriptorProto where
     = case ft' of
         10 -> P'.getBareMessage update'Self
         11 -> P'.getMessage update'Self
+        _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
           = case field'Number of

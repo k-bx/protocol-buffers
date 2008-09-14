@@ -33,6 +33,7 @@ import Text.ProtocolBuffers.WireMessage( putSize
                                        , wireSizeReq,wireSizeOpt,wireSizeRep
                                        , wirePutReq,wirePutOpt,wirePutRep
                                        , getMessage,getBareMessage
+                                       , wireSizeErr,wirePutErr,wireGetErr
                                        , unknownField)
 
 append :: Seq a -> a -> Seq a

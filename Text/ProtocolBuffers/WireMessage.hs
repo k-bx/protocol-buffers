@@ -18,6 +18,7 @@ module Text.ProtocolBuffers.WireMessage
     , putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep
+    , wireSizeErr,wirePutErr,wireGetErr
     , getMessage,getBareMessage,getMessageWith,getBareMessageWith
     , unknownField
     , castWord64ToDouble,castWord32ToFloat,castDoubleToWord64,castFloatToWord32
@@ -151,7 +152,7 @@ getMessage = getMessageWith unknown
 
 -- getMessage assumes the wireTag for the message, if it existed, has already been read.
 -- getMessage assumes that it still needs to read the Varint encoded length of the message.
-getMessageWith :: forall message. (Mergeable message, ReflectDescriptor message)
+getMessageWith :: (Mergeable message, ReflectDescriptor message)
                => (FieldId -> WireType -> message -> Get message) -- handle wireTags that updater cannot
                -> (FieldId -> message -> Get message)             -- handles "allowed" wireTags
                -> Get message
@@ -207,12 +208,12 @@ unknown fieldId wireType initialMessage = do
 -- getBareMessage assumes that it does needs to read the Varint encoded length of the message.
 -- getBareMessage will consume the entire ByteString it is operating on, or until it
 -- finds any STOP_GROUP tag
-getBareMessage :: forall message. (Typeable message, Mergeable message, ReflectDescriptor message)
+getBareMessage :: (Typeable message, Mergeable message, ReflectDescriptor message)
                => (FieldId -> message -> Get message)             -- handles "allowed" wireTags
                -> Get message
 getBareMessage = getBareMessageWith unknown
 
-getBareMessageWith :: forall message. (Mergeable message, ReflectDescriptor message)
+getBareMessageWith :: (Mergeable message, ReflectDescriptor message)
                    => (FieldId -> WireType -> message -> Get message) -- handle wireTags that updater cannot
                    -> (FieldId -> message -> Get message)             -- handles "allowed" wireTags
                    -> Get message
@@ -263,15 +264,19 @@ castDoubleToWord64 (D# d) = W64# (unsafeCoerce# d)
 castFloatToWord32 :: Float -> Word32
 castFloatToWord32 (F# d) = W32# (unsafeCoerce# d)
 
+-- These error handlers are exported to the generated code
 wireSizeErr :: Typeable a => FieldType -> a -> WireSize
 wireSizeErr ft x = error $ concat [ "Impossible? wireSize field type mismatch error: Field type number ", show ft
                                   , " does not match internal type ", show (typeOf x) ]
 wirePutErr :: Typeable a => FieldType -> a -> Put
 wirePutErr ft x = fail $ concat [ "Impossible? wirePut field type mismatch error: Field type number ", show ft
                                 , " does not match internal type ", show (typeOf x) ]
-wireGetErr :: forall a. (Typeable a) => FieldType -> Get a
-wireGetErr ft = fail $ concat [ "Impossible? wireGet field type mismatch error: Field type number ", show ft
-                              , " does not match internal type ", show (typeOf (undefined :: a)) ]
+wireGetErr :: Typeable a => FieldType -> Get a
+wireGetErr ft = answer where
+  answer = fail $ concat [ "Impossible? wireGet field type mismatch error: Field type number ", show ft
+                         , " does not match internal type ", show (typeOf (undefined `asTypeOf` typeHack answer)) ]
+  typeHack :: Get a -> a
+  typeHack = undefined
 
 instance Wire Double where
   wireSize {- TYPE_DOUBLE   -} 1      _ = 8

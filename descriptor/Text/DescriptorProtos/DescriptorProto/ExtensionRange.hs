@@ -14,10 +14,11 @@ instance P'.Default ExtensionRange where
   defaultValue = ExtensionRange (P'.Just P'.defaultValue) (P'.Just P'.defaultValue)
  
 instance P'.Wire ExtensionRange where
-  wireSize ft' (ExtensionRange x'1 x'2)
+  wireSize ft' self'@(ExtensionRange x'1 x'2)
     = case ft' of
         10 -> calc'Size
         11 -> calc'Size
+        _ -> P'.wireSizeErr ft' self'
     where
         calc'Size = (P'.wireSizeOpt 1 5 x'1 + P'.wireSizeOpt 1 5 x'2)
   wirePut ft' self'@(ExtensionRange x'1 x'2)
@@ -27,6 +28,7 @@ instance P'.Wire ExtensionRange where
           -> do
                P'.putSize (P'.wireSize 11 self')
                put'Fields
+        _ -> P'.wirePutErr ft' self'
     where
         put'Fields
           = do
@@ -36,6 +38,7 @@ instance P'.Wire ExtensionRange where
     = case ft' of
         10 -> P'.getBareMessage update'Self
         11 -> P'.getMessage update'Self
+        _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
           = case field'Number of

@@ -14,10 +14,11 @@ instance P'.Default MessageOptions where
   defaultValue = MessageOptions (P'.Just P'.False)
  
 instance P'.Wire MessageOptions where
-  wireSize ft' (MessageOptions x'1)
+  wireSize ft' self'@(MessageOptions x'1)
     = case ft' of
         10 -> calc'Size
         11 -> calc'Size
+        _ -> P'.wireSizeErr ft' self'
     where
         calc'Size = (P'.wireSizeOpt 1 8 x'1)
   wirePut ft' self'@(MessageOptions x'1)
@@ -27,6 +28,7 @@ instance P'.Wire MessageOptions where
           -> do
                P'.putSize (P'.wireSize 11 self')
                put'Fields
+        _ -> P'.wirePutErr ft' self'
     where
         put'Fields
           = do
@@ -35,6 +37,7 @@ instance P'.Wire MessageOptions where
     = case ft' of
         10 -> P'.getBareMessage update'Self
         11 -> P'.getMessage update'Self
+        _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
           = case field'Number of

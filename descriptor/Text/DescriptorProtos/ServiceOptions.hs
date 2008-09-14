@@ -14,10 +14,11 @@ instance P'.Default ServiceOptions where
   defaultValue = ServiceOptions
  
 instance P'.Wire ServiceOptions where
-  wireSize ft' (ServiceOptions)
+  wireSize ft' self'@(ServiceOptions)
     = case ft' of
         10 -> calc'Size
         11 -> calc'Size
+        _ -> P'.wireSizeErr ft' self'
     where
         calc'Size = 0
   wirePut ft' self'@(ServiceOptions)
@@ -27,6 +28,7 @@ instance P'.Wire ServiceOptions where
           -> do
                P'.putSize (P'.wireSize 11 self')
                put'Fields
+        _ -> P'.wirePutErr ft' self'
     where
         put'Fields
           = do
@@ -35,6 +37,7 @@ instance P'.Wire ServiceOptions where
     = case ft' of
         10 -> P'.getBareMessage update'Self
         11 -> P'.getMessage update'Self
+        _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
           = case field'Number of

@@ -34,10 +34,11 @@ instance P'.Default FieldDescriptorProto where
         (P'.Just P'.defaultValue)
  
 instance P'.Wire FieldDescriptorProto where
-  wireSize ft' (FieldDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
+  wireSize ft' self'@(FieldDescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
     = case ft' of
         10 -> calc'Size
         11 -> calc'Size
+        _ -> P'.wireSizeErr ft' self'
     where
         calc'Size
           = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeOpt 1 5 x'2 + P'.wireSizeOpt 1 14 x'3 + P'.wireSizeOpt 1 14 x'4 +
@@ -52,21 +53,23 @@ instance P'.Wire FieldDescriptorProto where
           -> do
                P'.putSize (P'.wireSize 11 self')
                put'Fields
+        _ -> P'.wirePutErr ft' self'
     where
         put'Fields
           = do
               P'.wirePutOpt 10 9 x'1
+              P'.wirePutOpt 18 9 x'6
               P'.wirePutOpt 24 5 x'2
               P'.wirePutOpt 32 14 x'3
               P'.wirePutOpt 40 14 x'4
               P'.wirePutOpt 50 9 x'5
-              P'.wirePutOpt 18 9 x'6
               P'.wirePutOpt 58 9 x'7
               P'.wirePutOpt 66 11 x'8
   wireGet ft'
     = case ft' of
         10 -> P'.getBareMessage update'Self
         11 -> P'.getMessage update'Self
+        _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
           = case field'Number of

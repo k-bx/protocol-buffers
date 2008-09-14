@@ -1,5 +1,6 @@
-module Text.ProtocolBuffers.Extensions(ExtKey(..),MessageAPI(..),defaultKeyValue,wireSizeExtField
-                                      ,wirePutExtField,GPB,getMessageExt,getBareMessageExt,Key(..),ExtField,ExtendMessage(..)
+module Text.ProtocolBuffers.Extensions(ExtKey(..),MessageAPI(..),defaultKeyValue
+                                      ,wireSizeExtField,wirePutExtField,getMessageExt,getBareMessageExt
+                                      ,GPB,Key(..),ExtField,ExtendMessage(..)
                                       ) where
 
 import Data.Map(Map)
@@ -79,14 +80,30 @@ class Typeable msg => ExtendMessage msg where
 -- hasFromWire :: msg -> Bool
 
 class ExtKey c where
-  putExt :: Key c msg v -> c v -> msg -> msg -- always workds
-  getExt :: Key c msg v -> msg -> Either String (c v) -- might fail with String
-  clearExt :: Key c msg v -> msg -> msg -- always works
-  parseWireExt :: Key c msg v -> WireType -> Seq ByteString -> Either String (FieldId,ExtFieldValue) -- might fail with String
+  -- | Change or clear the value of a key in a message. Passing
+  -- 'Nothing' to a optional key or an empty sequence to a repeated
+  -- key clears the value.  This function thus maintains the invariant
+  -- that have a field number in the extension map means that the
+  -- field is set and not empty.
+  putExt :: Key c msg v -> c v -> msg -> msg
+  -- | Access the key in the message.  Optional have type @(Key Maybe
+  -- msg v)@ and return type @(Maybe v)@ while repeated fields have type
+  -- @(Key Seq msg v)@ and return type @(Seq v)@.
+  --
+  -- There are a few sources of errors with the lookup of the key:
+  --  * It may find unparsed bytes from loading the message. 'getExt' will attempt to parse the bytes as the key\'s value type, and may fail.  The parsing is done with the 'parseWireExt' method (not exported to user API).
+  --  * The wrong optional versus repeated type is a failure
+  --  * The wrong type of the value might be found in the map and cause a failure
+  --
+  -- All of the above should only happen if an incompatible key was used.
+  getExt :: Key c msg v -> msg -> Either String (c v)
+  clearExt :: Key c msg v -> msg -> msg
+  parseWireExt :: Key c msg v -> WireType -> Seq ByteString -> Either String (FieldId,ExtFieldValue)
   wireGetKey :: Key c msg v -> msg -> Get msg
 
+-- | This can return the default value for a given Key
 defaultKeyValue :: Key c msg v -> v
-defaultKeyValue (Key _ _ md) = maybe defaultValue id md
+defaultKeyValue (Key _ _ md) = fromMaybe defaultValue md
 
 -- | The Key and GPWitness GADTs use GPB as a shorthand for many classes
 class (Mergeable a,Default a,Wire a,Show a,Typeable a,Eq a,Ord a) => GPB a 
@@ -125,14 +142,6 @@ mergeExtFieldValue (ExtRepeated ft1 (GPDynSeq GPWitness s1))
 
 instance Default ExtField where
   defaultValue = ExtField M.empty
-
-{-
-instance Show ExtField where
-  showsPrec _ (ExtField m) | M.null m = ("(ExtField [])"++)
-                           | otherwise = ("(ExtField ["++) . (foldr (.) ("])"++) . intersperse (',':) .  map see  . M.assocs $ m)
-    where see :: (FieldId,(FieldType,GPDyn)) -> ShowS
-          see (i,(t,GPDyn GPWitness d)) = shows (i,(t,d))
--}
 
 instance Show (GPWitness a) where
   showsPrec n GPWitness = ("(GPWitness :: GPWitness ("++) . shows (typeOf (undefined :: a)) . (')':) . (')':)
@@ -234,10 +243,12 @@ instance ExtKey Maybe where
         v' = ExtOptional t (GPDyn GPWitness v)
         ef' = M.insert i v' ef
     in seq v' $ seq ef' (putExtField (ExtField ef') msg)
+
   clearExt (Key i _ _ ) msg =
     let (ExtField ef) = getExtField msg
         ef' = M.delete i ef
     in seq ef' (putExtField (ExtField ef') msg)
+
   getExt k@(Key i t _) msg =
     let (ExtField ef) = getExtField msg
     in case M.lookup i ef of
@@ -251,6 +262,7 @@ instance ExtKey Maybe where
            case cast d of
              Nothing -> Left $ "getExt Maybe: Key's value cast failed: "++show (k,typeOf d)
              Just d' -> Right (Just d')
+
   parseWireExt k@(Key fi ft mv)  wt raw | wt /= toWireType ft =
     Left $ "parseWireExt Maybe: Key's FieldType does not match ExtField's wire type: "++show (k,toWireType ft,wt)
                                         | otherwise = do
@@ -261,6 +273,7 @@ instance ExtKey Maybe where
         errs = [ m | Left m <- parsed ]
     if null errs then Right (fi,(ExtOptional ft (GPDyn witness (mergeConcat [ a | Right a <- parsed ]))))
       else Left (unlines errs)
+
   wireGetKey (Key i t mv) msg = do
     let myCast :: Maybe a -> Get a
         myCast = undefined
@@ -279,15 +292,18 @@ applyGet g bs = resolveEOF (runGet g bs) where
   resolveEOF (Get.Partial {}) = Left "Not enough input"
 
 instance ExtKey Seq where
-  putExt (Key i t _) s msg =
+  putExt key@(Key i t _) s msg | Seq.null s = clearExt key msg
+                               | otherwise =
       let (ExtField ef) = getExtField msg
           v' = ExtRepeated t (GPDynSeq GPWitness s)
           ef' = M.insert i v' ef
       in seq v' $ seq ef' (putExtField (ExtField ef') msg)
+
   clearExt (Key i _ _ ) msg =
     let (ExtField ef) = getExtField msg
         ef' = M.delete i ef
     in seq ef' (putExtField (ExtField ef') msg)
+
   getExt k@(Key i t _) msg =
     let (ExtField ef) = getExtField msg
     in case M.lookup i ef of
@@ -300,6 +316,7 @@ instance ExtKey Seq where
            case cast s of
              Nothing -> Left $ "getExt Seq: Key's Seq value cast failed: "++show (k,typeOf s)
              Just s' -> Right s'
+
   parseWireExt k@(Key i t mv)  wt raw | wt /= toWireType t =
     Left $ "parseWireExt Maybe: Key's FieldType does not match ExtField's wire type: "++show (k,toWireType t,wt)
                                         | otherwise = do
@@ -310,6 +327,7 @@ instance ExtKey Seq where
         errs = [ m | Left m <- parsed ]
     if null errs then Right (i,(ExtRepeated t (GPDynSeq witness (Seq.fromList [ a | Right a <- parsed ]))))
       else Left (unlines errs)
+
   wireGetKey k@(Key i t mv) msg = do
     let myCast :: Maybe a -> Get a
         myCast = undefined
@@ -332,6 +350,7 @@ instance ExtKey Seq where
     let ef' = M.insert i v' ef
     seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
 
+-- | This is used by the generated code
 wireSizeExtField (ExtField m) = F.foldl' aSize 0 (M.assocs m)  where
     aSize old (fi,(ExtFromWire wt bs)) = old +
       let tagSize = size'Varint (getWireTag (mkWireTag fi wt))
@@ -343,16 +362,19 @@ wireSizeExtField (ExtField m) = F.foldl' aSize 0 (M.assocs m)  where
       let tagSize = size'Varint (getWireTag (toWireTag fi ft))
       in wireSizeRep tagSize ft s
 
+-- | This is used by the generated code
 wirePutExtField (ExtField m) = mapM_ aPut (M.assocs m) where
     aPut (fi,(ExtFromWire wt raw)) = F.mapM_ (\bs -> putVarUInt (getWireTag $ mkWireTag fi wt) >> putLazyByteString bs) raw
     aPut (fi,(ExtOptional ft (GPDyn GPWitness d))) = wirePutOpt (toWireTag fi ft) ft (Just d)
     aPut (fi,(ExtRepeated ft (GPDynSeq GPWitness s))) = wirePutRep (toWireTag fi ft) ft s
 
+-- | This is used by the generated code to get messages that have extensions
 getMessageExt :: (Mergeable message, ReflectDescriptor message,Typeable message,ExtendMessage message)
               => (FieldId -> message -> Get message)           -- handles "allowed" wireTags
               -> Get message
 getMessageExt = getMessageWith extension
 
+-- | This is used by the generated code to get messages that have extensions
 getBareMessageExt :: (Mergeable message, ReflectDescriptor message,Typeable message,ExtendMessage message)
                   => (FieldId -> message -> Get message)           -- handles "allowed" wireTags
                   -> Get message
@@ -418,7 +440,18 @@ wireGetFromWire fi wt = getLazyByteString =<< calcLen where
       5 -> skip 4 >> skipGroup
 
 class MessageAPI msg a b | msg a -> b where
+  -- | Access data in a message.  The first argument is always the message.  The second argument can be one of 4 categories.
+  -- * The field name of a required field acts a simple retrieval of the data from the message.
+  -- * The field name of an optional field will retreive the data if it is set or lookup the default value if it is not set.
+  -- * The field name of a repeated field always retrieves the (possibly empty) 'Seq' of values.
+  -- * A Key for an optional or repeated value will act as the field name does above, but if there is an error it will use the defaultValue for optional types and an empty sequence for repeated types.
   getVal :: msg -> a -> b
+
+  -- | Check whether data is present in the message.
+  -- * Required fields always return 'True'.
+  -- * Optional fields return whether a value is present.
+  -- * Repeated field return 'False' if there are no values, otherwise they return 'True'.
+  -- * Keys return as optional or repeated, but checks only if the field # is present.  A badly formed Ext'Field might contain invalid information or an empty Sequence.
   isSet :: msg -> a -> Bool
   isSet _ _ = True
 
@@ -435,7 +468,7 @@ instance MessageAPI msg (msg -> (Seq a)) (Seq a) where
 instance (Default v) => MessageAPI msg (Key Maybe msg v) v where
   getVal m k@(Key _ _ md) = case getExt k m of
                            Right (Just v) -> v
-                           _ -> maybe defaultValue id md
+                           _ -> fromMaybe defaultValue md
   isSet m (Key fid _ _) = let (ExtField x) = getExtField m
                           in M.member fid x
 
@@ -454,36 +487,3 @@ instance MessageAPI msg (msg -> Int32) Int32 where getVal m f = f m
 instance MessageAPI msg (msg -> Int64) Int64 where getVal m f = f m
 instance MessageAPI msg (msg -> Word32) Word32 where getVal m f = f m
 instance MessageAPI msg (msg -> Word64) Word64 where getVal m f = f m
-
-{-
-data Testmsg = Testmsg { name :: String
-                       , child :: Maybe Testmsg
-                       , e'f :: ExtField}
-  deriving (Show,Typeable,Eq,Ord)
-
-instance ExtendMessage Testmsg where
-  getExtField msg = e'f msg
-  putExtField x msg = msg { e'f = x }
-  validExtRanges _ = [(20000,maxBound)]
-
-instance Wire Testmsg
-instance Mergeable Testmsg
-instance Default Testmsg
-instance GPB Testmsg
-
-key1 :: Key Maybe Testmsg Int64
-key1 = Key 1 3 Nothing
-
-key2 :: Key Maybe Testmsg Testmsg
-key2 = Key 2 11 Nothing
-
-{-
-testKey =
-  let m0 = Testmsg "hello" Nothing (ExtField M.empty)
-      m1 = putExt key1 17 (m0 {name = "world"})
-      m2 = putExt key2 m0 (m1 {name = "kitty"})
-      m3 = m2 { child = Just m1 }
-  in m3
-
--}
--}
