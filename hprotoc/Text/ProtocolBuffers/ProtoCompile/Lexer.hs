@@ -1,15 +1,15 @@
 {-# OPTIONS -cpp #-}
-{-# LINE 1 "Text/ProtocolBuffers/Lexer.x" #-}
+{-# LINE 1 "Text/ProtocolBuffers/ProtoCompile/Lexer.x" #-}
 
+{-# OPTIONS_GHC -Wwarn #-}
 module Text.ProtocolBuffers.ProtoCompile.Lexer (Lexed(..), alexScanTokens,getLinePos)  where
 
 import Control.Monad.Error()
 import Codec.Binary.UTF8.String(encode)
 import qualified Data.ByteString.Lazy as L
-import Data.Char(ord,chr,isHexDigit,isOctDigit,toLower)
-import Data.List(sort,unfoldr)
+import Data.Char(ord,isHexDigit,isOctDigit,toLower)
 import Data.Word(Word8)
-import Numeric(readHex,readOct,readDec,showOct,readSigned,readFloat)
+import Numeric(readHex,readOct,readDec,readSigned,readFloat)
 
 
 #if __GLASGOW_HASKELL__ >= 603
@@ -151,10 +151,10 @@ alex_deflt :: Array Int Int
 alex_deflt = listArray (0,74) [74,-1,-1,-1,-1,13,7,7,9,9,13,14,13,13,13,-1,-1,-1,-1,-1,21,-1,-1,-1,-1,26,-1,-1,-1,30,-1,-1,-1,-1,-1,-1,-1,38,-1,-1,43,55,43,43,43,43,43,43,43,43,43,43,43,43,55,55,55,55,55,55,55,55,55,55,55,55,-1,-1,-1,-1,-1,-1,-1,-1,-1]
 
 alex_accept = listArray (0::Int,74) [[],[],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[],[],[],[],[],[(AlexAcc (alex_action_13))],[(AlexAccPred  (alex_action_2) (alexRightContext 20)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_6))],[(AlexAccPred  (alex_action_2) (alexRightContext 20)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_6))],[(AlexAccPred  (alex_action_2) (alexRightContext 20)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_6))],[(AlexAcc (alex_action_13))],[],[(AlexAccSkip)],[(AlexAccPred  (alex_action_3) (alexRightContext 25)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_7))],[(AlexAccPred  (alex_action_3) (alexRightContext 25)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_7))],[(AlexAccPred  (alex_action_3) (alexRightContext 25)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_7))],[],[(AlexAccSkip)],[(AlexAccPred  (alex_action_4) (alexRightContext 29)),(AlexAcc (alex_action_8))],[],[],[(AlexAccSkip)],[(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_9))],[(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_9))],[(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_9))],[],[],[],[],[(AlexAccSkip)],[(AlexAcc (alex_action_10))],[(AlexAcc (alex_action_10))],[(AlexAcc (alex_action_10))],[(AlexAcc (alex_action_13))],[],[],[],[],[],[],[],[],[],[],[],[(AlexAcc (alex_action_13))],[],[],[],[],[],[],[],[],[],[],[],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_13))],[],[(AlexAcc (alex_action_12))],[(AlexAcc (alex_action_13))]]
-{-# LINE 54 "Text/ProtocolBuffers/Lexer.x" #-}
+{-# LINE 54 "Text/ProtocolBuffers/ProtoCompile/Lexer.x" #-}
 
 line :: AlexPosn -> Int
-line (AlexPn _byte line' _col) = line'
+line (AlexPn _byte lineNum _col) = lineNum
 {-# INLINE line #-}
 
 data Lexed = L_Integer !Int !Integer
@@ -176,7 +176,7 @@ getLinePos x = case x of
 
 -- 'errAt' is the only access to L_Error, so I can see where it is created with pos
 errAt pos msg =  L_Error (line pos) $ "Lexical error (in Text.ProtocolBuffers.Lexer): "++ msg ++ ", at "++see pos where
-  see (AlexPn char line col) = "character "++show char++" line "++show line++" column "++show col++"."
+  see (AlexPn char lineNum col) = "character "++show char++" line "++show lineNum++" column "++show col++"."
 dieAt msg pos _s = errAt pos msg
 wtfAt pos s = errAt pos $ "unknown character "++show c++" (decimal "++show (ord c)++")"
   where (c:_) = ByteString.unpack s
@@ -208,7 +208,7 @@ op one = go id where
   go f cs = case one cs of
               Left msg -> Left msg
               Right Nothing -> Right (f [])
-              Right (Just (ws,cs)) -> go (f . (ws++)) cs
+              Right (Just (ws,cs')) -> go (f . (ws++)) cs'
 
 -- Put this mess in the lexer, so the rest of the code can assume
 -- everything is saner.  The input is checked to really be "Char8"
@@ -220,11 +220,12 @@ op one = go id where
 sDecode :: [Char] -> Either String [Word8]
 sDecode = op one where
   one :: [Char] -> Either String (Maybe ([Word8],[Char]))
-  one (x:xs) | x /= '\\' = do x' <- checkChar8 x
-                              return $ Just (x',xs)  -- main case of unescaped value
+  one ('\\':xs) = unescape xs
+  one (x:xs) = do x' <- checkChar8 x
+                  return $ Just (x',xs)  -- main case of unescaped value
   one [] = return Nothing
-  one ('\\':[]) = Left "cannot understand a string that ends with a backslash"
-  one ('\\':ys) | 1 <= len =
+  unescape [] = Left "cannot understand a string that ends with a backslash"
+  unescape ys | 1 <= len =
       case mayRead readOct oct of
         Just w -> do w' <- checkByte w
                      return $ Just (w',rest)
@@ -232,7 +233,7 @@ sDecode = op one where
     where oct = takeWhile isOctDigit (take 3 ys)
           len = length oct
           rest = drop len ys
-  one ('\\':x:ys) | 'x' == toLower x && 1 <= len =
+  unescape (x:ys) | 'x' == toLower x && 1 <= len =
       case mayRead readHex hex of
         Just w -> do w' <- checkByte w
                      return $ Just (w',rest)
@@ -240,22 +241,22 @@ sDecode = op one where
     where hex = takeWhile isHexDigit (take 2 ys)
           len = length hex
           rest = drop len ys          
-  one ('\\':'u':ys) | ok =
+  unescape ('u':ys) | ok =
       case mayRead readHex hex of
         Just w -> do w' <- checkUnicode w
                      return $ Just (w',rest)
         Nothing -> Left $ "failed to decode 4 char unicode sequence "++ys
     where ok = all isHexDigit hex && 4 == length hex
           (hex,rest) = splitAt 4 ys
-  one ('\\':'U':ys) | ok =
+  unescape ('U':ys) | ok =
       case mayRead readHex hex of
         Just w -> do w' <- checkUnicode w
                      return $ Just (w',rest)
         Nothing -> Left $ "failed to decode 8 char unicode sequence "++ys
     where ok = all isHexDigit hex && 8 == length hex
           (hex,rest) = splitAt 8 ys
-  one ('\\':(x:xs)) = do x' <- decode x
-                         return $ Just ([x'],xs)
+  unescape (x:xs) = do x' <- decode x
+                       return $ Just ([x'],xs)
   decode :: Char -> Either String Word8
   decode 'a' = return 7
   decode 'b' = return 8

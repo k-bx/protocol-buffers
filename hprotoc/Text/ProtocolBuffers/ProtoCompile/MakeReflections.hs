@@ -22,47 +22,40 @@ import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D.Descr
 import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D.DescriptorProto.ExtensionRange(ExtensionRange(..))
 import qualified Text.DescriptorProtos.EnumDescriptorProto            as D(EnumDescriptorProto) 
 import qualified Text.DescriptorProtos.EnumDescriptorProto            as D.EnumDescriptorProto(EnumDescriptorProto(..)) 
-import qualified Text.DescriptorProtos.EnumOptions                    as D(EnumOptions)
-import qualified Text.DescriptorProtos.EnumOptions                    as D.EnumOptions(EnumOptions(..))
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D(EnumValueDescriptorProto)
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D.EnumValueDescriptorProto(EnumValueDescriptorProto(..))
-import qualified Text.DescriptorProtos.EnumValueOptions               as D(EnumValueOptions) 
-import qualified Text.DescriptorProtos.EnumValueOptions               as D.EnumValueOptions(EnumValueOptions(..)) 
 import qualified Text.DescriptorProtos.FieldDescriptorProto           as D(FieldDescriptorProto) 
 import qualified Text.DescriptorProtos.FieldDescriptorProto           as D.FieldDescriptorProto(FieldDescriptorProto(..)) 
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Label     as D.FieldDescriptorProto(Label)
 import           Text.DescriptorProtos.FieldDescriptorProto.Label     as D.FieldDescriptorProto.Label(Label(..))
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto(Type)
 import           Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto.Type(Type(..))
-import qualified Text.DescriptorProtos.FieldOptions                   as D(FieldOptions)
-import qualified Text.DescriptorProtos.FieldOptions                   as D.FieldOptions(FieldOptions(..))
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D(FileDescriptorProto(FileDescriptorProto)) 
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D.FileDescriptorProto(FileDescriptorProto(..)) 
-import qualified Text.DescriptorProtos.FileOptions                    as D(FileOptions)
-import qualified Text.DescriptorProtos.FileOptions                    as D.FileOptions(FileOptions(..))
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Reflections
-import Text.ProtocolBuffers.Extensions
 import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag,runPut)
 
 import qualified Data.Foldable as F(foldr,toList)
 import qualified Data.ByteString as S(concat)
 import qualified Data.ByteString.Char8 as SC(spanEnd)
-import qualified Data.ByteString.Lazy.Char8 as LC(toChunks,fromChunks,length,init,unpack)
+import qualified Data.ByteString.Lazy.Char8 as LC(toChunks,fromChunks,length,init)
 import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.List(partition,unfoldr)
---import Data.Sequence(viewl,ViewL(..),(|>))
 import qualified Data.Sequence as Seq(fromList,empty,singleton)
 import Numeric(readHex,readOct,readDec)
-import Data.Map(Map)
 import Data.Monoid(mconcat,mappend)
-import qualified Data.Map as M(empty,fromListWith,lookup)
+import qualified Data.Map as M(fromListWith,lookup)
 import Data.Maybe(fromMaybe,catMaybes)
 import System.FilePath
 
-import Debug.Trace (trace)
+--import Debug.Trace (trace)
 
+imp :: String -> a
+imp msg = error $ "Text.ProtocolBuffers.ProtoCompile.MakeReflections: Impossible? "++msg
+
+spanEndL :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
 spanEndL f bs = let (a,b) = SC.spanEnd f (S.concat . LC.toChunks $ bs)
                 in (LC.fromChunks [a],LC.fromChunks [b])
 
@@ -72,6 +65,7 @@ splitMod (Utf8 bs) = case spanEndL ('.'/=) bs of
                        (pre,post) | LC.length pre <= 1 -> Right (Utf8 bs)
                                   | otherwise -> Left (Utf8 (LC.init pre),Utf8 post)
 
+toString :: Utf8 -> String
 toString = U.toString . utf8
 
 toProtoName :: String -> Utf8 -> ProtoName
@@ -122,18 +116,19 @@ makeProtoInfo prefix names
   allKeys = M.fromListWith mappend . map (\(k,a) -> (k,Seq.singleton a))
             . F.toList . mconcat $ keyInfos : map keys allMessages
 
-  processMSG isGroup msg = 
-    let getKnownKeys protoName = fromMaybe Seq.empty (M.lookup protoName allKeys)
+  processMSG msgIsGroup msg = 
+    let getKnownKeys protoName' = fromMaybe Seq.empty (M.lookup protoName' allKeys)
         groups = collectedGroups msg
-        checkGroup x = elem (fromMaybe (error $ "Impossible? no message name in makeProtoInfo.processMSG.checkGroup:\n"++show msg)
+        checkGroup x = elem (fromMaybe (imp $ "no message name in makeProtoInfo.processMSG.checkGroup:\n"++show msg)
                                        (D.DescriptorProto.name x))
                             groups
-    in makeDescriptorInfo getKnownKeys prefix isGroup msg
+    in makeDescriptorInfo getKnownKeys prefix msgIsGroup msg
        : concatMap (\x -> processMSG (checkGroup x) x)
                    (F.toList (D.DescriptorProto.nested_type msg))
   processENM msg = foldr ((:) . makeEnumInfo prefix) nested
                          (F.toList (D.DescriptorProto.enum_type msg))
     where nested = concatMap processENM (F.toList (D.DescriptorProto.nested_type msg))
+makeProtoInfo prefix names fdp = imp $ "no name in fdp passed to makeProtoInfo: " ++ show (prefix,names,fdp)
 
 collectedGroups :: D.DescriptorProto -> [Utf8] 
 collectedGroups = catMaybes
@@ -146,9 +141,9 @@ makeEnumInfo :: String -> D.EnumDescriptorProto -> EnumInfo
 makeEnumInfo prefix e@(D.EnumDescriptorProto.EnumDescriptorProto
                         { D.EnumDescriptorProto.name = Just rawName })
     = let protoName = toProtoName prefix rawName
-      in EnumInfo protoName (toPath prefix rawName) (enumValues e)
-  where enumValues :: D.EnumDescriptorProto -> [(EnumCode,String)]
-        enumValues (D.EnumDescriptorProto.EnumDescriptorProto
+      in EnumInfo protoName (toPath prefix rawName) (enumVals e)
+  where enumVals :: D.EnumDescriptorProto -> [(EnumCode,String)]
+        enumVals (D.EnumDescriptorProto.EnumDescriptorProto
                     { D.EnumDescriptorProto.value = value}) 
             = F.foldr ((:) . oneValue) [] value
           where oneValue  :: D.EnumValueDescriptorProto -> (EnumCode,String)
@@ -156,21 +151,23 @@ makeEnumInfo prefix e@(D.EnumDescriptorProto.EnumDescriptorProto
                           { D.EnumValueDescriptorProto.name = Just name
                           , D.EnumValueDescriptorProto.number = Just number })
                     = (EnumCode number,toString name)
+                oneValue evdp = imp $ "no name or number for evdp passed to makeEnumInfo.oneValue: "++show evdp
+makeEnumInfo prefix e = imp $ "no name for enum passed to makeEnumInfo: " ++ show (prefix,e)
 
 makeDescriptorInfo :: (ProtoName -> Seq FieldInfo)
                    -> String -> Bool -> D.DescriptorProto -> DescriptorInfo
-makeDescriptorInfo getKnownKeys prefix isGroup
-                   d@(D.DescriptorProto.DescriptorProto
-                       { D.DescriptorProto.name = Just rawName
-                       , D.DescriptorProto.field = rawFields
-                       , D.DescriptorProto.extension_range = extension_range })
-    = let di = DescriptorInfo protoName (toPath prefix rawName) isGroup
+makeDescriptorInfo getKnownKeys prefix msgIsGroup
+                   (D.DescriptorProto.DescriptorProto
+                     { D.DescriptorProto.name = Just rawName
+                     , D.DescriptorProto.field = rawFields
+                     , D.DescriptorProto.extension_range = extension_range })
+    = let di = DescriptorInfo protoName (toPath prefix rawName) msgIsGroup
                               fieldInfos keyInfos extRangeList (getKnownKeys protoName)
       in di -- trace (toString rawName ++ "\n" ++ show di ++ "\n\n") $ di
   where protoName = toProtoName prefix rawName
-        (fields,keys) = partition (\ f -> Nothing == (D.FieldDescriptorProto.extendee f)) . F.toList $ rawFields
-        fieldInfos = Seq.fromList . map (toFieldInfo protoName) $ fields
-        keyInfos = Seq.fromList . map (\f -> (keyExtendee prefix f,toFieldInfo protoName f)) $ keys
+        (msgFields,keysHere) = partition (\ f -> Nothing == (D.FieldDescriptorProto.extendee f)) . F.toList $ rawFields
+        fieldInfos = Seq.fromList . map (toFieldInfo protoName) $ msgFields
+        keyInfos = Seq.fromList . map (\f -> (keyExtendee prefix f,toFieldInfo protoName f)) $ keysHere
         extRangeList = concatMap check unchecked
           where check x@(lo,hi) | hi < lo = []
                                 | hi<19000 || 19999<lo  = [x]
@@ -180,16 +177,20 @@ makeDescriptorInfo getKnownKeys prefix isGroup
                             { D.DescriptorProto.ExtensionRange.start = start
                             , D.DescriptorProto.ExtensionRange.end = end }) =
                   (maybe minBound FieldId start, maybe maxBound FieldId end)
+makeDescriptorInfo _ prefix msgIsGroup d =
+  imp $ "No name passed in dp passed to makeDescriptorInfo: "++show (prefix,msgIsGroup,d)
+
   
+keyExtendee :: String -> D.FieldDescriptorProto.FieldDescriptorProto -> ProtoName
 keyExtendee prefix f
     = case D.FieldDescriptorProto.extendee f of
         Nothing -> error "Impossible? keyExtendee expected Just but found Nothing"
         Just extName -> toProtoName prefix extName
 
 toFieldInfo :: ProtoName ->  D.FieldDescriptorProto -> FieldInfo
-toFieldInfo (ProtoName prefix mod parent)
+toFieldInfo (ProtoName prefix modName parent)
             f@(D.FieldDescriptorProto.FieldDescriptorProto
-                { D.FieldDescriptorProto.name = Just fieldName
+                { D.FieldDescriptorProto.name = Just name
                 , D.FieldDescriptorProto.number = Just number
                 , D.FieldDescriptorProto.label = Just label
                 , D.FieldDescriptorProto.type' = Just type'
@@ -198,21 +199,22 @@ toFieldInfo (ProtoName prefix mod parent)
                 , D.FieldDescriptorProto.default_value = mayRawDef })
     = fieldInfo
   where mayDef = parseDefaultValue f
-        fieldInfo = let fullName = ProtoName prefix (dotPre mod parent) (toString fieldName)
+        fieldInfo = let fullName = ProtoName prefix (dotPre modName parent) (toString name)
                         fieldId = (FieldId (fromIntegral number))
                         fieldType = (FieldType (fromEnum type'))
-                        wireTag = toWireTag fieldId fieldType
-                        wireTagLength = size'Varint (getWireTag wireTag)
+                        wt = toWireTag fieldId fieldType
+                        wtLength = size'Varint (getWireTag wt)
                     in FieldInfo fullName
                                  fieldId
-                                 wireTag
-                                 wireTagLength
+                                 wt
+                                 wtLength
                                  (label == LABEL_REQUIRED)
                                  (label == LABEL_REPEATED)
                                  fieldType
                                  (fmap (toProtoName prefix) mayTypeName)
                                  (fmap utf8 mayRawDef)
                                  mayDef
+toFieldInfo pn f = imp $ "Not enough information defined in field passed to toFieldInfo: "++show(pn,f)
 
 -- "Nothing" means no value specified
 -- A failure to parse a provided value will result in an error at the moment

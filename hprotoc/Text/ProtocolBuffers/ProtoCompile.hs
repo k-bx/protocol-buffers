@@ -3,7 +3,7 @@ module Main where
 
 import qualified Data.Map as M
 import Data.Version
-import Language.Haskell.Pretty(prettyPrintStyleMode,Style(..),Mode(..),PPHsMode(..),PPLayout(..),defaultMode)
+import Language.Haskell.Pretty(prettyPrintStyleMode,Style(..),Mode(..),PPHsMode(..),PPLayout(..))
 import System.Console.GetOpt
 import System.Environment
 import System.Directory
@@ -30,6 +30,7 @@ data Options = Options { optPrefix :: String
   deriving Show
 
 setPrefix,setTarget,setInclude,setProto :: String -> Options -> Options
+setVerbose,setUnknown :: Options -> Options
 setPrefix   s o = o { optPrefix = s }
 setTarget   s o = o { optTarget = s }
 setInclude  s o = o { optInclude = s : optInclude o }
@@ -41,8 +42,8 @@ data OptionAction = Mutate (Options->Options) | Run (Options->Options) | Switch 
 
 data Flag = VersionInfo
 
-options :: [OptDescr OptionAction]
-options =
+optionList :: [OptDescr OptionAction]
+optionList =
   [ Option ['I'] ["proto_path"] (ReqArg (Mutate . setInclude) "DIR")
                "directory from which to search for imported proto files (default is pwd); all DIR searched"
   , Option ['o'] ["haskell_out"] (ReqArg (Mutate . setTarget) "DIR")
@@ -57,7 +58,8 @@ options =
                "print out version information"
   ]
 
-usageMsg = usageInfo "Usage: protoCompile [OPTION..] path-to-file.proto ..." options
+usageMsg,versionInfo :: String
+usageMsg = usageInfo "Usage: protoCompile [OPTION..] path-to-file.proto ..." optionList
 
 versionInfo = unlines $
   [ "Welcome to protocol-buffers version "++showVersion version
@@ -72,7 +74,7 @@ versionInfo = unlines $
 
 processOptions :: [String] -> Either String [OptionAction]
 processOptions argv =
-  case getOpt (ReturnInOrder (Run . setProto)) options argv of
+    case getOpt (ReturnInOrder (Run . setProto)) optionList argv of
     (opts,_,[]) -> Right opts
     (_,_,errs) -> Left (unlines errs ++ usageMsg)
 
@@ -81,28 +83,35 @@ defaultOptions = do
   pwd <- getCurrentDirectory
   return $ Options { optPrefix = "", optTarget = pwd, optInclude = [pwd], optProto = "", optVerbose = False, optUnkownFields = False }
 
+main :: IO ()
 main = do
-  options <- defaultOptions
+  defs <- defaultOptions
   args <- getArgs
   case processOptions args of
     Left msg -> putStrLn msg
-    Right todo -> process options todo
+    Right todo -> process defs todo
 
-process options [] = if null (optProto options) then do putStrLn "No proto file specified (or empty proto file)"
-                                                        putStrLn ""
-                                                        putStrLn usageMsg
+process :: Options -> [OptionAction] -> IO ()
+process options [] = if null (optProto options)
+                       then do putStrLn "No proto file specified (or empty proto file)"
+                               putStrLn ""
+                               putStrLn usageMsg
                        else putStrLn "Processing complete, have a nice day."
 process options (Mutate f:rest) = process (f options) rest
 process options (Run f:rest) = let options' = f options
                             in run options' >> process options' rest
-process options (Switch VersionInfo:_) = putStrLn versionInfo
+process _options (Switch VersionInfo:_) = putStrLn versionInfo
   
 mkdirFor :: FilePath -> IO ()
 mkdirFor p = createDirectoryIfMissing True (takeDirectory p)
 
+style :: Style
 style = Style PageMode 132 0.5
+
+myMode :: PPHsMode
 myMode = PPHsMode 2 2 2 2 4 2 True PPOffsideRule False True
 
+run :: Options -> IO ()
 run options = do
   print options
   protos <- loadProto (optInclude options) (optProto options)

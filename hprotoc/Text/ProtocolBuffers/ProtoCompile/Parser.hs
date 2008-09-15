@@ -59,7 +59,9 @@ filename1,filename2 :: String
 filename1 = "/tmp/unittest.proto"
 filename2 = "/tmp/descriptor.proto"
 
+utf8FromString :: String -> Maybe Utf8
 utf8FromString = Just . Utf8 . U.fromString
+utf8ToString :: Utf8 -> String
 utf8ToString = U.toString . utf8
 
 initState :: String -> D.FileDescriptorProto
@@ -182,6 +184,7 @@ parser = proto >> getState
         upTopEnum e  = update' (\s -> s {D.FileDescriptorProto.enum_type=D.FileDescriptorProto.enum_type s |> e})
         upTopField f = update' (\s -> s {D.FileDescriptorProto.extension=D.FileDescriptorProto.extension s |> f})
 
+importFile,package,fileOption,service :: P D.FileDescriptorProto.FileDescriptorProto ()
 importFile = pName (U.fromString "import") >> strLit >>= \p -> eol >> update' (\s -> s {D.FileDescriptorProto.dependency=(D.FileDescriptorProto.dependency s) |> p})
 
 package = pName (U.fromString "package") >> ident_package >>= \p -> eol >> update' (\s -> s {D.FileDescriptorProto.package=Just p})
@@ -206,6 +209,7 @@ message up = pName (U.fromString "message") >> do
   up =<< subParser (pChar '{' >> subMessage) (mergeEmpty {D.DescriptorProto.name=Just self})
 
 -- subMessage is also used to parse group declarations
+subMessage,messageOption,extensions :: P D.DescriptorProto.DescriptorProto ()
 subMessage = (pChar '}') <|> (choice [ eol
                                      , field upNestedMsg Nothing >>= upMsgField
                                      , message upNestedMsg
@@ -359,13 +363,14 @@ isValidUTF8 ws = go 0 (L.unpack ws) 0 where
   -- leading 3 bits are 100, so next 6 are at most 001111, i.e. 10001111
   high (x:xs) n | 128 <= x && x <= 143 = go 2 xs $! succ n
                 | otherwise = Just n
+  high [] n = Just n
 
 enum :: (D.EnumDescriptorProto -> P s ()) -> P s ()
 enum up = pName (U.fromString "enum") >> do
   self <- ident1
   up =<< subParser (pChar '{' >> subEnum) (mergeEmpty {D.EnumDescriptorProto.name=Just self})
 
-
+enumOption,subEnum :: P D.EnumDescriptorProto.EnumDescriptorProto ()
 enumOption = pOption >>= setOption >>= \p -> eol >> update' (\s -> s {D.EnumDescriptorProto.options=Just p})
   where
     setOption optName = do

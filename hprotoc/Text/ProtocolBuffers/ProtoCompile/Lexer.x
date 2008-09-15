@@ -5,10 +5,9 @@ module Text.ProtocolBuffers.ProtoCompile.Lexer (Lexed(..), alexScanTokens,getLin
 import Control.Monad.Error()
 import Codec.Binary.UTF8.String(encode)
 import qualified Data.ByteString.Lazy as L
-import Data.Char(ord,chr,isHexDigit,isOctDigit,toLower)
-import Data.List(sort,unfoldr)
+import Data.Char(ord,isHexDigit,isOctDigit,toLower)
 import Data.Word(Word8)
-import Numeric(readHex,readOct,readDec,showOct,readSigned,readFloat)
+import Numeric(readHex,readOct,readDec,readSigned,readFloat)
 
 }
 
@@ -76,7 +75,7 @@ getLinePos x = case x of
 
 -- 'errAt' is the only access to L_Error, so I can see where it is created with pos
 errAt pos msg =  L_Error (line pos) $ "Lexical error (in Text.ProtocolBuffers.Lexer): "++ msg ++ ", at "++see pos where
-  see (AlexPn char line col) = "character "++show char++" line "++show line++" column "++show col++"."
+  see (AlexPn char lineNum col) = "character "++show char++" line "++show lineNum++" column "++show col++"."
 dieAt msg pos _s = errAt pos msg
 wtfAt pos s = errAt pos $ "unknown character "++show c++" (decimal "++show (ord c)++")"
   where (c:_) = ByteString.unpack s
@@ -120,11 +119,12 @@ op one = go id where
 sDecode :: [Char] -> Either String [Word8]
 sDecode = op one where
   one :: [Char] -> Either String (Maybe ([Word8],[Char]))
-  one (x:xs) | x /= '\\' = do x' <- checkChar8 x
-                              return $ Just (x',xs)  -- main case of unescaped value
+  one ('\\':xs) = unescape xs
+  one (x:xs) = do x' <- checkChar8 x
+                  return $ Just (x',xs)  -- main case of unescaped value
   one [] = return Nothing
-  one ('\\':[]) = Left "cannot understand a string that ends with a backslash"
-  one ('\\':ys) | 1 <= len =
+  unescape [] = Left "cannot understand a string that ends with a backslash"
+  unescape ys | 1 <= len =
       case mayRead readOct oct of
         Just w -> do w' <- checkByte w
                      return $ Just (w',rest)
@@ -132,7 +132,7 @@ sDecode = op one where
     where oct = takeWhile isOctDigit (take 3 ys)
           len = length oct
           rest = drop len ys
-  one ('\\':x:ys) | 'x' == toLower x && 1 <= len =
+  unescape (x:ys) | 'x' == toLower x && 1 <= len =
       case mayRead readHex hex of
         Just w -> do w' <- checkByte w
                      return $ Just (w',rest)
@@ -140,22 +140,22 @@ sDecode = op one where
     where hex = takeWhile isHexDigit (take 2 ys)
           len = length hex
           rest = drop len ys          
-  one ('\\':'u':ys) | ok =
+  unescape ('u':ys) | ok =
       case mayRead readHex hex of
         Just w -> do w' <- checkUnicode w
                      return $ Just (w',rest)
         Nothing -> Left $ "failed to decode 4 char unicode sequence "++ys
     where ok = all isHexDigit hex && 4 == length hex
           (hex,rest) = splitAt 4 ys
-  one ('\\':'U':ys) | ok =
+  unescape ('U':ys) | ok =
       case mayRead readHex hex of
         Just w -> do w' <- checkUnicode w
                      return $ Just (w',rest)
         Nothing -> Left $ "failed to decode 8 char unicode sequence "++ys
     where ok = all isHexDigit hex && 8 == length hex
           (hex,rest) = splitAt 8 ys
-  one ('\\':(x:xs)) = do x' <- decode x
-                         return $ Just ([x'],xs)
+  unescape (x:xs) = do x' <- decode x
+                       return $ Just ([x'],xs)
   decode :: Char -> Either String Word8
   decode 'a' = return 7
   decode 'b' = return 8

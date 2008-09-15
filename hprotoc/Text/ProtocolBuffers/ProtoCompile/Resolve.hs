@@ -20,26 +20,21 @@ import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D(Exten
 import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D.ExtensionRange(ExtensionRange(..))
 import qualified Text.DescriptorProtos.EnumDescriptorProto            as D(EnumDescriptorProto)
 import qualified Text.DescriptorProtos.EnumDescriptorProto            as D.EnumDescriptorProto(EnumDescriptorProto(..))
-import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D(EnumValueDescriptorProto(EnumValueDescriptorProto))
+import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D(EnumValueDescriptorProto)
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D.EnumValueDescriptorProto(EnumValueDescriptorProto(..))
-import qualified Text.DescriptorProtos.FieldDescriptorProto           as D(FieldDescriptorProto(FieldDescriptorProto))
 import qualified Text.DescriptorProtos.FieldDescriptorProto           as D.FieldDescriptorProto(FieldDescriptorProto(..))
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto(Type)
 import           Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto.Type(Type(..))
-import qualified Text.DescriptorProtos.FieldOptions                   as D(FieldOptions)
-import qualified Text.DescriptorProtos.FieldOptions                   as D.FieldOptions(FieldOptions(..))
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D(FileDescriptorProto(FileDescriptorProto))
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D.FileDescriptorProto(FileDescriptorProto(..))
 import qualified Text.DescriptorProtos.FileOptions                    as D.FileOptions(FileOptions(..))
-import qualified Text.DescriptorProtos.MessageOptions                 as D.MessageOptions(MessageOptions(..))
-import qualified Text.DescriptorProtos.MethodDescriptorProto          as D(MethodDescriptorProto(MethodDescriptorProto))
+import qualified Text.DescriptorProtos.MethodDescriptorProto          as D(MethodDescriptorProto)
 import qualified Text.DescriptorProtos.MethodDescriptorProto          as D.MethodDescriptorProto(MethodDescriptorProto(..))
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D.ServiceDescriptorProto(ServiceDescriptorProto(..))
 
 import Text.ProtocolBuffers.Header
 import Text.ProtocolBuffers.ProtoCompile.Parser
 
-import Control.Monad
 import Control.Monad.State
 import Data.Char
 import Data.Ix(inRange)
@@ -55,8 +50,9 @@ import qualified Data.ByteString.Lazy.Char8 as LC
 import System.Directory
 import System.FilePath
 
+err :: forall b. String -> b
 err s = error $ "Text.ProtocolBuffers.Resolve fatal error encountered, message:\n"++indent s
-  where indent = unlines . map (\s -> ' ':' ':s) . lines
+  where indent = unlines . map (\str -> ' ':' ':str) . lines
 
 encodeModuleNames :: [String] -> Utf8
 encodeModuleNames [] = Utf8 mempty
@@ -121,15 +117,15 @@ extRangeList d = concatMap check unchecked
 
 newtype NameSpace = NameSpace {unNameSpace::(Map String ([String],NameType,Maybe NameSpace))}
   deriving (Show,Read)
-data NameType = Message [(Int32,Int32)] | Enumeration [Utf8] | Service | Void
+data NameType = Message [(Int32,Int32)] | Enumeration [Utf8] | Service | Void 
   deriving (Show,Read)
 
 type Context = [NameSpace]
-type Resolver = Context -> ByteString -> ByteString
 
 seeContext :: Context -> [String] 
 seeContext cx = map ((++"[]") . concatMap (\k -> show k ++ ", ") . M.keys . unNameSpace) cx
 
+toString :: Utf8 -> String
 toString = U.toString . utf8
 
 findFile :: [FilePath] -> FilePath -> IO (Maybe FilePath)
@@ -204,11 +200,13 @@ withPackage :: Context -> D.FileDescriptorProto -> Context
 withPackage (cx:_) (D.FileDescriptorProto {D.FileDescriptorProto.package=Just package}) =
   let prepend = mangleCap1 . Just $ package
   in [NameSpace (M.singleton prepend ([prepend],Void,Just cx))]
-withPackage (cx:_) (D.FileDescriptorProto {D.FileDescriptorProto.name=n}) =  err $
+withPackage (_:_) (D.FileDescriptorProto {D.FileDescriptorProto.name=n}) =  err $
   "withPackage given an imported FDP without a package declaration: "++show n
 withPackage [] (D.FileDescriptorProto {D.FileDescriptorProto.name=n}) =  err $
-  "withPackage given an empty context"
+  "withPackage given an empty context: "++show n
 
+resolveFDP :: D.FileDescriptorProto.FileDescriptorProto
+           -> (D.FileDescriptorProto.FileDescriptorProto, [String])
 resolveFDP fdpIn =
   let (context,_,names) = toContext fdpIn
   in (resolveWithContext context fdpIn,names)
@@ -267,8 +265,9 @@ resolveWithContext protoContext protoIn =
           Just (_,_,Just ns1) -> ns1:cx
           x -> rerr $ "*** Name resolution failed when descending:\n"++unlines (mangled : show x : "KNOWN NAMES" : seeContext cx)
        where mangled = mangleCap1 name -- XXX empty on nothing?
+      descend [] _ = []
       resolve :: Context -> Maybe Utf8 -> Maybe Utf8
-      resolve context Nothing = Nothing
+      resolve _context Nothing = Nothing
       resolve context (Just bs) = fmap fst (resolveWithNameType context bs)
       resolveWithNameType :: Context -> Utf8 -> Maybe (Utf8,NameType)
       resolveWithNameType context bsIn =
@@ -278,7 +277,7 @@ resolveWithContext protoContext protoIn =
                                ,"Mangled name: "++show nameIn
                                ,"List of known names:"]
                      ++ unlines (seeContext context)
-            resolver [] (NameSpace cx) = rerr $ "Impossible? case in Text.ProtocolBuffers.Resolve.resolveWithNameType.resolver []\n" ++ errMsg
+            resolver [] (NameSpace _cx) = rerr $ "Impossible? case in Text.ProtocolBuffers.Resolve.resolveWithNameType.resolver []\n" ++ errMsg
             resolver [name] (NameSpace cx) = case M.lookup name cx of
                                                Nothing -> Nothing
                                                Just (fqName,nameType,_) -> Just (encodeModuleNames fqName,nameType)
@@ -315,18 +314,17 @@ resolveWithContext protoContext protoIn =
                                 (Just (newName,Message ers),Just fid) ->
                                   if checkER ers fid then newName
                                     else rerr $ "*** Name resolution found an extension field that is out of the allowed extension ranges: "++show f ++ "\n has a number "++ show fid ++" not in one of the valid ranges: " ++ show ers
-                                (Nothing,_) -> rerr $ "*** Name resolution failed for the extendee: "++show f
+                                (Just _,_) -> rerr $ "*** Name resolution found wrong type for "++show orig++" : "++show e2
+                                (Nothing,Just {}) -> rerr $ "*** Name resolution failed for the extendee: "++show f
                                 (_,Nothing) -> rerr $ "*** No field id number for the extension field: "++show f
              r2 = fmap (fromMaybe (rerr $ "*** Name resolution failed for the type_name of extension field: "++show f)
                          . (resolveWithNameType cx))
                        (D.FieldDescriptorProto.type_name f)
              t (Message {}) = TYPE_MESSAGE
              t (Enumeration {}) = TYPE_ENUM
-             t Void = rerr $ unlines [ "Problem found: processFLD cannot resolve type_name to Void"
-                                     , "  The parent message is "++maybe "<no message>" toString mp
-                                     , "  The field name is "++maybe "<no field name>" toString (D.FieldDescriptorProto.name f)]
-             checkSelf (Just parent) x@(Just name) = if parent==name then (D.FieldDescriptorProto.type_name f) else x
-             checkSelf _ x = x
+             t _ = rerr $ unlines [ "Problem found: processFLD cannot resolve type_name to Void or Service"
+                                  , "  The parent message is "++maybe "<no message>" toString mp
+                                  , "  The field name is "++maybe "<no field name>" toString (D.FieldDescriptorProto.name f)]
              new_type' = (D.FieldDescriptorProto.type' f) `mplus` (fmap (t.snd) r2)
              checkEnumDefault = case (D.FieldDescriptorProto.default_value f,fmap snd r2) of
                                   (Just name,Just (Enumeration values)) | name  `elem` values -> mangleEnum (Just name)

@@ -40,7 +40,7 @@ import qualified Data.Map as M
 import qualified Data.Sequence as Seq(null,length)
 import qualified Data.Set as S
 
-import Debug.Trace(trace)
+--import Debug.Trace(trace)
 
 -- -- -- -- Helper functions
 
@@ -180,13 +180,15 @@ instanceEnum ei
 instanceWireEnum :: EnumInfo -> HsDecl
 instanceWireEnum ei
     = HsInstDecl src [] (private "Wire") [HsTyCon (unqualName (enumName ei))]
-        [ withName "wireSize", withName "wirePut", withGet ]
-  where withName foo = inst foo [litIntP 14,HsPVar (HsIdent "enum")] rhs
-          where rhs = (pvar foo $$ HsLit (HsInt 14)) $$
-                      (HsParen $ pvar "fromEnum" $$ lvar "enum")
+        [ withName "wireSize", withName "wirePut", withGet, withGetErr ]
+  where withName foo = inst foo [HsPVar (HsIdent "ft'"),HsPVar (HsIdent "enum")] rhs
+          where rhs = pvar foo $$ lvar "ft'" $$
+                        (HsParen $ pvar "fromEnum" $$ lvar "enum")
         withGet = inst "wireGet" [litIntP 14] rhs
-          where rhs = (pvar "fmap" $$ pvar "toEnum") $$
-                      (HsParen $ pvar "wireGet" $$ HsLit (HsInt 14))
+          where rhs = pvar "fmap" $$ pvar "toEnum" $$
+                        (HsParen $ pvar "wireGet" $$ HsLit (HsInt 14))
+        withGetErr = inst "wireGet" [HsPVar (HsIdent "ft'")] rhs
+          where rhs = pvar "wireGetErr" $$ lvar "ft'"
 
 instanceGPB :: ProtoName -> HsDecl
 instanceGPB protoName
@@ -262,14 +264,11 @@ embed'fdpBS bs = [ myType, myValue ]
 descriptorModule :: DescriptorInfo -> HsModule
 descriptorModule di
     = let protoName = descName di
-          prefix = haskellPrefix protoName
           un = UnQual . HsIdent . baseName $ protoName
-          imports = standardImports (hasExt di) ++ map formatImport' (toImport' di)
+          imports = standardImports (hasExt di) ++ map formatImport (toImport di)
           exportKeys = map (HsEVar . UnQual . HsIdent . baseName . fieldName . snd) (F.toList (keys di))
-          formatImport' ((a,b),s) = HsImportDecl src (Module a) True (Just (Module b)) (Just (False,
+          formatImport ((a,b),s) = HsImportDecl src (Module a) True (Just (Module b)) (Just (False,
                                       map (HsIAbs . HsIdent) (S.toList s)))
-          formatImport (m,t) = HsImportDecl src (Module (dotPre prefix (dotPre m t))) True
-                                 (Just (Module m)) (Just (False,[HsIAbs (HsIdent t)]))
       in HsModule src (Module (fqName protoName))
            (Just (HsEThingAll un : exportKeys))
            imports (descriptorX di : (keysX protoName (keys di) ++ instancesDescriptor di))
@@ -282,32 +281,18 @@ standardImports ext =
  where ops | ext = map (HsIVar . HsSymbol) ["+","<=","&&"," || "]
            | otherwise = map (HsIVar . HsSymbol) ["+"]
 
-toImport' :: DescriptorInfo -> [((String,String),S.Set String)]
-toImport' di
+toImport :: DescriptorInfo -> [((String,String),S.Set String)]
+toImport di
     = M.assocs . M.fromListWith S.union . filter isForeign . map withMod $ allNames
   where isForeign = let here = fqName protoName
                     in (\((a,_),_) -> a/=here)
-        protoName@(ProtoName _prefix parents self) = descName di
+        protoName = descName di
         withMod p@(ProtoName prefix modname base) | isUpper (head base) = ((fqName p,modname),S.singleton base)
                                                   | otherwise = ((dotPre prefix modname,modname),S.singleton base)
         allNames = F.foldr addName keyNames (fields di)
         keyNames = F.foldr (\(e,fi) rest -> e : addName fi rest) keysKnown (keys di)
         keysKnown = F.foldr (\fi rest -> fieldName fi : rest) [] (knownKeys di)
 --      keysKnown = F.foldr (\fi rest -> addName fi (fieldName fi : rest)) [] (knownKeys di)
-        addName fi rest = maybe rest (:rest) (typeName fi)
-
-toImport :: DescriptorInfo -> [(String,String)]
-toImport di
-    = map head . group . sort 
-      . filter (selfName /=)
-      . concatMap withMod
-      $ allNames
-  where selfName = (parentModule (descName di), baseName (descName di))
-        withMod (ProtoName _prefix "" _base) = []
-        withMod (ProtoName _prefix modname base) = [(modname,base)]
-        allNames = F.foldr addName keyNames (fields di)
-        keyNames = F.foldr (\(e,fi) rest -> e : addName fi rest) keysKnown (keys di)
-        keysKnown = F.foldr addName [] (knownKeys di)
         addName fi rest = maybe rest (:rest) (typeName fi)
 
 keysX :: ProtoName -> Seq KeyInfo -> [HsDecl]
@@ -440,7 +425,6 @@ mkOp s a b = HsInfixApp a (HsQVarOp (UnQual (HsSymbol s))) b
 -}
 instanceWireDescriptor :: DescriptorInfo -> HsDecl
 instanceWireDescriptor (DescriptorInfo { descName = protoName
-                                       , isGroup = isGroup
                                        , fields = fieldInfos
                                        , extRanges = allowedExts
                                        , knownKeys = fieldExts })
