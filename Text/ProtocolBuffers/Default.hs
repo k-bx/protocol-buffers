@@ -3,7 +3,8 @@ module Text.ProtocolBuffers.Default(Default(..)) where
 import Text.ProtocolBuffers.Basic
 import Data.Monoid(mempty)
 
-instance Default a => Default (Maybe a) where defaultValue = Just defaultValue
+--instance Default a => Default (Maybe a) where defaultValue = Just defaultValue
+instance Default a => Default (Maybe a) where defaultValue = Nothing
 instance Default (Seq a) where defaultValue = mempty
 instance Default Bool where defaultValue = False
 instance Default ByteString where defaultValue = mempty

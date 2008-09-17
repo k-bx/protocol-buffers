@@ -1,9 +1,15 @@
--- | "Text.ProtocolBuffers.Basic" defines or re-exports all the basic field types.
--- It also defined the Mergeable, Default, and Wire classes
-module Text.ProtocolBuffers.Basic(Seq,Utf8(..),ByteString,Int32,Int64,Word32,Word64
-                                 ,WireTag(..),FieldId(..),WireType(..),FieldType(..),EnumCode(..),WireSize
-                                 ,Mergeable(..),Default(..),Wire(..)
-                                 ) where
+-- | "Text.ProtocolBuffers.Basic" defines or re-exports most of the
+-- basic field types; 'Maybe','Bool', 'Double', and 'Float' come from
+-- the Prelude instead. This module also defined the 'Mergeable',
+-- 'Default', and 'Wire' classes.
+module Text.ProtocolBuffers.Basic
+  ( -- * Basic types for protocol buffer fields in Haskell
+    Seq,Utf8(..),ByteString,Int32,Int64,Word32,Word64
+    -- * Haskell types that act in the place of DescritorProto values
+  , WireTag(..),FieldId(..),WireType(..),FieldType(..),EnumCode(..),WireSize
+    -- * Some of the type classes implemented messages and fields
+  , Mergeable(..),Default(..),Wire(..)
+  ) where
 
 import Data.Binary.Put(Put)
 import Data.Bits(Bits)
@@ -22,7 +28,8 @@ import Text.ProtocolBuffers.Get(Get)
 -- | 'Utf8' is used to mark 'ByteString' values that (should) contain
 -- valud utf8 encoded strings.  This type is used to represent
 -- 'TYPE_STRING' values.
-newtype Utf8 = Utf8 {utf8 :: ByteString} deriving (Read,Show,Data,Typeable,Eq,Ord)
+newtype Utf8 = Utf8 {utf8 :: ByteString}
+  deriving (Read,Show,Data,Typeable,Eq,Ord)
 
 -- | 'WireTag' is the 32 bit value with the upper 29 bits being the
 -- 'FieldId' and the lower 3 bits being the 'WireType'
@@ -35,13 +42,26 @@ newtype WireTag = WireTag { getWireTag :: Word32 } -- bit concatenation of Field
 newtype FieldId = FieldId { getFieldId :: Int32 } -- really 29 bits
   deriving (Eq,Ord,Read,Show,Num,Data,Typeable,Ix)
 
--- Note that valeus 19000-19999 are forbidden for FieldId
+-- Note that values 19000-19999 are forbidden for FieldId
 instance Bounded FieldId where
   minBound = 0
   maxBound = 536870911 -- 2^29-1
 
 -- | 'WireType' is the 3 bit wire encoding value, and is currently in
--- | the range 1 to 5.
+-- the range 0 to 5, leaving 6 and 7 currently invalid.
+--
+-- * 0 /Varint/ : int32, int64, uint32, uint64, sint32, sint64, bool, enum
+--
+-- * 1 /64-bit/ : fixed64, sfixed64, double
+--
+-- * 2 /Length-delimited/ : string, bytes, embedded messages
+--
+-- * 3 /Start group/ : groups (deprecated)
+--
+-- * 4 /End group/ : groups (deprecated)
+--
+-- * 5 /32-bit/ : fixed32, sfixed32, float
+--
 newtype WireType = WireType { getWireType :: Word32 }    -- really 3 bits
   deriving (Eq,Ord,Read,Show,Num,Data,Typeable)
 
@@ -49,9 +69,39 @@ instance Bounded WireType where
   minBound = 0
   maxBound = 5
 
--- | 'FieldType' is the integer associated with the
--- FieldDescriptorProto's Type.  The allowed range is currently 1 to
--- 18.
+{- | 'FieldType' is the integer associated with the
+  FieldDescriptorProto's Type.  The allowed range is currently 1 to
+  18, as shown below (excerpt from descritor.proto)
+
+>    // 0 is reserved for errors.
+>    // Order is weird for historical reasons.
+>    TYPE_DOUBLE         = 1;
+>    TYPE_FLOAT          = 2;
+>    TYPE_INT64          = 3;   // Not ZigZag encoded.  Negative numbers
+>                               // take 10 bytes.  Use TYPE_SINT64 if negative
+>                               // values are likely.
+>    TYPE_UINT64         = 4;
+>    TYPE_INT32          = 5;   // Not ZigZag encoded.  Negative numbers
+>                               // take 10 bytes.  Use TYPE_SINT32 if negative
+>                               // values are likely.
+>    TYPE_FIXED64        = 6;
+>    TYPE_FIXED32        = 7;
+>    TYPE_BOOL           = 8;
+>    TYPE_STRING         = 9;
+>    TYPE_GROUP          = 10;  // Tag-delimited aggregate.
+>    TYPE_MESSAGE        = 11;  // Length-delimited aggregate.
+>
+>    // New in version 2.
+>    TYPE_BYTES          = 12;
+>    TYPE_UINT32         = 13;
+>    TYPE_ENUM           = 14;
+>    TYPE_SFIXED32       = 15;
+>    TYPE_SFIXED64       = 16;
+>    TYPE_SINT32         = 17;  // Uses ZigZag encoding.
+>    TYPE_SINT64         = 18;  // Uses ZigZag encoding.
+
+-}
+
 newtype FieldType = FieldType { getFieldType :: Int } -- really [1..18] as fromEnum of Type from Type.hs
   deriving (Eq,Ord,Read,Show,Num,Data,Typeable)
 
@@ -60,7 +110,7 @@ instance Bounded FieldType where
   maxBound = 18
 
 -- | 'EnumCode' is the Int32 assoicated with a
--- EnumValueDescriptorProto and is in the range 0 to 2^31-1
+-- EnumValueDescriptorProto and is in the range 0 to 2^31-1.
 newtype EnumCode = EnumCode { getEnumCode :: Int32 }  -- really [0..maxBound::Int32] of some .proto defined enumeration
   deriving (Eq,Ord,Read,Show,Num,Data,Typeable) 
 
@@ -80,7 +130,7 @@ class Mergeable a where
   -- | The 'mergeEmpty' value of a basic type or a message with
   -- required fields will be undefined and a runtime error to
   -- evaluate.  These are only handy for reading the wire encoding and
-  -- users should employ 'defaultValue' instead'.
+  -- users should employ 'defaultValue' instead.
   mergeEmpty :: a
   mergeEmpty = error "You did not define Mergeable.mergeEmpty!"
 
@@ -103,19 +153,23 @@ class Mergeable a where
 -- and also note that 'Enum' types have a 'defaultValue' that is the
 -- first one in the @.proto@ file (there is always at least one
 -- value).  Instances of this for messages hold any default value
--- defined in the @.proto@ file.
+-- defined in the @.proto@ file.  'defaultValue' is where the
+-- 'MessageAPI' function 'getVal' looks when an optional field is not
+-- set.
 class Default a where
   -- | The 'defaultValue' is never undefined or an error to evalute.
-  -- This makes it much more useful compared to 'mergeEmpty'. Optional
-  -- field values are set to 'Just' and not 'Nothing'.  Repeated field
-  -- value are always empty by default.
+  -- This makes it much more useful compared to 'mergeEmpty'. In a
+  -- default message all Optional field values are set to 'Nothing'
+  -- and Repeated field values are empty.
   defaultValue :: a
 
--- | If you mis-match a FieldType with the type of @b@ then you will
--- get a pattern match failure at runtime.
+-- | The 'Wire' class is for internal use, and may change.  If there
+-- is a mis-match between the 'FieldType' and the type of @b@ then you
+-- will get a failure at runtime.
 --
--- These are only used internally and by the generated files.  The
--- users should not (normally) need to import these class functions.
+-- Users should stick to the message functions defined in
+-- "Text.ProtocolBuffers.WireMessage" and exported to use user by
+-- "Text.ProtocolBuffers".  These are less likely to change.
 class Wire b where
   {-# INLINE wireSize #-}
   wireSize :: FieldType -> b -> WireSize
