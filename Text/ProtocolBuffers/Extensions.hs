@@ -1,7 +1,7 @@
 -- | The "Extensions" module contributes two main things.  The first
 -- is the definition and implementation of extensible message
 -- features.  This means that the 'ExtField' data type is exported but
--- its contructor is hidden.
+-- its constructor is hidden.
 --
 -- This first part also includes the keys for the extension fields:
 -- the 'Key' data type.  These are typically defined in code generated
