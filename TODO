@@ -1,7 +1,6 @@
 Add the rest of the documentation for the public API.
-compile with -Wall -Werror
 
-Bext task: re-organize code
+Next task: re-organize code
   Goals:
     1) A command-line code generation tool
        a) CLI input
