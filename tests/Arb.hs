@@ -18,12 +18,26 @@ arb g = do
    return $ generate i s2' g
 
 integralRandomR :: (Integral a, RandomGen g) => (a,a) -> g -> (a,g)
-integralRandomR  (a,b) g = case randomR (fromIntegral a :: Integer,
-                                         fromIntegral b :: Integer) g of
-                            (x,g) -> (fromIntegral x, g)
+integralRandomR  (a,b) g =
+  case randomR (fromIntegral a :: Integer,fromIntegral b :: Integer) g of
+    (x,g) -> (fromIntegral x, g)
 
 minmax :: Bounded a => (a,a)
 minmax = (minBound,maxBound)
+
+barb :: (Enum a,Bounded a) => Gen a
+barb = elements [minBound..maxBound]
+
+bcoarb :: Enum a => a -> Gen b -> Gen b
+bcoarb a = variant ((fromEnum a) `rem` 4)
+
+class ArbCon a x where
+  futz :: a -> Gen x
+
+instance ArbCon a a where futz = return
+
+instance (Arbitrary a,ArbCon b x) => ArbCon (a -> b) x where
+  futz f = arbitrary >>= futz . f
 
 instance Arbitrary Int32 where
   arbitrary = choose minmax
@@ -75,6 +89,7 @@ instance Arbitrary Utf8 where
              [ (3, choose (1,3))
              , (1, return 0) ]
     fmap (Utf8 . U.fromString) (vector len)
+  coarbitrary (Utf8 s) = variant (fromIntegral ((L.length s) `rem` 4))
 
 instance Arbitrary L.ByteString where
   arbitrary = do
@@ -82,6 +97,7 @@ instance Arbitrary L.ByteString where
              [ (3, choose (1,3))
              , (1, return 0) ]
     fmap L.pack (vector len)
+  coarbitrary s = variant (fromIntegral ((L.length s) `rem` 4))
 
 instance Arbitrary a => Arbitrary (Seq a) where
   arbitrary = do
@@ -89,3 +105,6 @@ instance Arbitrary a => Arbitrary (Seq a) where
              [ (3, choose (1,3))
              , (1, return 0) ]
     fmap Seq.fromList (vector len)
+  coarbitrary s = variant ((Seq.length s) `rem` 4)
+
+

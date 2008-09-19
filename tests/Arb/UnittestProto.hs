@@ -1,4 +1,5 @@
-module Arb.UnittestProto.TestAllTypes where
+-- everything passes version 0.2.7
+module Arb.UnittestProto where
 
 import Arb
 
@@ -33,20 +34,9 @@ import UnittestProto.TestAllExtensions (TestAllExtensions(..))
 
 import Debug.Trace(trace)
 
-barb :: (Enum a,Bounded a) => Gen a
-barb = elements [minBound..maxBound]
-
 instance Arbitrary ImportEnum where arbitrary = barb
 instance Arbitrary ForeignEnum where arbitrary = barb
 instance Arbitrary NestedEnum where arbitrary = barb
-
-class ArbCon a x where
-  futz :: a -> Gen x
-
-instance ArbCon a a where futz = return
-
-instance (Arbitrary a,ArbCon b x) => ArbCon (a -> b) x where
-  futz f = arbitrary >>= futz . f
 
 instance Arbitrary ImportMessage where arbitrary = futz ImportMessage
 instance Arbitrary ForeignMessage where arbitrary = futz ForeignMessage
@@ -93,6 +83,7 @@ prop_WireArb1 a =
 
 type G x = Either String (x,ByteString)
 
+-- main method of serialing messages
 prop_WireArb3 :: (Show a,Eq a,Arbitrary a,ReflectDescriptor a,Wire a) => a -> Bool
 prop_WireArb3 aIn =
    let unused = aIn==a
@@ -128,13 +119,16 @@ seqKey k = \msg -> do
   v <- vector n
   return (putExt k (Seq.fromList v) msg)
 
+-- Really push the extension system by creating two new keys here, one
+-- for Maybe code and one for Seq code testing.
 newOptKey :: Key Maybe TestAllExtensions Int32
 newOptKey = Key 1000000 15 Nothing
 
 newRepKey :: Key Seq TestAllExtensions Utf8
 newRepKey = Key 1000001 9 Nothing
 
--- This is all 70 known for TestAllExtensions
+-- This is all 70 known for TestAllExtensions plus the two above.
+-- The String names are currently discarded.
 allKeys :: [ ( String , TestAllExtensions -> Gen TestAllExtensions ) ]
 allKeys = 
   [ ( "newOptKey" , maybeKey newOptKey )
@@ -222,40 +216,9 @@ tests_TestAllTypes =
 
 tests_TestAllExtensions :: [(String,TestAllExtensions -> Bool)]
 tests_TestAllExtensions =
- [ ( "WireArb1", prop_WireArb1 )
- , ( "WireArb2", prop_WireArb2 )
- , ( "Size1" , prop_Size1 )
- , ( "Size2", prop_Size2 )
- , ( "WireArb3", prop_WireArb3 )
- ]
-
-main =  do
-  mapM_ (\(name,test) -> putStrLn name >> quickCheck test) tests_TestAllTypes
-  mapM_ (\(name,test) -> putStrLn name >> quickCheck test) tests_TestAllExtensions
-
-{-
-WireArb1
-Not all input consumed: 24
-TestAllExtensions {ext'field = ExtField (fromList [(FieldId {getFieldId = 31},ExtRepeated (FieldType {getFieldType = 5}) (GPDynSeq (GPWitness :: GPWitness (Int32)) (fromList [-1397484008,-2013522346,638582067]))),(FieldId {getFieldId = 1000000},ExtOptional (FieldType {getFieldType = 15}) (GPDyn (GPWitness :: GPWitness (Int32)) (1586669532))),(FieldId {getFieldId = 1000001},ExtRepeated (FieldType {getFieldType = 9}) (GPDynSeq (GPWitness :: GPWitness (Text.ProtocolBuffers.Basic.Utf8)) (fromList [Utf8 {utf8 = Chunk "\242\178\158\184\225\169\173" Empty},Utf8 {utf8 = Chunk "\232\133\138\243\150\188\172" Empty}])))])}
-
-[248,1,152,172,208,229,10,248,1,214,172,240,191,8,248,1,179,250,191,176,2,133,164,232,3,220,167,146,94,138,164,232,3,7,242,178,158,184,225,169,173,138,164,232,3,7,232,133,138,243,150,188,172]
--}
-
-bad :: ByteString
-bad = L.pack bytes
-
-bytes = bytes1++bytes2++bytes3
-bytes1 = [248,1,152,172,208,229,10,248,1,214,172,240,191,8,248,1,179,250,191,176,2,133,164,232,3,220,167,146,94]
-bytes2 = [138,164,232,3,7,242,178,158,184,225,169,173]
-bytes3 = [138,164,232,3,7,232,133,138,243,150,188,172]
-
-fails = messageGet bad :: G TestAllExtensions
-front = messageGet (L.take (L.length bad - 24) bad) :: G TestAllExtensions
-back1 = messageGet (L.drop (L.length bad - 24) bad) :: G TestAllExtensions
-back2 = messageGet (L.drop (L.length bad - 12) bad) :: G TestAllExtensions
-
-wiretag :: Int64
-wiretag = (138-128)+(164-128)*128+(232-128)*128*128+3*128*128*128
-
-(fi,wt) = quotRem wiretag 8
-
+  [ ( "Size1" , prop_Size1 )
+  , ( "Size2", prop_Size2 )
+  , ( "WireArb1", prop_WireArb1 )
+  , ( "WireArb2", prop_WireArb2 )
+  , ( "WireArb3", prop_WireArb3 ) 
+  ]
