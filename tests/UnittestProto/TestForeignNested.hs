@@ -12,7 +12,7 @@ instance P'.Mergeable TestForeignNested where
   mergeAppend (TestForeignNested x'1) (TestForeignNested y'1) = TestForeignNested (P'.mergeAppend x'1 y'1)
  
 instance P'.Default TestForeignNested where
-  defaultValue = TestForeignNested (P'.Just P'.defaultValue)
+  defaultValue = TestForeignNested P'.defaultValue
  
 instance P'.Wire TestForeignNested where
   wireSize ft' self'@(TestForeignNested x'1)
@@ -27,7 +27,7 @@ instance P'.Wire TestForeignNested where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

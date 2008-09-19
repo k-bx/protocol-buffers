@@ -405,9 +405,14 @@ instanceDefault di
         end = if hasExt di then [pvar "defaultValue"] else []
 
         defX :: FieldInfo -> HsExp
-        defX fi | isRequired fi || canRepeat fi = dv
-                | otherwise = HsParen $ HsCon (private "Just") $$ dv
-          where dv = maybe (pvar "defaultValue") (defToSyntax (typeCode fi)) (hsDefault fi)
+        defX fi | isRequired fi = dv1
+                | otherwise = dv2
+          where dv1 = case hsDefault fi of
+                        Nothing -> pvar "defaultValue"
+                        Just hsdef -> defToSyntax (typeCode fi) hsdef
+                dv2 = case hsDefault fi of
+                        Nothing -> pvar "defaultValue"
+                        Just hsdef -> HsParen $ HsCon (private "Just") $$ defToSyntax (typeCode fi) hsdef
 
 instanceMessageAPI :: ProtoName -> HsDecl
 instanceMessageAPI protoName
@@ -459,7 +464,7 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
         putCases = HsUnGuardedRhs $ cases
           (lvar "put'Fields")
           (HsDo [ HsQualifier $ pvar "putSize" $$
-                    (HsParen $ foldl' HsApp (pvar "wireSize") [ litInt 11 , lvar "self'" ])
+                    (HsParen $ foldl' HsApp (pvar "wireSize") [ litInt 10 , lvar "self'" ])
                 , HsQualifier $ lvar "put'Fields" ])
           (pvar "wirePutErr" $$ lvar "ft'" $$ lvar "self'")
         wherePutFields = [HsFunBind [HsMatch src (HsIdent "put'Fields") [] (HsUnGuardedRhs (HsDo putStmts)) noWhere]]

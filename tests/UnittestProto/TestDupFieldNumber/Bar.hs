@@ -11,7 +11,7 @@ instance P'.Mergeable Bar where
   mergeAppend (Bar x'1) (Bar y'1) = Bar (P'.mergeAppend x'1 y'1)
  
 instance P'.Default Bar where
-  defaultValue = Bar (P'.Just P'.defaultValue)
+  defaultValue = Bar P'.defaultValue
  
 instance P'.Wire Bar where
   wireSize ft' self'@(Bar x'1)
@@ -26,7 +26,7 @@ instance P'.Wire Bar where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

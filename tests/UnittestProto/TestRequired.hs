@@ -2,7 +2,7 @@ module UnittestProto.TestRequired (TestRequired(..), single, multi) where
 import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
-import qualified UnittestProto.TestAllExtensions as UnittestProto (TestAllExtensions)
+import {-# SOURCE #-} qualified UnittestProto.TestAllExtensions as UnittestProto (TestAllExtensions)
  
 data TestRequired = TestRequired{a :: P'.Int32, dummy2 :: P'.Maybe P'.Int32, b :: P'.Int32, dummy4 :: P'.Maybe P'.Int32,
                                  dummy5 :: P'.Maybe P'.Int32, dummy6 :: P'.Maybe P'.Int32, dummy7 :: P'.Maybe P'.Int32,
@@ -89,34 +89,32 @@ instance P'.Mergeable TestRequired where
  
 instance P'.Default TestRequired where
   defaultValue
-    = TestRequired P'.defaultValue (P'.Just P'.defaultValue) P'.defaultValue (P'.Just P'.defaultValue) (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
+    = TestRequired P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
         P'.defaultValue
  
 instance P'.Wire TestRequired where
@@ -166,7 +164,7 @@ instance P'.Wire TestRequired where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

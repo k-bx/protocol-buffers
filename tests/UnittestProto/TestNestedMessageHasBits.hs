@@ -13,7 +13,7 @@ instance P'.Mergeable TestNestedMessageHasBits where
   mergeAppend (TestNestedMessageHasBits x'1) (TestNestedMessageHasBits y'1) = TestNestedMessageHasBits (P'.mergeAppend x'1 y'1)
  
 instance P'.Default TestNestedMessageHasBits where
-  defaultValue = TestNestedMessageHasBits (P'.Just P'.defaultValue)
+  defaultValue = TestNestedMessageHasBits P'.defaultValue
  
 instance P'.Wire TestNestedMessageHasBits where
   wireSize ft' self'@(TestNestedMessageHasBits x'1)
@@ -28,7 +28,7 @@ instance P'.Wire TestNestedMessageHasBits where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

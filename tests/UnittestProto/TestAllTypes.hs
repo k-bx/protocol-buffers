@@ -195,27 +195,24 @@ instance P'.Mergeable TestAllTypes where
  
 instance P'.Default TestAllTypes where
   defaultValue
-    = TestAllTypes (P'.Just P'.defaultValue) (P'.Just P'.defaultValue) (P'.Just P'.defaultValue) (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
+    = TestAllTypes P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
+        P'.defaultValue
         P'.defaultValue
         P'.defaultValue
         P'.defaultValue
@@ -345,7 +342,7 @@ instance P'.Wire TestAllTypes where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

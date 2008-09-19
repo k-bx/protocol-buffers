@@ -1,0 +1,92 @@
+diff -Nru UnittestProto/TestAllExtensions.hs-boot Unew/TestAllExtensions.hs-boot
+--- UnittestProto/TestAllExtensions.hs-boot	1970-01-01 01:00:00.000000000 +0100
++++ Unew/TestAllExtensions.hs-boot	2008-09-18 19:13:19.000000000 +0100
+@@ -0,0 +1,19 @@
++module UnittestProto.TestAllExtensions (TestAllExtensions) where
++
++import qualified Prelude as P'(Show,Eq,Ord,Maybe,Double,Float)
++import qualified Text.ProtocolBuffers.Header as P'(Typeable,Mergeable,Default,Wire,MessageAPI,GPB,ReflectDescriptor
++                                                  ,Seq,Utf8,ByteString,Int32,Int64,Word32,Word64,ExtendMessage)
++
++data TestAllExtensions
++
++instance P'.Show TestAllExtensions
++instance P'.Eq TestAllExtensions
++instance P'.Ord TestAllExtensions
++instance P'.Typeable TestAllExtensions
++instance P'.Mergeable TestAllExtensions
++instance P'.Default TestAllExtensions
++instance P'.Wire TestAllExtensions
++instance P'.MessageAPI msg' (msg' -> TestAllExtensions) TestAllExtensions
++instance P'.GPB TestAllExtensions
++instance P'.ExtendMessage TestAllExtensions
++instance P'.ReflectDescriptor TestAllExtensions
+diff -Nru UnittestProto/TestFieldOrderings.hs-boot Unew/TestFieldOrderings.hs-boot
+--- UnittestProto/TestFieldOrderings.hs-boot	1970-01-01 01:00:00.000000000 +0100
++++ Unew/TestFieldOrderings.hs-boot	2008-09-18 19:12:51.000000000 +0100
+@@ -0,0 +1,19 @@
++module UnittestProto.TestFieldOrderings (TestFieldOrderings) where
++
++import qualified Prelude as P'(Show,Eq,Ord,Maybe,Double,Float)
++import qualified Text.ProtocolBuffers.Header as P'(Typeable,Mergeable,Default,Wire,MessageAPI,GPB,ReflectDescriptor
++                                                  ,Seq,Utf8,ByteString,Int32,Int64,Word32,Word64,ExtendMessage)
++
++data TestFieldOrderings
++
++instance P'.Show TestFieldOrderings
++instance P'.Eq TestFieldOrderings
++instance P'.Ord TestFieldOrderings
++instance P'.Typeable TestFieldOrderings
++instance P'.Mergeable TestFieldOrderings
++instance P'.Default TestFieldOrderings
++instance P'.Wire TestFieldOrderings
++instance P'.MessageAPI msg' (msg' -> TestFieldOrderings) TestFieldOrderings
++instance P'.GPB TestFieldOrderings
++instance P'.ExtendMessage TestFieldOrderings
++instance P'.ReflectDescriptor TestFieldOrderings
+diff -Nru UnittestProto/TestMutualRecursionA.hs-boot Unew/TestMutualRecursionA.hs-boot
+--- UnittestProto/TestMutualRecursionA.hs-boot	1970-01-01 01:00:00.000000000 +0100
++++ Unew/TestMutualRecursionA.hs-boot	2008-09-18 19:12:13.000000000 +0100
+@@ -0,0 +1,18 @@
++module UnittestProto.TestMutualRecursionA (TestMutualRecursionA) where
++
++import qualified Prelude as P'(Show,Eq,Ord,Maybe,Double,Float)
++import qualified Text.ProtocolBuffers.Header as P'(Typeable,Mergeable,Default,Wire,MessageAPI,GPB,ReflectDescriptor
++                                                  ,Seq,Utf8,ByteString,Int32,Int64,Word32,Word64,ExtendMessage)
++
++data TestMutualRecursionA
++
++instance P'.Show TestMutualRecursionA
++instance P'.Eq TestMutualRecursionA
++instance P'.Ord TestMutualRecursionA
++instance P'.Typeable TestMutualRecursionA
++instance P'.Mergeable TestMutualRecursionA
++instance P'.Default TestMutualRecursionA
++instance P'.Wire TestMutualRecursionA
++instance P'.MessageAPI msg' (msg' -> TestMutualRecursionA) TestMutualRecursionA
++instance P'.GPB TestMutualRecursionA
++instance P'.ReflectDescriptor TestMutualRecursionA
+diff -Nru UnittestProto/TestMutualRecursionB.hs Unew/TestMutualRecursionB.hs
+--- UnittestProto/TestMutualRecursionB.hs	2008-09-19 06:31:10.000000000 +0100
++++ Unew/TestMutualRecursionB.hs	2008-09-18 19:15:29.000000000 +0100
+@@ -2,7 +2,7 @@
+ import Prelude ((+))
+ import qualified Prelude as P'
+ import qualified Text.ProtocolBuffers.Header as P'
+-import qualified UnittestProto.TestMutualRecursionA as UnittestProto (TestMutualRecursionA)
++import {-# SOURCE #-} qualified UnittestProto.TestMutualRecursionA as UnittestProto (TestMutualRecursionA)
+  
+ data TestMutualRecursionB = TestMutualRecursionB{a :: P'.Maybe UnittestProto.TestMutualRecursionA,
+                                                  optional_int32 :: P'.Maybe P'.Int32}
+diff -Nru UnittestProto/TestRequired.hs Unew/TestRequired.hs
+--- UnittestProto/TestRequired.hs	2008-09-19 06:31:09.000000000 +0100
++++ Unew/TestRequired.hs	2008-09-18 19:14:48.000000000 +0100
+@@ -2,7 +2,7 @@
+ import Prelude ((+))
+ import qualified Prelude as P'
+ import qualified Text.ProtocolBuffers.Header as P'
+-import qualified UnittestProto.TestAllExtensions as UnittestProto (TestAllExtensions)
++import {-# SOURCE #-} qualified UnittestProto.TestAllExtensions as UnittestProto (TestAllExtensions)
+  
+ data TestRequired = TestRequired{a :: P'.Int32, dummy2 :: P'.Maybe P'.Int32, b :: P'.Int32, dummy4 :: P'.Maybe P'.Int32,
+                                  dummy5 :: P'.Maybe P'.Int32, dummy6 :: P'.Maybe P'.Int32, dummy7 :: P'.Maybe P'.Int32,

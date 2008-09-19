@@ -15,7 +15,7 @@ instance P'.Mergeable TestDupFieldNumber where
     = TestDupFieldNumber (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3)
  
 instance P'.Default TestDupFieldNumber where
-  defaultValue = TestDupFieldNumber (P'.Just P'.defaultValue) (P'.Just P'.defaultValue) (P'.Just P'.defaultValue)
+  defaultValue = TestDupFieldNumber P'.defaultValue P'.defaultValue P'.defaultValue
  
 instance P'.Wire TestDupFieldNumber where
   wireSize ft' self'@(TestDupFieldNumber x'1 x'2 x'3)
@@ -30,7 +30,7 @@ instance P'.Wire TestDupFieldNumber where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

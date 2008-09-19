@@ -11,7 +11,7 @@ instance P'.Mergeable ForeignMessage where
   mergeAppend (ForeignMessage x'1) (ForeignMessage y'1) = ForeignMessage (P'.mergeAppend x'1 y'1)
  
 instance P'.Default ForeignMessage where
-  defaultValue = ForeignMessage (P'.Just P'.defaultValue)
+  defaultValue = ForeignMessage P'.defaultValue
  
 instance P'.Wire ForeignMessage where
   wireSize ft' self'@(ForeignMessage x'1)
@@ -26,7 +26,7 @@ instance P'.Wire ForeignMessage where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

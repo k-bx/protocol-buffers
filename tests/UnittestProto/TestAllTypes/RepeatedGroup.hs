@@ -11,7 +11,7 @@ instance P'.Mergeable RepeatedGroup where
   mergeAppend (RepeatedGroup x'1) (RepeatedGroup y'1) = RepeatedGroup (P'.mergeAppend x'1 y'1)
  
 instance P'.Default RepeatedGroup where
-  defaultValue = RepeatedGroup (P'.Just P'.defaultValue)
+  defaultValue = RepeatedGroup P'.defaultValue
  
 instance P'.Wire RepeatedGroup where
   wireSize ft' self'@(RepeatedGroup x'1)
@@ -26,7 +26,7 @@ instance P'.Wire RepeatedGroup where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

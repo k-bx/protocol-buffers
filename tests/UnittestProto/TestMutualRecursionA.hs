@@ -12,7 +12,7 @@ instance P'.Mergeable TestMutualRecursionA where
   mergeAppend (TestMutualRecursionA x'1) (TestMutualRecursionA y'1) = TestMutualRecursionA (P'.mergeAppend x'1 y'1)
  
 instance P'.Default TestMutualRecursionA where
-  defaultValue = TestMutualRecursionA (P'.Just P'.defaultValue)
+  defaultValue = TestMutualRecursionA P'.defaultValue
  
 instance P'.Wire TestMutualRecursionA where
   wireSize ft' self'@(TestMutualRecursionA x'1)
@@ -27,7 +27,7 @@ instance P'.Wire TestMutualRecursionA where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

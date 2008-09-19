@@ -12,7 +12,7 @@ instance P'.Mergeable TestRecursiveMessage where
     = TestRecursiveMessage (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2)
  
 instance P'.Default TestRecursiveMessage where
-  defaultValue = TestRecursiveMessage (P'.Just P'.defaultValue) (P'.Just P'.defaultValue)
+  defaultValue = TestRecursiveMessage P'.defaultValue P'.defaultValue
  
 instance P'.Wire TestRecursiveMessage where
   wireSize ft' self'@(TestRecursiveMessage x'1 x'2)
@@ -27,7 +27,7 @@ instance P'.Wire TestRecursiveMessage where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

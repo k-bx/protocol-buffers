@@ -40,9 +40,10 @@ instance P'.Enum TestEnumWithDupValue where
   pred (BAR2) = FOO2
  
 instance P'.Wire TestEnumWithDupValue where
-  wireSize 14 enum = P'.wireSize 14 (P'.fromEnum enum)
-  wirePut 14 enum = P'.wirePut 14 (P'.fromEnum enum)
+  wireSize ft' enum = P'.wireSize ft' (P'.fromEnum enum)
+  wirePut ft' enum = P'.wirePut ft' (P'.fromEnum enum)
   wireGet 14 = P'.fmap P'.toEnum (P'.wireGet 14)
+  wireGet ft' = P'.wireGetErr ft'
  
 instance P'.GPB TestEnumWithDupValue
  

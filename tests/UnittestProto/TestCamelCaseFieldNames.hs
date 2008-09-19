@@ -39,10 +39,7 @@ instance P'.Mergeable TestCamelCaseFieldNames where
  
 instance P'.Default TestCamelCaseFieldNames where
   defaultValue
-    = TestCamelCaseFieldNames (P'.Just P'.defaultValue) (P'.Just P'.defaultValue) (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
-        (P'.Just P'.defaultValue)
+    = TestCamelCaseFieldNames P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue
         P'.defaultValue
         P'.defaultValue
         P'.defaultValue
@@ -72,7 +69,7 @@ instance P'.Wire TestCamelCaseFieldNames where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

@@ -2,7 +2,7 @@ module UnittestProto.OptionalGroup_extension (OptionalGroup_extension(..)) where
 import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
- 
+
 data OptionalGroup_extension = OptionalGroup_extension{a :: P'.Maybe P'.Int32}
                              deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
@@ -11,7 +11,7 @@ instance P'.Mergeable OptionalGroup_extension where
   mergeAppend (OptionalGroup_extension x'1) (OptionalGroup_extension y'1) = OptionalGroup_extension (P'.mergeAppend x'1 y'1)
  
 instance P'.Default OptionalGroup_extension where
-  defaultValue = OptionalGroup_extension (P'.Just P'.defaultValue)
+  defaultValue = OptionalGroup_extension P'.defaultValue
  
 instance P'.Wire OptionalGroup_extension where
   wireSize ft' self'@(OptionalGroup_extension x'1)
@@ -26,7 +26,7 @@ instance P'.Wire OptionalGroup_extension where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

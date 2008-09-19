@@ -1,7 +1,7 @@
 -- | The "Extensions" module contributes two main things.  The first
 -- is the definition and implementation of extensible message
 -- features.  This means that the 'ExtField' data type is exported but
--- its constructor is hidden.
+-- its constructor is (in an ideal world) hidden.
 --
 -- This first part also includes the keys for the extension fields:
 -- the 'Key' data type.  These are typically defined in code generated
@@ -21,7 +21,7 @@ module Text.ProtocolBuffers.Extensions
   , Key(..),ExtKey(..),MessageAPI(..)
   -- * Internal types, functions, and classes
   , wireSizeExtField,wirePutExtField,getMessageExt,getBareMessageExt
-  , GPB,ExtField,ExtendMessage(..)
+  , GPB,ExtField(..),ExtendMessage(..)
   ) where
 
 import Data.Map(Map)
@@ -126,7 +126,42 @@ data GPDynSeq = forall a . GPDynSeq (GPWitness a) (Seq a)
 data ExtFieldValue = ExtFromWire WireType (Seq ByteString)
                    | ExtOptional FieldType GPDyn
                    | ExtRepeated FieldType GPDynSeq
-  deriving (Typeable,Eq,Ord,Show)
+  deriving (Typeable,Ord,Show)
+
+data DummyMessageType deriving (Typeable)
+instance ExtendMessage DummyMessageType
+
+-- I want a complicated comparison here to at least allow testing of
+-- setting a field, writing to wire, reading back from wire, and
+-- comparing.
+--
+-- The comparison of ExtFromWire with ExtFromWire is conservative
+-- about returning True.  It is entirely possible that if both value
+-- were interpreted by the same Key that their resulting values would
+-- compare True.
+instance Eq ExtFieldValue where
+  (==) (ExtFromWire a b) (ExtFromWire a' b') = a==a' && b==b'
+  (==) (ExtOptional a b) (ExtOptional a' b') = a==a' && b==b'
+  (==) (ExtRepeated a b) (ExtRepeated a' b') = a==a' && b==b'
+  (==) x@(ExtOptional ft (GPDyn w@GPWitness _)) (ExtFromWire wt' s') =
+    let wt = toWireType ft
+    in wt==wt' && (let makeKeyType :: GPWitness a -> Key Maybe DummyMessageType a
+                       makeKeyType = undefined
+                       key = Key 0 ft Nothing `asTypeOf` makeKeyType w
+                   in case parseWireExtMaybe key wt s' of
+                        Right (_,y) -> x==y
+                        _ -> False)
+  (==) y@(ExtFromWire {}) x@(ExtOptional {})  = x == y
+  (==) x@(ExtRepeated ft (GPDynSeq w@GPWitness _)) (ExtFromWire wt' s') =
+    let wt = toWireType ft
+    in wt==wt' && (let makeKeyType :: GPWitness a -> Key Seq DummyMessageType a
+                       makeKeyType = undefined
+                       key = Key 0 ft Nothing `asTypeOf` makeKeyType w
+                   in case parseWireExtSeq key wt s' of
+                        Right (_,y) -> x==y
+                        _ -> False)
+  (==) y@(ExtFromWire {}) x@(ExtRepeated {})  = x == y
+  (==) _ _ = False
 
 -- | ExtField is a newtype'd map from the numeric FieldId key to the
 -- ExtFieldValue.  This allows for the needed class instances.

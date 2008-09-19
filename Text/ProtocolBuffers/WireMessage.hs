@@ -39,11 +39,13 @@ import qualified Data.Set as Set(notMember,delete,null)
 -- GHC internals for getting at Double and Float representation as Word64 and Word32
 import GHC.Exts (Double(D#),Float(F#),unsafeCoerce#)
 import GHC.Word (Word64(W64#),Word32(W32#))
+import System.IO.Unsafe(unsafePerformIO)
+import Foreign(alloca,peek,poke,castPtr)
 
-import Data.Binary.Put (Put,runPut,putWord8,putWord32be,putWord64be,putLazyByteString)
+import Data.Binary.Put (Put,runPut,putWord8,putWord32le,putWord64le,putLazyByteString)
 --import Data.Binary.Builder (Builder)
 import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,bytesRead,isEmpty
-                                       ,getWord8,getWord32be,getWord64be,getLazyByteString)
+                                       ,getWord8,getWord32le,getWord64le,getLazyByteString)
 
 -- import qualified Data.ByteString.Lazy as BS (unpack)
 -- import Numeric
@@ -166,7 +168,8 @@ getMessageWith punt updater = do
           GT -> do
             wireTag <- fmap WireTag getVarInt -- get tag off wire
             let (fieldId,wireType) = splitWireTag wireTag
-            if Set.notMember wireTag allowed then punt fieldId wireType message
+            if Set.notMember wireTag allowed
+              then punt fieldId wireType message >>= go reqs
               else let reqs' = Set.delete wireTag reqs
                    in updater fieldId message >>= go reqs'
       go' message = do
@@ -177,7 +180,8 @@ getMessageWith punt updater = do
           GT -> do
             wireTag <- fmap WireTag getVarInt -- get tag off wire
             let (fieldId,wireType) = splitWireTag wireTag
-            if Set.notMember wireTag allowed then punt fieldId wireType message
+            if Set.notMember wireTag allowed
+              then punt fieldId wireType message >>= go'
               else updater fieldId message >>= go'
   go required initialMessage
  where
@@ -223,7 +227,8 @@ getBareMessageWith punt updater = go required initialMessage
         wireTag <- fmap WireTag getVarInt -- get tag off wire
         let (fieldId,wireType) = splitWireTag wireTag
         if wireType == 4 then notEnoughData -- END_GROUP too soon
-          else if Set.notMember wireTag allowed then punt fieldId wireType message
+          else if Set.notMember wireTag allowed
+                 then punt fieldId wireType message >>= go reqs
                  else let reqs' = Set.delete wireTag reqs
                       in updater fieldId message >>= go reqs'
   go' message = do
@@ -233,7 +238,8 @@ getBareMessageWith punt updater = go required initialMessage
         wireTag <- fmap WireTag getVarInt -- get tag off wire
         let (fieldId,wireType) = splitWireTag wireTag -- WIRETYPE_END_GROUP
         if wireType == 4 then return message
-          else if Set.notMember wireTag allowed then punt fieldId wireType message
+          else if Set.notMember wireTag allowed
+                 then punt fieldId wireType message >>= go'
                  else updater fieldId message >>= go'
   initialMessage = mergeEmpty
   (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
@@ -247,18 +253,20 @@ unknownField fieldId = do
         ++" The Message's updater claims there is an unknown field id on wire: "++show fieldId
         ++" at a position just before here == "++show here)
 
+{-# INLINE castWord32ToFloat #-}
+castWord32ToFloat :: Word32 -> Float
+--castWord32ToFloat (W32# w) = F# (unsafeCoerce# w)
+castWord32ToFloat x = unsafePerformIO $ alloca $ \p -> poke p x >> peek (castPtr p)
+{-# INLINE castFloatToWord32 #-}
+castFloatToWord32 :: Float -> Word32
+--castFloatToWord32 (F# f) = W32# (unsafeCoerce# f)
+castFloatToWord32 x = unsafePerformIO $ alloca $ \p -> poke p x >> peek (castPtr p)
 {-# INLINE castWord64ToDouble #-}
 castWord64ToDouble :: Word64 -> Double
 castWord64ToDouble (W64# w) = D# (unsafeCoerce# w)
-{-# INLINE castWord32ToFloat #-}
-castWord32ToFloat :: Word32 -> Float
-castWord32ToFloat (W32# w) = F# (unsafeCoerce# w)
 {-# INLINE castDoubleToWord64 #-}
 castDoubleToWord64 :: Double -> Word64
 castDoubleToWord64 (D# d) = W64# (unsafeCoerce# d)
-{-# INLINE castFloatToWord32 #-}
-castFloatToWord32 :: Float -> Word32
-castFloatToWord32 (F# d) = W32# (unsafeCoerce# d)
 
 -- These error handlers are exported to the generated code
 wireSizeErr :: Typeable a => FieldType -> a -> WireSize
@@ -277,17 +285,17 @@ wireGetErr ft = answer where
 instance Wire Double where
   wireSize {- TYPE_DOUBLE   -} 1      _ = 8
   wireSize ft x = wireSizeErr ft x
-  wirePut  {- TYPE_DOUBLE   -} 1      x = putWord64be (castDoubleToWord64 x)
+  wirePut  {- TYPE_DOUBLE   -} 1      x = putWord64le (castDoubleToWord64 x)
   wirePut ft x = wirePutErr ft x
-  wireGet  {- TYPE_DOUBLE   -} 1        = fmap castWord64ToDouble getWord64be
+  wireGet  {- TYPE_DOUBLE   -} 1        = fmap castWord64ToDouble getWord64le
   wireGet ft = wireGetErr ft
 
 instance Wire Float where
   wireSize {- TYPE_FLOAT    -} 2      _ = 4
   wireSize ft x = wireSizeErr ft x
-  wirePut  {- TYPE_FLOAT    -} 2      x = putWord32be (castFloatToWord32 x)
+  wirePut  {- TYPE_FLOAT    -} 2      x = putWord32le (castFloatToWord32 x)
   wirePut ft x = wirePutErr ft x
-  wireGet  {- TYPE_FLOAT    -} 2        = fmap castWord32ToFloat getWord32be
+  wireGet  {- TYPE_FLOAT    -} 2        = fmap castWord32ToFloat getWord32le
   wireGet ft = wireGetErr ft
 
 instance Wire Int64 where
@@ -297,11 +305,11 @@ instance Wire Int64 where
   wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_INT64    -} 3      x = putVarSInt x
   wirePut  {- TYPE_SINT64   -} 18     x = putVarUInt (zzEncode64 x)
-  wirePut  {- TYPE_SFIXED64 -} 16     x = putWord64be (fromIntegral x)
+  wirePut  {- TYPE_SFIXED64 -} 16     x = putWord64le (fromIntegral x)
   wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_INT64    -} 3        = getVarInt
   wireGet  {- TYPE_SINT64   -} 18       = fmap zzDecode64 getVarInt
-  wireGet  {- TYPE_SFIXED64 -} 16       = fmap fromIntegral getWord64be
+  wireGet  {- TYPE_SFIXED64 -} 16       = fmap fromIntegral getWord64le
   wireGet ft = wireGetErr ft
 
 instance Wire Int32 where
@@ -311,11 +319,11 @@ instance Wire Int32 where
   wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_INT32    -} 5      x = putVarSInt x
   wirePut  {- TYPE_SINT32   -} 17     x = putVarUInt (zzEncode32 x)
-  wirePut  {- TYPE_SFIXED32 -} 15     x = putWord32be (fromIntegral x)
+  wirePut  {- TYPE_SFIXED32 -} 15     x = putWord32le (fromIntegral x)
   wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_INT32    -} 5        = getVarInt
   wireGet  {- TYPE_SINT32   -} 17       = fmap zzDecode32 getVarInt
-  wireGet  {- TYPE_SFIXED32 -} 15       = fmap fromIntegral getWord32be
+  wireGet  {- TYPE_SFIXED32 -} 15       = fmap fromIntegral getWord32le
   wireGet ft = wireGetErr ft
 
 instance Wire Word64 where
@@ -323,9 +331,9 @@ instance Wire Word64 where
   wireSize {- TYPE_FIXED64  -} 6      _ = 8
   wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_UINT64   -} 4      x = putVarUInt x
-  wirePut  {- TYPE_FIXED64  -} 6      x = putWord64be x
+  wirePut  {- TYPE_FIXED64  -} 6      x = putWord64le x
   wirePut ft x = wirePutErr ft x
-  wireGet  {- TYPE_FIXED64  -} 6        = getWord64be
+  wireGet  {- TYPE_FIXED64  -} 6        = getWord64le
   wireGet  {- TYPE_UINT64   -} 4        = getVarInt
   wireGet ft = wireGetErr ft
 
@@ -334,10 +342,10 @@ instance Wire Word32 where
   wireSize {- TYPE_FIXED32  -} 7      _ = 4
   wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_UINT32   -} 13     x = putVarUInt x
-  wirePut  {- TYPE_FIXED32  -} 7      x = putWord32be x
+  wirePut  {- TYPE_FIXED32  -} 7      x = putWord32le x
   wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_UINT32   -} 13       = getVarInt
-  wireGet  {- TYPE_FIXED32  -} 7        = getWord32be
+  wireGet  {- TYPE_FIXED32  -} 7        = getWord32le
   wireGet ft = wireGetErr ft
 
 instance Wire Bool where
@@ -592,7 +600,7 @@ cw = concatMap (padL 2 '0')
 
 fbe :: Double -> [String]
 fbe (D# d) = let w = W64# (unsafeCoerce# d)
-                 b = Build.toLazyByteString (Build.putWord64be w)
+                 b = Build.toLazyByteString (Build.putWord64le w)
              in map (flip showHex "") $  BS.unpack  b
 
 fle :: Double -> [String]
@@ -604,7 +612,7 @@ gbe :: [Char] -> ([Char], ([Char], Word64, String), ([Char], Double))
 gbe s = let pairs = Data.List.unfoldr (\a -> if Prelude.null a then Nothing
                                                else Just (splitAt 2 a)) s
             words = map (fst . head . readHex) pairs
-            w@(W64# w64) = Get.runGet Get.getWord64be (BS.pack words)
+            w@(W64# w64) = Get.runGet Get.getWord64le (BS.pack words)
             d = D# (unsafeCoerce# w64)
         in (s,("word",w,showHex w ""),("double",d))
 

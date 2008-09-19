@@ -11,7 +11,7 @@ instance P'.Mergeable OptionalGroup where
   mergeAppend (OptionalGroup x'1) (OptionalGroup y'1) = OptionalGroup (P'.mergeAppend x'1 y'1)
  
 instance P'.Default OptionalGroup where
-  defaultValue = OptionalGroup (P'.Just P'.defaultValue)
+  defaultValue = OptionalGroup P'.defaultValue
  
 instance P'.Wire OptionalGroup where
   wireSize ft' self'@(OptionalGroup x'1)
@@ -26,7 +26,7 @@ instance P'.Wire OptionalGroup where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

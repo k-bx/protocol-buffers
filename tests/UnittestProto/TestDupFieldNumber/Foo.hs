@@ -11,7 +11,7 @@ instance P'.Mergeable Foo where
   mergeAppend (Foo x'1) (Foo y'1) = Foo (P'.mergeAppend x'1 y'1)
  
 instance P'.Default Foo where
-  defaultValue = Foo (P'.Just P'.defaultValue)
+  defaultValue = Foo P'.defaultValue
  
 instance P'.Wire Foo where
   wireSize ft' self'@(Foo x'1)
@@ -26,7 +26,7 @@ instance P'.Wire Foo where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

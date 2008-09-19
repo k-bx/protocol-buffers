@@ -2,7 +2,7 @@ module UnittestProto.TestMutualRecursionB (TestMutualRecursionB(..)) where
 import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
-import qualified UnittestProto.TestMutualRecursionA as UnittestProto (TestMutualRecursionA)
+import {-# SOURCE #-} qualified UnittestProto.TestMutualRecursionA as UnittestProto (TestMutualRecursionA)
  
 data TestMutualRecursionB = TestMutualRecursionB{a :: P'.Maybe UnittestProto.TestMutualRecursionA,
                                                  optional_int32 :: P'.Maybe P'.Int32}
@@ -14,7 +14,7 @@ instance P'.Mergeable TestMutualRecursionB where
     = TestMutualRecursionB (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2)
  
 instance P'.Default TestMutualRecursionB where
-  defaultValue = TestMutualRecursionB (P'.Just P'.defaultValue) (P'.Just P'.defaultValue)
+  defaultValue = TestMutualRecursionB P'.defaultValue P'.defaultValue
  
 instance P'.Wire TestMutualRecursionB where
   wireSize ft' self'@(TestMutualRecursionB x'1 x'2)
@@ -29,7 +29,7 @@ instance P'.Wire TestMutualRecursionB where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

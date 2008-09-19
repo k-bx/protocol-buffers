@@ -19,7 +19,7 @@ instance P'.Mergeable TestFieldOrderings where
     = TestFieldOrderings (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
  
 instance P'.Default TestFieldOrderings where
-  defaultValue = TestFieldOrderings (P'.Just P'.defaultValue) (P'.Just P'.defaultValue) (P'.Just P'.defaultValue) P'.defaultValue
+  defaultValue = TestFieldOrderings P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue
  
 instance P'.Wire TestFieldOrderings where
   wireSize ft' self'@(TestFieldOrderings x'1 x'2 x'3 x'4)
@@ -34,7 +34,7 @@ instance P'.Wire TestFieldOrderings where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

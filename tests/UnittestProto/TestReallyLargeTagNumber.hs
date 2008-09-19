@@ -12,7 +12,7 @@ instance P'.Mergeable TestReallyLargeTagNumber where
     = TestReallyLargeTagNumber (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2)
  
 instance P'.Default TestReallyLargeTagNumber where
-  defaultValue = TestReallyLargeTagNumber (P'.Just P'.defaultValue) (P'.Just P'.defaultValue)
+  defaultValue = TestReallyLargeTagNumber P'.defaultValue P'.defaultValue
  
 instance P'.Wire TestReallyLargeTagNumber where
   wireSize ft' self'@(TestReallyLargeTagNumber x'1 x'2)
@@ -27,7 +27,7 @@ instance P'.Wire TestReallyLargeTagNumber where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where

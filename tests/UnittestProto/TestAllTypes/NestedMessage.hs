@@ -11,7 +11,7 @@ instance P'.Mergeable NestedMessage where
   mergeAppend (NestedMessage x'1) (NestedMessage y'1) = NestedMessage (P'.mergeAppend x'1 y'1)
  
 instance P'.Default NestedMessage where
-  defaultValue = NestedMessage (P'.Just P'.defaultValue)
+  defaultValue = NestedMessage P'.defaultValue
  
 instance P'.Wire NestedMessage where
   wireSize ft' self'@(NestedMessage x'1)
@@ -26,7 +26,7 @@ instance P'.Wire NestedMessage where
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where
