@@ -1,6 +1,6 @@
 This the README file for protocol-buffers, protocol-buffers-descriptors, and hprotoc.
 These are three interdependent Haskell packages by Chris Kuklewicz.
-This README was updated most recently to reflect version 0.2.7
+This README was updated most recently to reflect version 0.2.8
 
 Questions and answers:
 
@@ -63,7 +63,10 @@ What do I need to compile the code?
 
   The hprotoc Lexer.hs is produced from Lexer.x by the alex program (I use version 2.2) which can be downloaded from http://www.haskell.org/alex/ if you edit Lexer.x and need to regenerate Lexer.hs.
 
-  The usual cabal configure/buid/install works for the protocol-buffers library.
+  The usual cabal configure/buid/install works for the protocol-buffers library:
+    runhaskell Setup.hs configure 
+    runhaskell Setup.hs build
+    runhaskell Setup.hs install
   After installing protocol-buffers go into the describe sub-directory and configure/build/install the protocol-buffers-descriptor library.
   After installing protocol-buffers  and protocol-buffers-descriptor go into the hprotoc sub-directory and configure/build/install the hprotoc executable.
 
