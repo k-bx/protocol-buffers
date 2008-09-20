@@ -41,6 +41,9 @@ import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName
                                     ,getInput,setInput,getPosition,setPosition,getState,setState
                                     ,(<?>),(<|>),option,token,choice,between,eof,unexpected,skipMany)
 import Text.ParserCombinators.Parsec.Pos(newPos)
+import Data.Word(Word8)
+
+default ()
 
 type P = GenParser Lexed
 
@@ -350,6 +353,7 @@ constant (Just t) =
 -- Returns Nothing if valid, and the position of the error if invalid
 isValidUTF8 :: ByteString -> Maybe Int
 isValidUTF8 ws = go 0 (L.unpack ws) 0 where
+  go :: Int -> [Word8] -> Int -> Maybe Int
   go 0 [] _ = Nothing
   go 0 (x:xs) n | x <= 127 = go 0 xs $! succ n -- binary 01111111
                 | x <= 193 = Just n            -- binary 11000001, decodes to <=127, should not be here

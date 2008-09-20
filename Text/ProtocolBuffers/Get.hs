@@ -1,16 +1,13 @@
 {-# LANGUAGE CPP,MagicHash,ScopedTypeVariables,FlexibleInstances,RankNTypes #-}
---
--- By Chris Kuklewicz, drawing heavily from binary and binary-strict,
+-- | By Chris Kuklewicz, drawing heavily from binary and binary-strict,
 -- but all the bugs are my own.
 --
 -- This file is under the usual BSD3 licence, copyright 2008.
 --
--- There is a streamlined version of MyGet.hs
---
 -- This started out as an improvement to
--- Data.Binary.Stric.IncrementalGet with slightly better internals.
+-- "Data.Binary.Strict.IncrementalGet" with slightly better internals.
 -- The simplified 'Get', 'runGet', 'Result' trio with the
--- 'Data.Binary.Strict.Class.BinaryParser' instance are an _untested_
+-- "Data.Binary.Strict.Class.BinaryParser" instance are an _untested_
 -- upgrade from IncrementalGet.  Especially untested are the
 -- strictness properties.
 --
@@ -39,7 +36,7 @@
 -- handlers.  This change is _not_ reverted by fail/throwError/mzero.
 --
 -- The three 'lookAhead' and 'lookAheadM' and 'lookAheadE' functions are
--- the same as the ones in binary's Data.Binary.Get.
+-- very similar to the ones in binary's Data.Binary.Get.
 --
 module Text.ProtocolBuffers.Get
     (Get,runGet,Result(..)
@@ -50,7 +47,7 @@ module Text.ProtocolBuffers.Get
      -- lookAhead capabilities
     ,lookAhead,lookAheadM,lookAheadE
      -- below is for implementation of BinaryParser (for Int64 and Lazy bytestrings)
-    ,skip,bytesRead,isEmpty,remaining,spanOf
+    ,skip,bytesRead,isEmpty,isReallyEmpty,remaining,spanOf
     ,getWord8,getByteString
     ,getWord16be,getWord32be,getWord64be
     ,getWord16le,getWord32le,getWord64le
@@ -379,10 +376,29 @@ remaining = do (S ss bs _) <- getFull
                return $ fromIntegral (S.length ss) + (L.length bs)
 
 -- | Return True if the number of bytes 'remaining' is 0.  Any futher
--- attempts to read an empty parser will cal 'suspend'.
+-- attempts to read an empty parser will call 'suspend' which might
+-- result in more input to consume.
+--
+-- Compare with 'isReallyEmpty'
 isEmpty :: Get Bool
 isEmpty = do (S ss bs _n) <- getFull
              return $ (S.null ss) && (L.null bs)
+
+-- | Return True if the input is exhausted and will never be added to.
+-- Returns False if there is input left to consume.
+--
+-- Compare with 'isEmpty'
+isReallyEmpty :: Get Bool
+isReallyEmpty = do
+  b <- isEmpty
+  if not b then return b
+    else loop
+ where loop = do
+         continue <- suspend
+         b <- isEmpty
+         if not b then return b
+           else if continue then loop
+                  else return False
 
 spanOf :: (Word8 -> Bool) ->  Get (L.ByteString)
 spanOf f = do let loop = do (S ss bs n) <- getFull
@@ -485,6 +501,10 @@ getWord64host = getStorable
 {-# INLINE getWord64host #-}
 
 {-
+
+-- I no longer include the binary-strict package, but if one wants it
+-- here is the instance:
+
 instance P.BinaryParser Get where
   skip = skip . fromIntegral
   bytesRead = fmap fromIntegral bytesRead
@@ -612,89 +632,3 @@ shiftl_w16 = shiftL
 shiftl_w32 = shiftL
 shiftl_w64 = shiftL
 #endif
-
-{-
-------------------------------------------------------------------------
-{- TESTING:  This predate conversion to Simplified form -}
-------------------------------------------------------------------------
-
-chomp :: Get () String () IO ()
-chomp = getByteString 1 >>= \w -> tell (map (toEnum . fromEnum) (S.unpack w))
-
-feed :: (Monad t) => Word8 -> CompResult t1 t2 t t3 -> t (CompResult t1 t2 t t3)
-feed x (CPartial q) = q (Just (L.pack [x]))
-feed _x y = return y
-
-test :: Get a -> [Word8] -> Result a
-test g bs = runGet g () () (L.pack bs)
-
-test10 :: IO (CompResult String () IO [()])
-test10 = test (mplus (pr "go" >> replicateM 5 chomp >> pr "die" >> mzero) (pr "reborn" >> replicateM 10 chomp)) [1] >>= feed 2 >>= feed 3 >>= feed 4 >>= feed 5 >>= feed 6 >>= feed 7 >>=feed 8 >>= feed 9 >>= feed 10
-
-pr :: (Show a) => a -> Get () String () IO ()
-pr = liftIO . Prelude.print
-
-countPC :: ({-Show user,-} Monad m) => Get Int
-countPC = Get $ \ sc s pc ->
-  let go (ErrorFrame {}) i = i
-      go (HandlerFrame _ _ _ pc') i = go pc' $! succ i
-  in sc (go pc 0) s pc
-
-{- testDepth result on my machine:
-
-*Text.ProtocolBuffers.MyGet> testDepth
-("stack depth",0,"bytes read",0,"bytes remaining",0,"begin")
-("feed1",[48,49])
-("stack depth",1,"bytes read",1,"bytes remaining",1,"mayFail")
-("stack depth",2,"bytes read",1,"bytes remaining",1,"depth2")
-("feed1",[50,51])
-("stack depth",2,"bytes read",4,"bytes remaining",0,"about to mzero")
-("stack depth",1,"bytes read",1,"bytes remaining",3,"middle")
-("stack depth",1,"bytes read",2,"bytes remaining",2,"about to mzero again")
-("stack depth",0,"bytes read",1,"bytes remaining",3,"handler")
-("feed1",[52,53])
-("feed1",[54,55])
-("stack depth",0,"bytes read",7,"bytes remaining",1,"got 6, now suspendUntilComplete")
-("feed1",[56,57])
-("feed1",[58,59])
-("feed1",[60,61])
-("stack depth",0,"bytes read",7,"bytes remaining",7,"end")
-(CFinished (Chunk "7" (Chunk "89" (Chunk ":;" (Chunk "<=" Empty)))) 7 ("0") (()) ("123456"))
-
-The first chomp tell's "0".
-All other tell's are thrown away by the error handling.
-The stack depth returns to 0 as it should.
-The "bytes read" is reset along with the input on each throwError/mzero/fail.
-The (getByteString 6) reads "123456", leaving the "7" chunk on the input.
-suspendUntilComplete loads the rest of the "89" ":;" and "<=" chunks.
-
--}
-
--- Ensure the stack fixing in catchError play words well:
-testDepth :: IO (CompResult String () IO S.ByteString)
-testDepth = test depth [] >>= feed12 >>= feedNothing where
-  p s = countPC >>= \d -> bytesRead >>= \ b -> remaining >>= \r ->
-         pr ("stack depth",d,"bytes read",b,"bytes remaining",r,s)
-  depth = do
-    p "begin"
-    chomp
-    catchError ( p "mayFail" >>
-                 ((p "depth2" >> replicateM 3 chomp >> p "about to mzero" >> mzero) <|> return ()) >>
-                 p "middle" >>
-                 chomp >> p "about to mzero again" >> mzero)
-               (\_ -> p "handler")
-    a <- getByteString 6
-    p "got 6, now suspendUntilComplete"
-    suspendUntilComplete
-    p "end"
-    return a
-
-feed12 :: CompResult w user IO a -> IO (CompResult w user IO a)
-feed12 = foldr1 (>=>) . map feeds $ [ [2*i,2*i+1]  | i <- [24..30]]
-  where feeds x (CPartial q) = print ("feed1",x)  >> q (Just (L.pack x))
-        feeds _x y = return y
-
-feedNothing :: (Monad t) => CompResult t1 t2 t t3 -> t (CompResult t1 t2 t t3)
-feedNothing (CPartial q) = q Nothing
-feedNothing x = return x
--}

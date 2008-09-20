@@ -1,8 +1,5 @@
-module Text.ProtocolBuffers.Mergeable(Mergeable(..),mayMerge) where
--- This types are isomorphic to Monoid(mappend).  But the sematics are
--- different, since mergeEmpty is likely only a left idenitity and not
--- a right identity. The Mergeable class also has a default
--- implementation to mergeAppend that take the second parameter.
+-- | This provides instance of 'Mergeable' for the basic field types.
+module Text.ProtocolBuffers.Mergeable() where
 
 import Text.ProtocolBuffers.Basic
 import Data.Monoid(mempty,mappend)

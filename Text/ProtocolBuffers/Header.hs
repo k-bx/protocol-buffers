@@ -1,6 +1,6 @@
--- This provides much that is needed for the output of Gen.hs to compile against.
--- It will be imported qualified as P'
--- The prime ensuring no name conflicts are possible.
+-- | This provides much that is needed for the output of 'hprotoc' to
+-- compile.  It will be imported qualified as P', the prime ensuring
+-- no name conflicts are possible.
 module Text.ProtocolBuffers.Header
     ( -- needed for Gen.hs output
       emptyBS

@@ -14,6 +14,8 @@
 -- Access to extension fields is strictly though keys.  There is not
 -- currently any way to query or change or clear any other extension
 -- field data.
+--
+-- This module is likely to get broken up into pieces.
 module Text.ProtocolBuffers.Extensions
   ( -- * Query functions for 'Key'
     getKeyFieldId,getKeyFieldType,getKeyDefaultValue
@@ -37,7 +39,7 @@ import qualified Data.Foldable as F
 import qualified Data.Map as M
 
 import Text.ProtocolBuffers.Basic
-import Text.ProtocolBuffers.Default
+import Text.ProtocolBuffers.Default()
 import Text.ProtocolBuffers.WireMessage
 import Text.ProtocolBuffers.Reflections
 import Text.ProtocolBuffers.Get as Get (Get,runGet,Result(..),lookAhead,getLazyByteString,spanOf,skip,bytesRead)
@@ -129,7 +131,10 @@ data ExtFieldValue = ExtFromWire WireType (Seq ByteString)
   deriving (Typeable,Ord,Show)
 
 data DummyMessageType deriving (Typeable)
-instance ExtendMessage DummyMessageType
+instance ExtendMessage DummyMessageType where
+  getExtField = undefined
+  putExtField = undefined
+  validExtRanges = undefined
 
 -- I want a complicated comparison here to at least allow testing of
 -- setting a field, writing to wire, reading back from wire, and

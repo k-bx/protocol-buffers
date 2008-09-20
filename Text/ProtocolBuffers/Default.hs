@@ -1,4 +1,5 @@
-module Text.ProtocolBuffers.Default(Default(..)) where
+-- | This only defined instances now.  The class definition was moved to Basic.hs
+module Text.ProtocolBuffers.Default() where
 
 import Text.ProtocolBuffers.Basic
 import Data.Monoid(mempty)

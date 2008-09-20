@@ -1,20 +1,27 @@
--- http://code.google.com/apis/protocolbuffers/docs/encoding.html
-{- | This module cooperates with the generated code to implement the
-  Wire instances.  
+{- | 
+Here are the serialization and deserialization functions.
 
-  enum WireType {
-    WIRETYPE_VARINT           = 0,
-    WIRETYPE_FIXED64          = 1,
-    WIRETYPE_LENGTH_DELIMITED = 2,
-    WIRETYPE_START_GROUP      = 3,
-    WIRETYPE_END_GROUP        = 4,
-    WIRETYPE_FIXED32          = 5,
+This module cooperates with the generated code to implement the Wire
+instances.  The encoding is mostly documented at
+<http://code.google.com/apis/protocolbuffers/docs/encoding.html>.
+
+The user API functions are grouped into sections and documented.  The
+rest are for internal use.
  -}
 module Text.ProtocolBuffers.WireMessage
-    ( Wire(..),WireSize,Put,Get
-    , messageSize,messagePut,messageGet,messagePutM,messageGetM
+    ( -- * User API functions
+      -- ** Main encoding and decoding operations (non-delimited message encoding)
+      messageSize,messagePut,messageGet,messagePutM,messageGetM
+      -- **  The author's home brewed encoding (length written first to delimit message)
     , messageWithLengthSize,messageWithLengthPut,messageWithLengthGet,messageWithLengthPutM,messageWithLengthGetM
-    , runGet,runGetOnLazy,getFromBS,runPut,size'Varint,toWireType,toWireTag,mkWireTag
+      -- ** Encoding to write or read a single message field (good for delimited messages or incremental use)
+    , messageAsFieldSize,messageAsFieldPutM,messageAsFieldGetM
+      -- ** The Put monad from the binary package, and a custom binary Get monad ("Text.ProtocolBuffers.Get")
+    , Put,Get,runPut,runGet,runGetOnLazy,getFromBS
+      -- * The Wire monad itself.  Users should beware that passing an incompatible 'FieldType' is a runtime error or fail
+    , Wire(..)
+      -- * The internal exports, for use by generated code and the "Text.ProtcolBuffer.Extensions" module
+    , size'Varint,toWireType,toWireTag,mkWireTag
     , prependMessageSize,putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep
@@ -25,80 +32,155 @@ module Text.ProtocolBuffers.WireMessage
     , zzEncode64,zzEncode32,zzDecode64,zzDecode32
     ) where
 
-import Text.ProtocolBuffers.Basic
-import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
-                                       ,DescriptorInfo(..),GetMessageInfo(..))
-import Text.ProtocolBuffers.Mergeable(Mergeable(mergeEmpty))
-
+-- GHC internals for getting at Double and Float representation as Word64 and Word32
+import Control.Monad(when)
 import Data.Bits (Bits(..))
-import Data.Typeable (Typeable(..))
-import Data.List (genericLength)
 import qualified Data.ByteString.Lazy as BS (length)
 import qualified Data.Foldable as F(foldl',forM_)
+import Data.List (genericLength)
 import qualified Data.Set as Set(notMember,delete,null)
--- GHC internals for getting at Double and Float representation as Word64 and Word32
-import GHC.Exts (Double(D#),Float(F#),unsafeCoerce#)
-import GHC.Word (Word64(W64#),Word32(W32#))
-import System.IO.Unsafe(unsafePerformIO)
+import Data.Typeable (Typeable(..))
 import Foreign(alloca,peek,poke,castPtr)
+import GHC.Exts (Double(D#),Float(F#),unsafeCoerce#)
+import GHC.Word (Word64(W64#)) -- ,Word32(W32#))
+import System.IO.Unsafe(unsafePerformIO)
 
+-- binary package
 import Data.Binary.Put (Put,runPut,putWord8,putWord32le,putWord64le,putLazyByteString)
---import Data.Binary.Builder (Builder)
-import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,bytesRead,isEmpty
+
+import Text.ProtocolBuffers.Basic
+import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,bytesRead,isReallyEmpty
                                        ,getWord8,getWord32le,getWord64le,getLazyByteString)
-
--- import qualified Data.ByteString.Lazy as BS (unpack)
--- import Numeric
-
-getFromBS :: Get r -> ByteString -> r
-getFromBS parser bs = case resolve (Get.runGet parser bs) of
-                        Left msg -> error msg
-                        Right (r,_) -> r
-
-runGetOnLazy :: Get r -> ByteString -> Either String (r,ByteString)
-runGetOnLazy parser bs = resolve (Get.runGet parser bs)
-
-resolve :: Get.Result r -> Either String (r,ByteString)
-resolve (Get.Failed i s) = Left ("Failed at "++show i++" : "++s)
-resolve (Get.Finished bs _i r) = Right (r,bs)
-resolve (Get.Partial {}) = Left ("Not enough input")
-
-prependMessageSize :: WireSize -> WireSize
-prependMessageSize n = n + size'Varint n
+import Text.ProtocolBuffers.Mergeable()
+import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
+                                       ,DescriptorInfo(..),GetMessageInfo(..))
 
 -- External user API for writing and reading messages
 
+-- | This computes the size of the message's fields with tags on the
+-- wire with no initial tag or length (in bytes).  This is also the
+-- length of the message as placed between group start and stop tags.
 messageSize :: (ReflectDescriptor msg,Wire msg) => msg -> WireSize
 messageSize msg = wireSize 10 msg
 
+-- | This computes the size of the message fields as in 'messageSize'
+-- and add the length of the encoded size to the total.  Thus this is
+-- the the length of the message including the encoded length header,
+-- but without any leading tag.
 messageWithLengthSize :: (ReflectDescriptor msg,Wire msg) => msg -> WireSize
 messageWithLengthSize msg = wireSize 11 msg
 
+-- | This computes the size of the 'messageWithLengthSize' and then
+-- adds the length an initial tag with the given 'FieldId'.
+messageAsFieldSize :: (ReflectDescriptor msg,Wire msg) => FieldId -> msg -> WireSize
+messageAsFieldSize fi msg = let headerSize = size'Varint (getWireTag (toWireTag fi 11))
+                            in headerSize + messageWithLengthSize msg
+
+-- | This is 'runPut' applied to 'messagePutM'. It result in a
+-- 'ByteString' with a length of 'messageSize' bytes.
 messagePut :: (ReflectDescriptor msg, Wire msg) => msg -> ByteString
 messagePut msg = runPut (messagePutM msg)
 
+-- | This is 'runPut' applied to 'messageWithLengthPutM'.  It results
+-- in a 'ByteString' with a length of 'messageWithLengthSize' bytes.
 messageWithLengthPut :: (ReflectDescriptor msg, Wire msg) => msg -> ByteString
 messageWithLengthPut msg = runPut (messageWithLengthPutM msg)
 
+-- | This writes just the message's fields with tags to the wire.  This
+-- 'Put' monad can be composed and eventually executed with 'runPut'.
+--
+-- This is actually @ wirePut 10 msg @
 messagePutM :: (ReflectDescriptor msg, Wire msg) => msg -> Put
 messagePutM msg = wirePut 10 msg
 
+-- | This writes the encoded length of the message's fields and then
+--  the message's fields with tags to the wire.  This 'Put' monad can
+--  be composed and eventually executed with 'runPut'.
+--
+-- This is actually @ wirePut 11 msg @
 messageWithLengthPutM :: (ReflectDescriptor msg, Wire msg) => msg -> Put
 messageWithLengthPutM msg = wirePut 11 msg
 
+-- | This writes an encoded wire tag with the given 'FieldId' and then
+--  the encoded length of the message's fields and then the message's
+--  fields with tags to the wire.  This 'Put' monad can be composed
+--  and eventually executed with 'runPut'.
+messageAsFieldPutM :: (ReflectDescriptor msg, Wire msg) => FieldId -> msg -> Put
+messageAsFieldPutM fi msg = let wireTag = toWireTag fi 11
+                            in wirePutReq wireTag 11 msg
+
+-- | This consumes the 'ByteString' to decode a message.  It assumes
+-- the 'ByteString' is merely a sequence of the tagged fields of the
+-- message, and consumes until a group stop tag is detected or the
+-- entire input is consumed.  Any 'ByteString' past the end of the
+-- stop tag is returned as well.
+--
+-- This is 'runGetOnLazy' applied to 'messageGetM'.
 messageGet :: (ReflectDescriptor msg, Wire msg) => ByteString -> Either String (msg,ByteString)
 messageGet bs = runGetOnLazy (messageGetM) bs
 
+-- | This 'runGetOnLazy' applied to 'messageWithLengthGetM'.
+--
+-- This first reads the encoded length of the message and will then
+-- succeed when it has consumed precisely this many additional bytes.
+-- The 'ByteString' after this point will be returned.
 messageWithLengthGet :: (ReflectDescriptor msg, Wire msg) => ByteString -> Either String (msg,ByteString)
 messageWithLengthGet bs = runGetOnLazy (messageWithLengthGetM) bs
 
+-- | This reads the tagged message fields until the stop tag or the
+-- end of input is reached.
+--
+-- This is actually @ wireGet 10 msg @
 messageGetM :: (ReflectDescriptor msg, Wire msg) => Get msg
 messageGetM = wireGet 10
 
+-- | This reads the encoded message length and then the message.
+--
+-- This is actually @ wireGet 11 msg @
 messageWithLengthGetM :: (ReflectDescriptor msg, Wire msg) => Get msg
 messageWithLengthGetM = wireGet 11
 
+-- | This reads a wire tag (must be of type '2') to get the 'FieldId'.
+-- Then the encoded message length is read, followed by the message
+-- itself.  Both the 'FieldId' and the message are returned.
+--
+-- This allows for incremental reading and processing.
+messageAsFieldGetM :: (ReflectDescriptor msg, Wire msg) => Get (FieldId,msg)
+messageAsFieldGetM = do
+  wireTag <- fmap WireTag getVarInt
+  let (fieldId,wireType) = splitWireTag wireTag
+  when (wireType /= 2) (fail $ "messageAsFieldGetM: wireType was not 2 "++show (fieldId,wireType))
+  msg <- wireGet 11
+  return (fieldId,msg)
+
+-- more functions
+
+-- | This is 'runGetOnLazy' with the 'Left' results converted to
+-- 'error' calls and the trailing 'ByteString' discarded.  This use of
+-- runtime errors is discouraged, but may be convenient.
+getFromBS :: Get r -> ByteString -> r
+getFromBS parser bs = case runGetOnLazy parser bs of
+                        Left msg -> error msg
+                        Right (r,_) -> r
+
+-- This is like 'runGet' but any 'Result' of 'Partial' is converted in
+-- a @ Left "Not enoguh input" @ error.  Thus the 'ByteString'
+-- argument is taken to be the entire input.  To be able to
+-- incrementally feed in more input you should use 'runGet' and
+-- respond to 'Partial' differently.
+runGetOnLazy :: Get r -> ByteString -> Either String (r,ByteString)
+runGetOnLazy parser bs = resolve (runGet parser bs)
+  where resolve :: Result r -> Either String (r,ByteString)
+        resolve (Failed i s) = Left ("Failed at "++show i++" : "++s)
+        resolve (Finished bsOut _i r) = Right (r,bsOut)
+        resolve (Partial {}) = Left ("Not enough input")
+
+-- | Used in generated code.
+prependMessageSize :: WireSize -> WireSize
+prependMessageSize n = n + size'Varint n
+
 {-# INLINE wirePutReq #-}
+-- | Used in generated code.
 wirePutReq :: Wire b => WireTag -> FieldType -> b -> Put
 wirePutReq wireTag 10 b = let startTag = getWireTag wireTag
                               endTag = succ startTag
@@ -106,28 +188,34 @@ wirePutReq wireTag 10 b = let startTag = getWireTag wireTag
 wirePutReq wireTag fieldType b = putVarUInt (getWireTag wireTag) >> wirePut fieldType b
 
 {-# INLINE wirePutOpt #-}
+-- | Used in generated code.
 wirePutOpt :: Wire b => WireTag -> FieldType -> Maybe b -> Put
 wirePutOpt _wireTag _fieldType Nothing = return ()
 wirePutOpt wireTag fieldType (Just b) = wirePutReq wireTag fieldType b 
 
 {-# INLINE wirePutRep #-}
+-- | Used in generated code.
 wirePutRep :: Wire b => WireTag -> FieldType -> Seq b -> Put
 wirePutRep wireTag fieldType bs = F.forM_ bs (\b -> wirePutReq wireTag fieldType b)
 
 {-# INLINE wireSizeReq #-}
+-- | Used in generated code.
 wireSizeReq :: Wire b => Int64 -> FieldType -> b -> Int64
 wireSizeReq tagSize 10 v = tagSize + wireSize 10 v + tagSize
 wireSizeReq tagSize  i v = tagSize + wireSize i v
 
 {-# INLINE wireSizeOpt #-}
+-- | Used in generated code.
 wireSizeOpt :: Wire b => Int64 -> FieldType -> Maybe b -> Int64
 wireSizeOpt _tagSize _i Nothing = 0
 wireSizeOpt tagSize i (Just v) = wireSizeReq tagSize i v
 
 {-# INLINE wireSizeRep #-}
+-- | Used in generated code.
 wireSizeRep :: Wire b => Int64 -> FieldType -> Seq b -> Int64
 wireSizeRep tagSize i s = F.foldl' (\n v -> n + wireSizeReq tagSize i v) 0 s
 
+-- | Used in generated code.
 putSize :: WireSize -> Put
 putSize = putVarUInt
 
@@ -143,6 +231,7 @@ splitWireTag :: WireTag -> (FieldId,WireType)
 splitWireTag (WireTag wireTag) = ( FieldId . fromIntegral $ wireTag `shiftR` 3
                                  , WireType . fromIntegral $ wireTag .&. 7 )
 
+-- | Used by generated code
 getMessage :: (Mergeable message, ReflectDescriptor message,Typeable message)
            => (FieldId -> message -> Get message)           -- handles "allowed" wireTags
            -> Get message
@@ -203,7 +292,7 @@ unknown fieldId wireType initialMessage = do
         ++ show (typeOf initialMessage,fieldId,wireType,here) ++ " when processing "
         ++ (show . descName . reflectDescriptorInfo $ initialMessage))
 
-
+-- | Used by generated code
 -- getBareMessage assumes the wireTag for the message, if it existed, has already been read.
 -- getBareMessage assumes that it does needs to read the Varint encoded length of the message.
 -- getBareMessage will consume the entire ByteString it is operating on, or until it
@@ -221,7 +310,7 @@ getBareMessageWith punt updater = go required initialMessage
  where
   go reqs message | Set.null reqs = go' message
                   | otherwise = do
-    done <- isEmpty
+    done <- isReallyEmpty
     if done then notEnoughData
       else do
         wireTag <- fmap WireTag getVarInt -- get tag off wire
@@ -232,7 +321,7 @@ getBareMessageWith punt updater = go required initialMessage
                  else let reqs' = Set.delete wireTag reqs
                       in updater fieldId message >>= go reqs'
   go' message = do
-    done <- isEmpty
+    done <- isReallyEmpty
     if done then return message
       else do
         wireTag <- fmap WireTag getVarInt -- get tag off wire
@@ -431,6 +520,7 @@ testZZ = and (concat testsZZ)
         values :: (Bounded a,Integral a) => [a]
         values = [minBound,div minBound 2,-3,-2,-1,0,1,2,3,div maxBound 2, maxBound]
 -}
+
 {-# INLINE getVarInt #-}
 getVarInt :: (Integral a, Bits a) => Get a
 getVarInt = do -- optimize first read instead of calling (go 0 0)
@@ -513,156 +603,3 @@ toWireType 16 =  1
 toWireType 17 =  5
 toWireType 18 =  1
 toWireType  x = error $ "Text.ProcolBuffers.Basic.toWireType: Bad FieldType: "++show x
-
-{-
--- copied from Data.Binary.Builder
--- copied from Data.ByteString.Lazy
---
-defaultSize :: Int
-defaultSize = 32 * k - overhead
-    where k = 1024
-          overhead = 2 * sizeOf (undefined :: Int)
-
--- | /O(n)./ Extract a lazy 'L.ByteString' from a 'Builder'.
--- The construction work takes place if and when the relevant part of
--- the lazy 'L.ByteString' is demanded.
---
-toLazyByteStringSized :: Int64 -> Builder -> ByteString
-toLazyByteStringSized m bytes = BS.fromChunks $ unsafePerformIO $ do
-    buf <- newBuffer bytes
-    return (runBuilder (m `append` flush) (const []) buf)
-
-newBuffer :: Int -> IO Buffer
-newBuffer size = do
-    fp <- S.mallocByteString size
-    return $! Buffer fp 0 0 size
-{-# INLINE newBuffer #-}
-
-runSizedPut :: Int64 -> Put -> ByteString
-runSizedPut bytes | bytes<0 = error "runSizedPut : size cannot be negative"
-                  | bytes==0 = const mempty
-                  | defaultSize<=bytes = runPut
-                  | otherwise = toLazyByteStringSized bytes . sndS  . unPut $ put
--}
-
-{-
-
-{- Useful for testing -}
-
-testVarInt :: (Integral a, Enum a, Ord a, Bits a) => a -> (Bool,[Word8],Either String a)
-testVarInt i = let w = toVarInt i
-               in case fromVarInt w of
-                    r@(Right v) -> (v==i,w,r)
-                    l -> (False,w,l)
-
-fromVarInt :: (Integral a, Bits a) => [Word8] -> Either String a
-fromVarInt [] = Left "No bytes!"
-fromVarInt (b:bs) = do
-  if testBit b 7 then go bs 7 (fromIntegral (b .&. 0x7F))
-    else if null bs then Right (fromIntegral b)
-           else Left ("Excess bytes: " ++ show (b,bs))
- where
-  go [] n val = Left ("Not enough bytes: " ++ show (n,val))
-  go (b:bs) n val = do
-    if testBit b 7 then go bs (n+7) (val .|. ((fromIntegral (b .&. 0x7F)) `shiftL` n))
-      else if null bs then Right (val .|. ((fromIntegral b) `shiftL` n))
-             else Left ("Excess bytes: " ++ show (b,bs,n,val))
-
-toVarInt :: (Integral a, Bits a) => a -> [Word8]
-toVarInt b = case compare b 0 of
-               LT -> let len = divBy (bitSize b) 7
-                         last'Size = (bitSize b) - ((pred len)*7)
-                         last'Mask = pred (1 `shiftL` last'Size)
-                         go i 1 = [fromIntegral i .&. last'Mask]
-                         go i n = (fromIntegral (i .&. 0x7F) .|. 0x80) : go (i `shiftR` 7) (pred n)
-                     in go b len
-               EQ -> [0]
-               GT -> let go i | i < 0x80 = [fromIntegral i]
-                              | otherwise = (fromIntegral (i .&. 0x7F) .|. 0x80) : go (i `shiftR` 7)
-                     in go b
-{-  On my G4 (big endian) powerbook:
-
-le is the protocol-buffer standard (x86 optimized)
-
-*Text.ProtocolBuffers.WireMessage Data.Int Data.Word Numeric> gle . cw $ fle pi
-("182d4454fb210940",("word",4614256656552045848,"400921fb54442d18"),("double",3.141592653589793))
-
-be is the network byte order standard (and native for my G4)
-
-*Text.ProtocolBuffers.WireMessage Data.Int Data.Word Numeric> gbe . cw $ fbe pi
-("400921fb54442d18",("word",4614256656552045848,"400921fb54442d18"),("double",3.141592653589793))
-
--}
-padL n c s = let l = length s
-             in replicate (n-l) c ++ s
-
-cw = concatMap (padL 2 '0')
-
-fbe :: Double -> [String]
-fbe (D# d) = let w = W64# (unsafeCoerce# d)
-                 b = Build.toLazyByteString (Build.putWord64le w)
-             in map (flip showHex "") $  BS.unpack  b
-
-fle :: Double -> [String]
-fle (D# d) = let w = W64# (unsafeCoerce# d)
-                 b = Build.toLazyByteString (Build.putWord64le w)
-             in map (flip showHex "") $ BS.unpack  b
-
-gbe :: [Char] -> ([Char], ([Char], Word64, String), ([Char], Double))
-gbe s = let pairs = Data.List.unfoldr (\a -> if Prelude.null a then Nothing
-                                               else Just (splitAt 2 a)) s
-            words = map (fst . head . readHex) pairs
-            w@(W64# w64) = Get.runGet Get.getWord64le (BS.pack words)
-            d = D# (unsafeCoerce# w64)
-        in (s,("word",w,showHex w ""),("double",d))
-
-gle :: [Char] -> ([Char], ([Char], Word64, String), ([Char], Double))
-gle s = let pairs = Data.List.unfoldr (\a -> if Prelude.null a then Nothing
-                                               else Just (splitAt 2 a)) s
-            words = map (fst . head . readHex) pairs
-            w@(W64# w64) = Get.runGet Get.getWord64le (BS.pack words)
-            d = D# (unsafeCoerce# w64)
-        in (s,("word",w,showHex w ""),("double",d))
-
--}
-
-
-{-
--- Some to-be-reviewed-for-sanity prototypes for the bytestream reader
-
-data WireData = VarInt ByteString -- the 128 bit variable encoding (least significant first)
-              | Fix8 ByteString -- 4 and 8 byte fixed length types, lsb first on wire
-              | VarString ByteString -- length of contents as a VarInt
-              |           ByteString -- the contents on the wire
-              | StartGroup
-              | StopGroup
-              | Fix4 ByteString
-  deriving (Eq,Ord,Show,Data,Typeable)
-
-newtype WireMessage = WireMessage (Map FieldId (Seq WireData))
-
-instance Monoid WireMessage where
-  mempty = WireMessage mempty
-  mappend (WireMessage a) (WireMessage b) = WireMessage (unionWith mappend a b)
-
-wireId :: WireData -> WireType
-wireId (VarInt {})    = WireType 0
-wireId (Fix8 {})      = WireType 1
-wireId (VarString {}) = WireType 2
-wireId  StartGroup    = WireType 3
-wireId  StopGroup     = WireType 4
-wireId (Fix4 {})      = WireType 5
-
-composeFieldWire :: FieldId -> WireType -> Word32
-composeFieldWire (FieldId f) (WireType w) = ((fromIntegral f) `shiftL` 3) .|. w
-
-decomposeFieldWire :: Word32 -> (FieldId,WireType)
-decomposeFieldWire x = (FieldId (fromIntegral (x `shiftR` 3)), WireType (x .&. 7))
-
-encodeWireMessage :: WireMessage -> ByteString
-encodeWireMessage = undefined
-
-decodeWireMessage :: ByteString -> WireMessage
-decodeWireMessage = undefined
-
--} 
