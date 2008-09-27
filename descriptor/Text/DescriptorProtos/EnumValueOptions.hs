@@ -3,30 +3,34 @@ import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
-data EnumValueOptions = EnumValueOptions{}
+data EnumValueOptions = EnumValueOptions{unknown'field :: P'.UnknownField}
                       deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
+instance P'.UnknownMessage EnumValueOptions where
+  getUnknownField = unknown'field
+  putUnknownField u'f msg = msg{unknown'field = u'f}
+ 
 instance P'.Mergeable EnumValueOptions where
-  mergeEmpty = EnumValueOptions
-  mergeAppend (EnumValueOptions) (EnumValueOptions) = EnumValueOptions
+  mergeEmpty = EnumValueOptions P'.mergeEmpty
+  mergeAppend (EnumValueOptions x'1) (EnumValueOptions y'1) = EnumValueOptions (P'.mergeAppend x'1 y'1)
  
 instance P'.Default EnumValueOptions where
-  defaultValue = EnumValueOptions
+  defaultValue = EnumValueOptions P'.defaultValue
  
 instance P'.Wire EnumValueOptions where
-  wireSize ft' self'@(EnumValueOptions)
+  wireSize ft' self'@(EnumValueOptions x'1)
     = case ft' of
         10 -> calc'Size
         11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
-        calc'Size = 0
-  wirePut ft' self'@(EnumValueOptions)
+        calc'Size = (P'.wireSizeUnknownField x'1)
+  wirePut ft' self'@(EnumValueOptions x'1)
     = case ft' of
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where
@@ -35,8 +39,8 @@ instance P'.Wire EnumValueOptions where
               P'.return ()
   wireGet ft'
     = case ft' of
-        10 -> P'.getBareMessage update'Self
-        11 -> P'.getMessage update'Self
+        10 -> P'.getBareMessageWith P'.loadUnknown update'Self
+        11 -> P'.getMessageWith P'.loadUnknown update'Self
         _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
@@ -51,4 +55,4 @@ instance P'.GPB EnumValueOptions
 instance P'.ReflectDescriptor EnumValueOptions where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"EnumValueOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"EnumValueOptions.hs\"], isGroup = False, fields = fromList [], keys = fromList [], extRanges = [], knownKeys = fromList []}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"EnumValueOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"EnumValueOptions.hs\"], isGroup = False, fields = fromList [], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"

@@ -14,8 +14,12 @@ data TestCamelCaseFieldNames = TestCamelCaseFieldNames{primitiveField :: P'.Mayb
                                                        repeatedEnumField :: P'.Seq UnittestProto.ForeignEnum,
                                                        repeatedMessageField :: P'.Seq UnittestProto.ForeignMessage,
                                                        repeatedStringPieceField :: P'.Seq P'.Utf8,
-                                                       repeatedCordField :: P'.Seq P'.Utf8}
+                                                       repeatedCordField :: P'.Seq P'.Utf8, unknown'field :: P'.UnknownField}
                              deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
+ 
+instance P'.UnknownMessage TestCamelCaseFieldNames where
+  getUnknownField = unknown'field
+  putUnknownField u'f msg = msg{unknown'field = u'f}
  
 instance P'.Mergeable TestCamelCaseFieldNames where
   mergeEmpty
@@ -25,8 +29,9 @@ instance P'.Mergeable TestCamelCaseFieldNames where
         P'.mergeEmpty
         P'.mergeEmpty
         P'.mergeEmpty
-  mergeAppend (TestCamelCaseFieldNames x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8 x'9 x'10 x'11 x'12)
-    (TestCamelCaseFieldNames y'1 y'2 y'3 y'4 y'5 y'6 y'7 y'8 y'9 y'10 y'11 y'12)
+        P'.mergeEmpty
+  mergeAppend (TestCamelCaseFieldNames x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8 x'9 x'10 x'11 x'12 x'13)
+    (TestCamelCaseFieldNames y'1 y'2 y'3 y'4 y'5 y'6 y'7 y'8 y'9 y'10 y'11 y'12 y'13)
     = TestCamelCaseFieldNames (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
         (P'.mergeAppend x'5 y'5)
         (P'.mergeAppend x'6 y'6)
@@ -36,6 +41,7 @@ instance P'.Mergeable TestCamelCaseFieldNames where
         (P'.mergeAppend x'10 y'10)
         (P'.mergeAppend x'11 y'11)
         (P'.mergeAppend x'12 y'12)
+        (P'.mergeAppend x'13 y'13)
  
 instance P'.Default TestCamelCaseFieldNames where
   defaultValue
@@ -46,9 +52,10 @@ instance P'.Default TestCamelCaseFieldNames where
         P'.defaultValue
         P'.defaultValue
         P'.defaultValue
+        P'.defaultValue
  
 instance P'.Wire TestCamelCaseFieldNames where
-  wireSize ft' self'@(TestCamelCaseFieldNames x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8 x'9 x'10 x'11 x'12)
+  wireSize ft' self'@(TestCamelCaseFieldNames x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8 x'9 x'10 x'11 x'12 x'13)
     = case ft' of
         10 -> calc'Size
         11 -> P'.prependMessageSize calc'Size
@@ -63,8 +70,9 @@ instance P'.Wire TestCamelCaseFieldNames where
                + P'.wireSizeRep 1 14 x'9
                + P'.wireSizeRep 1 11 x'10
                + P'.wireSizeRep 1 9 x'11
-               + P'.wireSizeRep 1 9 x'12)
-  wirePut ft' self'@(TestCamelCaseFieldNames x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8 x'9 x'10 x'11 x'12)
+               + P'.wireSizeRep 1 9 x'12
+               + P'.wireSizeUnknownField x'13)
+  wirePut ft' self'@(TestCamelCaseFieldNames x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8 x'9 x'10 x'11 x'12 x'13)
     = case ft' of
         10 -> put'Fields
         11
@@ -87,10 +95,11 @@ instance P'.Wire TestCamelCaseFieldNames where
               P'.wirePutRep 82 11 x'10
               P'.wirePutRep 90 9 x'11
               P'.wirePutRep 98 9 x'12
+              P'.wirePutUnknownField x'13
   wireGet ft'
     = case ft' of
-        10 -> P'.getBareMessage update'Self
-        11 -> P'.getMessage update'Self
+        10 -> P'.getBareMessageWith P'.loadUnknown update'Self
+        11 -> P'.getMessageWith P'.loadUnknown update'Self
         _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
@@ -128,4 +137,4 @@ instance P'.GPB TestCamelCaseFieldNames
 instance P'.ReflectDescriptor TestCamelCaseFieldNames where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"TestCamelCaseFieldNames\"}, descFilePath = [\"UnittestProto\",\"TestCamelCaseFieldNames.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"primitiveField\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 5}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"stringField\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 18}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"enumField\"}, fieldNumber = FieldId {getFieldId = 3}, wireTag = WireTag {getWireTag = 24}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just (ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"ForeignEnum\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"messageField\"}, fieldNumber = FieldId {getFieldId = 4}, wireTag = WireTag {getWireTag = 34}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"ForeignMessage\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"stringPieceField\"}, fieldNumber = FieldId {getFieldId = 5}, wireTag = WireTag {getWireTag = 42}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"cordField\"}, fieldNumber = FieldId {getFieldId = 6}, wireTag = WireTag {getWireTag = 50}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"repeatedPrimitiveField\"}, fieldNumber = FieldId {getFieldId = 7}, wireTag = WireTag {getWireTag = 56}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 5}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"repeatedStringField\"}, fieldNumber = FieldId {getFieldId = 8}, wireTag = WireTag {getWireTag = 66}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"repeatedEnumField\"}, fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 72}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 14}, typeName = Just (ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"ForeignEnum\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"repeatedMessageField\"}, fieldNumber = FieldId {getFieldId = 10}, wireTag = WireTag {getWireTag = 82}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"ForeignMessage\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"repeatedStringPieceField\"}, fieldNumber = FieldId {getFieldId = 11}, wireTag = WireTag {getWireTag = 90}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"repeatedCordField\"}, fieldNumber = FieldId {getFieldId = 12}, wireTag = WireTag {getWireTag = 98}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList []}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"TestCamelCaseFieldNames\"}, descFilePath = [\"UnittestProto\",\"TestCamelCaseFieldNames.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"primitiveField\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 5}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"stringField\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 18}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"enumField\"}, fieldNumber = FieldId {getFieldId = 3}, wireTag = WireTag {getWireTag = 24}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just (ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"ForeignEnum\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"messageField\"}, fieldNumber = FieldId {getFieldId = 4}, wireTag = WireTag {getWireTag = 34}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"ForeignMessage\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"stringPieceField\"}, fieldNumber = FieldId {getFieldId = 5}, wireTag = WireTag {getWireTag = 42}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"cordField\"}, fieldNumber = FieldId {getFieldId = 6}, wireTag = WireTag {getWireTag = 50}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"repeatedPrimitiveField\"}, fieldNumber = FieldId {getFieldId = 7}, wireTag = WireTag {getWireTag = 56}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 5}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"repeatedStringField\"}, fieldNumber = FieldId {getFieldId = 8}, wireTag = WireTag {getWireTag = 66}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"repeatedEnumField\"}, fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 72}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 14}, typeName = Just (ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"ForeignEnum\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"repeatedMessageField\"}, fieldNumber = FieldId {getFieldId = 10}, wireTag = WireTag {getWireTag = 82}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"ForeignMessage\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"repeatedStringPieceField\"}, fieldNumber = FieldId {getFieldId = 11}, wireTag = WireTag {getWireTag = 90}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestCamelCaseFieldNames\", baseName = \"repeatedCordField\"}, fieldNumber = FieldId {getFieldId = 12}, wireTag = WireTag {getWireTag = 98}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"

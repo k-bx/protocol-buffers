@@ -1,0 +1,10 @@
+Newest at the top.
+
+2008-09 : version 0.3.1 released.  This is the second release
+  * Change Parser.hs to allow negative enum values to match actual behavior of protoc.
+  * Use runST & castSTUArray for both Float and Double conversion to Word32 and Word64.
+  * Adding UnknownField support controlled by "-u" flag to hprotoc.
+  * Fix messageGet to use the new 'isReallyEmpty' and Parial Results get Nothing, to work better.
+  * Fix default instances of Descriptor messages to be Nothing instead of Just defaultValue.
+
+2008-09 : version 0.2.9 released.  This is the first working release.

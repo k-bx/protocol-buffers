@@ -22,27 +22,27 @@ module Text.ProtocolBuffers.Extensions
   -- * External types and classes
   , Key(..),ExtKey(..),MessageAPI(..)
   -- * Internal types, functions, and classes
-  , wireSizeExtField,wirePutExtField,getMessageExt,getBareMessageExt
+  , wireSizeExtField,wirePutExtField,getMessageExt,getBareMessageExt,loadExtension
   , GPB,ExtField(..),ExtendMessage(..)
   ) where
 
-import Data.Map(Map)
+import qualified Data.ByteString.Lazy as L
+import qualified Data.Foldable as F
 import Data.Generics
 import Data.Ix(inRange)
+import Data.Map(Map)
+import qualified Data.Map as M
 import Data.Maybe(fromMaybe)
-import Data.Typeable
 import Data.Monoid(mappend)
 import Data.Sequence(Seq,(|>))
 import qualified Data.Sequence as Seq
-import qualified Data.ByteString.Lazy as L
-import qualified Data.Foldable as F
-import qualified Data.Map as M
+import Data.Typeable
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Default()
 import Text.ProtocolBuffers.WireMessage
 import Text.ProtocolBuffers.Reflections
-import Text.ProtocolBuffers.Get as Get (Get,runGet,Result(..),lookAhead,getLazyByteString,spanOf,skip,bytesRead)
+import Text.ProtocolBuffers.Get as Get (Get,runGet,Result(..),bytesRead)
 
 err :: String -> b
 err msg = error $ "Text.ProtocolBuffers.Extensions error\n"++msg
@@ -114,23 +114,24 @@ data GPWitness a where GPWitness :: (GPB a) => GPWitness a
 -- | The 'GPDyn' is my specialization of 'Dynamic'.  It hides the type
 -- with an existential but the 'GPWitness' brings the class instances
 -- into scope.  This is used in 'ExtOptional' for optional fields.
-data GPDyn = forall a . GPDyn (GPWitness a) a
+data GPDyn = forall a . GPDyn !(GPWitness a) a
   deriving (Typeable)
 
 -- | The 'GPDynSeq' is another specialization of 'Dynamic' and is used
 -- in 'ExtRepeated' for repeated fields.
-data GPDynSeq = forall a . GPDynSeq (GPWitness a) (Seq a)
+data GPDynSeq = forall a . GPDynSeq !(GPWitness a) !(Seq a)
   deriving (Typeable)
 
 -- | The WireType is used to ensure the Seq is homogenous.
 -- The ByteString is the unparsed input after the tag.
 -- The WireSize includes all tags.
-data ExtFieldValue = ExtFromWire WireType (Seq ByteString)
-                   | ExtOptional FieldType GPDyn
-                   | ExtRepeated FieldType GPDynSeq
+data ExtFieldValue = ExtFromWire !WireType !(Seq ByteString)
+                   | ExtOptional !FieldType !GPDyn
+                   | ExtRepeated !FieldType !GPDynSeq
   deriving (Typeable,Ord,Show)
 
 data DummyMessageType deriving (Typeable)
+
 instance ExtendMessage DummyMessageType where
   getExtField = undefined
   putExtField = undefined
@@ -519,35 +520,35 @@ parseWireExtSeq k@(Key i t mv)  wt raw | wt /= toWireType t =
 -- | This is used by the generated code
 wireSizeExtField :: ExtField -> WireSize
 wireSizeExtField (ExtField m) = F.foldl' aSize 0 (M.assocs m)  where
-    aSize old (fi,(ExtFromWire wt bs)) = old +
-      let tagSize = size'Varint (getWireTag (mkWireTag fi wt))
-      in F.foldl' (\oldVal new -> oldVal + L.length new) (fromIntegral (Seq.length bs) * tagSize) bs
-    aSize old (fi,(ExtOptional ft (GPDyn GPWitness d))) = old +
-      let tagSize = size'Varint (getWireTag (toWireTag fi ft))
-      in wireSizeReq tagSize ft d
-    aSize old (fi,(ExtRepeated ft (GPDynSeq GPWitness s))) = old +
-      let tagSize = size'Varint (getWireTag (toWireTag fi ft))
-      in wireSizeRep tagSize ft s
+  aSize old (fi,(ExtFromWire wt raw)) = old +
+    let tagSize = size'Varint (getWireTag (mkWireTag fi wt))
+    in F.foldl' (\oldVal new -> oldVal + L.length new) (fromIntegral (Seq.length raw) * tagSize) raw
+  aSize old (fi,(ExtOptional ft (GPDyn GPWitness d))) = old +
+    let tagSize = size'Varint (getWireTag (toWireTag fi ft))
+    in wireSizeReq tagSize ft d
+  aSize old (fi,(ExtRepeated ft (GPDynSeq GPWitness s))) = old +
+    let tagSize = size'Varint (getWireTag (toWireTag fi ft))
+    in wireSizeRep tagSize ft s
 
 -- | This is used by the generated code. The data is serialized in
 -- order of increasing field number.
 wirePutExtField :: ExtField -> Put
 wirePutExtField (ExtField m) = mapM_ aPut (M.assocs m) where
-    aPut (fi,(ExtFromWire wt raw)) = F.mapM_ (\bs -> putVarUInt (getWireTag $ mkWireTag fi wt) >> putLazyByteString bs) raw
-    aPut (fi,(ExtOptional ft (GPDyn GPWitness d))) = wirePutOpt (toWireTag fi ft) ft (Just d)
-    aPut (fi,(ExtRepeated ft (GPDynSeq GPWitness s))) = wirePutRep (toWireTag fi ft) ft s
+  aPut (fi,(ExtFromWire wt raw)) = F.mapM_ (\bs -> putVarUInt (getWireTag $ mkWireTag fi wt) >> putLazyByteString bs) raw
+  aPut (fi,(ExtOptional ft (GPDyn GPWitness d))) = wirePutOpt (toWireTag fi ft) ft (Just d)
+  aPut (fi,(ExtRepeated ft (GPDynSeq GPWitness s))) = wirePutRep (toWireTag fi ft) ft s
 
 -- | This is used by the generated code to get messages that have extensions
 getMessageExt :: (Mergeable message, ReflectDescriptor message,Typeable message,ExtendMessage message)
               => (FieldId -> message -> Get message)           -- handles "allowed" wireTags
               -> Get message
-getMessageExt = getMessageWith extension
+getMessageExt = getMessageWith loadExtension
 
 -- | This is used by the generated code to get messages that have extensions
 getBareMessageExt :: (Mergeable message, ReflectDescriptor message,Typeable message,ExtendMessage message)
                   => (FieldId -> message -> Get message)           -- handles "allowed" wireTags
                   -> Get message
-getBareMessageExt = getBareMessageWith extension
+getBareMessageExt = getBareMessageWith loadExtension
 
 -- | 'isValidExt' is used by 'extension' to check whether the field
 -- number is in one of the ranges declared in the '.proto' file.
@@ -557,8 +558,8 @@ isValidExt fi msg = any (flip inRange fi) (validExtRanges msg)
 
 -- | get a value from the wire into the message's ExtField. This is
 -- used by 'getMessageExt' and 'getBareMessageExt' above.
-extension :: (ReflectDescriptor a, ExtendMessage a) => FieldId -> WireType -> a -> Get a
-extension fieldId wireType msg | isValidExt fieldId msg = do
+loadExtension :: (ReflectDescriptor a, ExtendMessage a) => FieldId -> WireType -> a -> Get a
+loadExtension fieldId wireType msg | isValidExt fieldId msg = do
   let (ExtField ef) = getExtField msg
       badwt wt = do here <- bytesRead
                     fail $ "Conflicting wire types at byte position "++show here ++ " for extension to message: "++show (typeOf msg,fieldId,wireType,wt)
@@ -586,46 +587,8 @@ extension fieldId wireType msg | isValidExt fieldId msg = do
       let v' = ExtRepeated ft (GPDynSeq x (s |> a))
           ef' = M.insert fieldId v' ef
       seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
-extension fieldId wireType msg = unknown fieldId wireType msg
+loadExtension fieldId wireType msg = unknown fieldId wireType msg
 
--- | This reads in the raw bytestring corresponding to an field known
--- only through the wiretag's 'FieldId' and 'WireType'.
-wireGetFromWire :: FieldId -> WireType -> Get ByteString
-wireGetFromWire fi wt = getLazyByteString =<< calcLen where
-  calcLen = case wt of
-              0 -> lenOf (spanOf (>=128) >> skip 1)
-              1 -> return 8
-              2 -> lookAhead $ do
-                     here <- bytesRead
-                     len <- getVarInt
-                     there <- bytesRead
-                     return ((there-here)+len)
-              3 -> lenOf (skipGroup fi)
-              4 -> fail $ "Cannot wireGetFromWire with wireType of STOP_GROUP: "++show (fi,wt)
-              5 -> return 4
-              wtf -> fail $ "Invalid wire type (expected 0,1,2,3,or 5) found: "++show (fi,wtf)
-  lenOf g = do here <- bytesRead
-               there <- lookAhead (g >> bytesRead)
-               return (there-here)
-
--- | After a group start tag with the given 'FieldId' this will skip
--- ahead in the stream past the end tag of that group.  Used by
--- 'wireGetFromWire' to help compule the length of an unknown field
--- when loading an extension.
-skipGroup :: FieldId -> Get ()
-skipGroup start_fi = go where
-  go = do
-    (fieldId,wireType) <- fmap (splitWireTag . WireTag) getVarInt
-    case wireType of
-      0 -> spanOf (>=128) >> skip 1 >> go
-      1 -> skip 8 >> go
-      2 -> getVarInt >>= skip >> go
-      3 -> skipGroup fieldId >> go
-      4 | start_fi /= fieldId -> fail $ "skipGroup failed, fieldId mismatch bewteen START_GROUP and STOP_GROUP: "++show (start_fi,(fieldId,wireType))
-        | otherwise -> return ()
-      5 -> skip 4 >> go
-      wtf -> fail $ "Invalid wire type (expected 0,1,2,3,4,or 5) found: "++show (fieldId,wtf)
-                     
 class MessageAPI msg a b | msg a -> b where
   -- | Access data in a message.  The first argument is always the
   -- message.  The second argument can be one of 4 categories.

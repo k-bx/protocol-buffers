@@ -4,25 +4,31 @@ import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified UnittestProto.TestMutualRecursionB as UnittestProto (TestMutualRecursionB)
  
-data TestMutualRecursionA = TestMutualRecursionA{bb :: P'.Maybe UnittestProto.TestMutualRecursionB}
+data TestMutualRecursionA = TestMutualRecursionA{bb :: P'.Maybe UnittestProto.TestMutualRecursionB,
+                                                 unknown'field :: P'.UnknownField}
                           deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
+instance P'.UnknownMessage TestMutualRecursionA where
+  getUnknownField = unknown'field
+  putUnknownField u'f msg = msg{unknown'field = u'f}
+ 
 instance P'.Mergeable TestMutualRecursionA where
-  mergeEmpty = TestMutualRecursionA P'.mergeEmpty
-  mergeAppend (TestMutualRecursionA x'1) (TestMutualRecursionA y'1) = TestMutualRecursionA (P'.mergeAppend x'1 y'1)
+  mergeEmpty = TestMutualRecursionA P'.mergeEmpty P'.mergeEmpty
+  mergeAppend (TestMutualRecursionA x'1 x'2) (TestMutualRecursionA y'1 y'2)
+    = TestMutualRecursionA (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2)
  
 instance P'.Default TestMutualRecursionA where
-  defaultValue = TestMutualRecursionA P'.defaultValue
+  defaultValue = TestMutualRecursionA P'.defaultValue P'.defaultValue
  
 instance P'.Wire TestMutualRecursionA where
-  wireSize ft' self'@(TestMutualRecursionA x'1)
+  wireSize ft' self'@(TestMutualRecursionA x'1 x'2)
     = case ft' of
         10 -> calc'Size
         11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
-        calc'Size = (P'.wireSizeOpt 1 11 x'1)
-  wirePut ft' self'@(TestMutualRecursionA x'1)
+        calc'Size = (P'.wireSizeOpt 1 11 x'1 + P'.wireSizeUnknownField x'2)
+  wirePut ft' self'@(TestMutualRecursionA x'1 x'2)
     = case ft' of
         10 -> put'Fields
         11
@@ -34,10 +40,11 @@ instance P'.Wire TestMutualRecursionA where
         put'Fields
           = do
               P'.wirePutOpt 10 11 x'1
+              P'.wirePutUnknownField x'2
   wireGet ft'
     = case ft' of
-        10 -> P'.getBareMessage update'Self
-        11 -> P'.getMessage update'Self
+        10 -> P'.getBareMessageWith P'.loadUnknown update'Self
+        11 -> P'.getMessageWith P'.loadUnknown update'Self
         _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
@@ -53,4 +60,4 @@ instance P'.GPB TestMutualRecursionA
 instance P'.ReflectDescriptor TestMutualRecursionA where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"TestMutualRecursionA\"}, descFilePath = [\"UnittestProto\",\"TestMutualRecursionA.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestMutualRecursionA\", baseName = \"bb\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"TestMutualRecursionB\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList []}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"TestMutualRecursionA\"}, descFilePath = [\"UnittestProto\",\"TestMutualRecursionA.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestMutualRecursionA\", baseName = \"bb\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"TestMutualRecursionB\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"

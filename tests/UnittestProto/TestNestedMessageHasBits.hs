@@ -5,25 +5,31 @@ import qualified Text.ProtocolBuffers.Header as P'
 import qualified UnittestProto.TestNestedMessageHasBits.NestedMessage as UnittestProto.TestNestedMessageHasBits (NestedMessage)
  
 data TestNestedMessageHasBits = TestNestedMessageHasBits{optional_nested_message ::
-                                                         P'.Maybe UnittestProto.TestNestedMessageHasBits.NestedMessage}
+                                                         P'.Maybe UnittestProto.TestNestedMessageHasBits.NestedMessage,
+                                                         unknown'field :: P'.UnknownField}
                               deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
+instance P'.UnknownMessage TestNestedMessageHasBits where
+  getUnknownField = unknown'field
+  putUnknownField u'f msg = msg{unknown'field = u'f}
+ 
 instance P'.Mergeable TestNestedMessageHasBits where
-  mergeEmpty = TestNestedMessageHasBits P'.mergeEmpty
-  mergeAppend (TestNestedMessageHasBits x'1) (TestNestedMessageHasBits y'1) = TestNestedMessageHasBits (P'.mergeAppend x'1 y'1)
+  mergeEmpty = TestNestedMessageHasBits P'.mergeEmpty P'.mergeEmpty
+  mergeAppend (TestNestedMessageHasBits x'1 x'2) (TestNestedMessageHasBits y'1 y'2)
+    = TestNestedMessageHasBits (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2)
  
 instance P'.Default TestNestedMessageHasBits where
-  defaultValue = TestNestedMessageHasBits P'.defaultValue
+  defaultValue = TestNestedMessageHasBits P'.defaultValue P'.defaultValue
  
 instance P'.Wire TestNestedMessageHasBits where
-  wireSize ft' self'@(TestNestedMessageHasBits x'1)
+  wireSize ft' self'@(TestNestedMessageHasBits x'1 x'2)
     = case ft' of
         10 -> calc'Size
         11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
-        calc'Size = (P'.wireSizeOpt 1 11 x'1)
-  wirePut ft' self'@(TestNestedMessageHasBits x'1)
+        calc'Size = (P'.wireSizeOpt 1 11 x'1 + P'.wireSizeUnknownField x'2)
+  wirePut ft' self'@(TestNestedMessageHasBits x'1 x'2)
     = case ft' of
         10 -> put'Fields
         11
@@ -35,10 +41,11 @@ instance P'.Wire TestNestedMessageHasBits where
         put'Fields
           = do
               P'.wirePutOpt 10 11 x'1
+              P'.wirePutUnknownField x'2
   wireGet ft'
     = case ft' of
-        10 -> P'.getBareMessage update'Self
-        11 -> P'.getMessage update'Self
+        10 -> P'.getBareMessageWith P'.loadUnknown update'Self
+        11 -> P'.getMessageWith P'.loadUnknown update'Self
         _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
@@ -57,4 +64,4 @@ instance P'.GPB TestNestedMessageHasBits
 instance P'.ReflectDescriptor TestNestedMessageHasBits where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"TestNestedMessageHasBits\"}, descFilePath = [\"UnittestProto\",\"TestNestedMessageHasBits.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestNestedMessageHasBits\", baseName = \"optional_nested_message\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestNestedMessageHasBits\", baseName = \"NestedMessage\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList []}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"TestNestedMessageHasBits\"}, descFilePath = [\"UnittestProto\",\"TestNestedMessageHasBits.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestNestedMessageHasBits\", baseName = \"optional_nested_message\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto.TestNestedMessageHasBits\", baseName = \"NestedMessage\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"

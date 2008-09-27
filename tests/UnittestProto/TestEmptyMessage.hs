@@ -3,25 +3,29 @@ import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
-data TestEmptyMessage = TestEmptyMessage{}
+data TestEmptyMessage = TestEmptyMessage{unknown'field :: P'.UnknownField}
                       deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
+instance P'.UnknownMessage TestEmptyMessage where
+  getUnknownField = unknown'field
+  putUnknownField u'f msg = msg{unknown'field = u'f}
+ 
 instance P'.Mergeable TestEmptyMessage where
-  mergeEmpty = TestEmptyMessage
-  mergeAppend (TestEmptyMessage) (TestEmptyMessage) = TestEmptyMessage
+  mergeEmpty = TestEmptyMessage P'.mergeEmpty
+  mergeAppend (TestEmptyMessage x'1) (TestEmptyMessage y'1) = TestEmptyMessage (P'.mergeAppend x'1 y'1)
  
 instance P'.Default TestEmptyMessage where
-  defaultValue = TestEmptyMessage
+  defaultValue = TestEmptyMessage P'.defaultValue
  
 instance P'.Wire TestEmptyMessage where
-  wireSize ft' self'@(TestEmptyMessage)
+  wireSize ft' self'@(TestEmptyMessage x'1)
     = case ft' of
         10 -> calc'Size
         11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
-        calc'Size = 0
-  wirePut ft' self'@(TestEmptyMessage)
+        calc'Size = (P'.wireSizeUnknownField x'1)
+  wirePut ft' self'@(TestEmptyMessage x'1)
     = case ft' of
         10 -> put'Fields
         11
@@ -32,11 +36,11 @@ instance P'.Wire TestEmptyMessage where
     where
         put'Fields
           = do
-              P'.return ()
+              P'.wirePutUnknownField x'1
   wireGet ft'
     = case ft' of
-        10 -> P'.getBareMessage update'Self
-        11 -> P'.getMessage update'Self
+        10 -> P'.getBareMessageWith P'.loadUnknown update'Self
+        11 -> P'.getMessageWith P'.loadUnknown update'Self
         _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
@@ -51,4 +55,4 @@ instance P'.GPB TestEmptyMessage
 instance P'.ReflectDescriptor TestEmptyMessage where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"TestEmptyMessage\"}, descFilePath = [\"UnittestProto\",\"TestEmptyMessage.hs\"], isGroup = False, fields = fromList [], keys = fromList [], extRanges = [], knownKeys = fromList []}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"TestEmptyMessage\"}, descFilePath = [\"UnittestProto\",\"TestEmptyMessage.hs\"], isGroup = False, fields = fromList [], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"

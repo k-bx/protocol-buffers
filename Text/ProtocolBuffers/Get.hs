@@ -26,7 +26,7 @@
 -- contination; it should return failure or finished.
 --
 -- 'suspendUntilComplete' repeatedly uses a partial continuation to
--- ask for more input until Nothing is passed and then it proceeds
+-- ask for more input until 'Nothing' is passed and then it proceeds
 -- with parsing.
 --
 -- The 'getAvailable' command returns the lazy byte string the parser
@@ -391,14 +391,15 @@ isEmpty = do (S ss bs _n) <- getFull
 isReallyEmpty :: Get Bool
 isReallyEmpty = do
   b <- isEmpty
-  if not b then return b
-    else loop
+  if b then loop
+    else return b
  where loop = do
          continue <- suspend
-         b <- isEmpty
-         if not b then return b
-           else if continue then loop
-                  else return False
+         if continue
+           then do b <- isEmpty
+                   if b then loop
+                     else return b
+           else return True
 
 spanOf :: (Word8 -> Bool) ->  Get (L.ByteString)
 spanOf f = do let loop = do (S ss bs n) <- getFull

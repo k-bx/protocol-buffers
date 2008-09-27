@@ -1,6 +1,6 @@
 This the README file for protocol-buffers, protocol-buffers-descriptors, and hprotoc.
 These are three interdependent Haskell packages by Chris Kuklewicz.
-This README was updated most recently to reflect version 0.2.8
+This README was updated most recently to reflect version 0.3.1
 
 Questions and answers:
 
@@ -14,14 +14,12 @@ http://code.Google.com/apis/protocolbuffers/docs/overview.html
 How well does this Haskell package duplicate Google's project?
 
   This provides non-mutable messages that ought to be wire-compatible with Google.
-  These message support extensions.
-  These messages do not support reading or storing unknown fields; these are errors.
+  These messages support extensions.
+  These messages support unknown fields if hprotoc is passed the proper flag.
   This does not generate anything for Services/Methods.
 
-  Adding support for unknown fields as an option to hprotoc could be done.
   Adding support for services has not been considered.
 
-  I reject negative field numbers in proto files.  Google's code silently changes them to positive numbers.
   I think that Google's code checks for some policy violations that are not well documented enough for me to reverse engineer.
   Some (all?) of Google's APIs include the possibility of mutable messages.
   I suspect that my message reflection is not as useful at runtime as in some of Google's APIs.
@@ -79,7 +77,7 @@ How mature is this code?
 
   hprotoc generates and uses the Text.DescriptorProtos tree from Google "descriptor.proto" file.
 
-  hprotoc has generated code from Google/protobuf/unittest.proto and Google/protobuf.unittest_import.  These compile after adding hs-boot files TestAllExtensions.hs-boot, TestFieldOrderings.hs-boot, and TestMutualRecursionA.hs-boot to resolve mutual recursion.  The SPARSE_D and SPARSE_E enum values in the original unittest.proto are negative, which is disallowed so I comment those out.  The TestEnumWithDupValue has duplicated values which cause a compilation warning.
+  hprotoc has generated code from Google/protobuf/unittest.proto and Google/protobuf.unittest_import.  These compile after adding hs-boot files TestAllExtensions.hs-boot, TestFieldOrderings.hs-boot, and TestMutualRecursionA.hs-boot to resolve mutual recursion.  The TestEnumWithDupValue has duplicated values which cause a compilation warning.
 
   There has been QuickCheck tests done for UnittestProto/TestAllType.hs and UnittestProto/TestAllExtensions.hs in the tests subdirectory.  These pass as of 2008-09-19 for version 0.2.7 (which has been tagged right after writing this).  These test that random messages can be roundtripped to the wire format without changing — with the caveat that the new extension keys are read back as raw bytes but compare equal because of the parsing done by (==).
 

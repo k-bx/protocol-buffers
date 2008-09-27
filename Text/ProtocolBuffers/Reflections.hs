@@ -54,6 +54,7 @@ data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , keys :: Seq KeyInfo
                                      , extRanges :: [(FieldId,FieldId)]
                                      , knownKeys :: Seq FieldInfo
+                                     , storeUnknown :: Bool
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 

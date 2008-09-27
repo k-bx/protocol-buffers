@@ -3,25 +3,29 @@ import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
-data FooRequest = FooRequest{}
+data FooRequest = FooRequest{unknown'field :: P'.UnknownField}
                 deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
+instance P'.UnknownMessage FooRequest where
+  getUnknownField = unknown'field
+  putUnknownField u'f msg = msg{unknown'field = u'f}
+ 
 instance P'.Mergeable FooRequest where
-  mergeEmpty = FooRequest
-  mergeAppend (FooRequest) (FooRequest) = FooRequest
+  mergeEmpty = FooRequest P'.mergeEmpty
+  mergeAppend (FooRequest x'1) (FooRequest y'1) = FooRequest (P'.mergeAppend x'1 y'1)
  
 instance P'.Default FooRequest where
-  defaultValue = FooRequest
+  defaultValue = FooRequest P'.defaultValue
  
 instance P'.Wire FooRequest where
-  wireSize ft' self'@(FooRequest)
+  wireSize ft' self'@(FooRequest x'1)
     = case ft' of
         10 -> calc'Size
         11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
-        calc'Size = 0
-  wirePut ft' self'@(FooRequest)
+        calc'Size = (P'.wireSizeUnknownField x'1)
+  wirePut ft' self'@(FooRequest x'1)
     = case ft' of
         10 -> put'Fields
         11
@@ -32,11 +36,11 @@ instance P'.Wire FooRequest where
     where
         put'Fields
           = do
-              P'.return ()
+              P'.wirePutUnknownField x'1
   wireGet ft'
     = case ft' of
-        10 -> P'.getBareMessage update'Self
-        11 -> P'.getMessage update'Self
+        10 -> P'.getBareMessageWith P'.loadUnknown update'Self
+        11 -> P'.getMessageWith P'.loadUnknown update'Self
         _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
@@ -51,4 +55,4 @@ instance P'.GPB FooRequest
 instance P'.ReflectDescriptor FooRequest where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"FooRequest\"}, descFilePath = [\"UnittestProto\",\"FooRequest.hs\"], isGroup = False, fields = fromList [], keys = fromList [], extRanges = [], knownKeys = fromList []}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"\", parentModule = \"UnittestProto\", baseName = \"FooRequest\"}, descFilePath = [\"UnittestProto\",\"FooRequest.hs\"], isGroup = False, fields = fromList [], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"

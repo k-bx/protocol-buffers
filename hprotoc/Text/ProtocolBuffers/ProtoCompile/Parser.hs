@@ -119,7 +119,8 @@ fieldInt = tok (\l-> case l of L_Integer _ x | inRange validRange x && not (inRa
 enumInt :: (Num a) => P s a
 enumInt = tok (\l-> case l of L_Integer _ x | inRange validRange x -> return (fromInteger x)
                               _ -> Nothing) <?> "enum value (from 0 to 2^31-1)"
-  where validRange = (0,(2^(31::Int))-1)
+  where validRange = (toInteger (minBound :: Int32), toInteger (maxBound :: Int32))
+-- where validRange = (0,(2^(31::Int))-1) -- documentation was wrong
 
 doubleLit :: P s Double
 doubleLit = tok (\l-> case l of L_Double _ x -> return x
@@ -281,6 +282,7 @@ field upGroup maybeExtendee = do
                , D.FieldDescriptorProto.extendee = maybeExtendee
                , D.FieldDescriptorProto.default_value = fmap Utf8 maybeDefault -- XXX Hack: we lie about Utf8 for the default value
                , D.FieldDescriptorProto.options = maybeOptions
+               , D.FieldDescriptorProto.unknown'field = mergeEmpty
                }
 
 subBracketOptions :: Maybe Type
@@ -375,31 +377,29 @@ enum up = pName (U.fromString "enum") >> do
   up =<< subParser (pChar '{' >> subEnum) (mergeEmpty {D.EnumDescriptorProto.name=Just self})
 
 enumOption,subEnum :: P D.EnumDescriptorProto.EnumDescriptorProto ()
+subEnum = eols >> rest 
+  where rest = (enumVal <|> enumOption) >> eols >> (pChar '}' <|> rest)
+{-      setOption = fail "There are no options for enumerations (when this parser was written)"   -}
+        enumVal :: P D.EnumDescriptorProto ()
+        enumVal = do
+          name <- ident1
+          number <- pChar '=' >> enumInt
+          -- enum value option
+          eol
+          let v = D.EnumValueDescriptorProto
+                       { D.EnumValueDescriptorProto.name = Just name
+                       , D.EnumValueDescriptorProto.number = Just number
+                       , D.EnumValueDescriptorProto.options = Nothing
+                       , D.EnumValueDescriptorProto.unknown'field = mergeEmpty
+                       }
+          update' (\s -> s {D.EnumDescriptorProto.value=D.EnumDescriptorProto.value s |> v})
+
 enumOption = pOption >>= setOption >>= \p -> eol >> update' (\s -> s {D.EnumDescriptorProto.options=Just p})
   where
     setOption optName = do
       -- old <- fmap (maybe mergeEmpty id . D.EnumDescriptorProto.options) getState
       case optName of
         s -> unexpected $ "There are no options for enumerations (when this parser was written): "++s
-
-subEnum = eols >> rest 
-  where rest = (enumVal <|> enumOption) >> eols >> (pChar '}' <|> rest)
-{-
-        first = (eol >> first) <|> ((enumVal <|> (pOption >>= setOption)) >> rest)
-        rest = pChar '}' <|> ((eol <|> enumVal <|> (pOption >>= setOption)) >> rest)
-        setOption = fail "There are no options for enumerations (when this parser was written)"
--}
-        enumVal :: P D.EnumDescriptorProto ()
-        enumVal = do
-          name <- ident1
-          number <- pChar '=' >> enumInt
-          eol
-          let v = D.EnumValueDescriptorProto
-                       { D.EnumValueDescriptorProto.name = Just name
-                       , D.EnumValueDescriptorProto.number = Just number
-                       , D.EnumValueDescriptorProto.options = Nothing
-                       }
-          update' (\s -> s {D.EnumDescriptorProto.value=D.EnumDescriptorProto.value s |> v})
 
 extensions = pName (U.fromString "extensions") >> do
   start <- fmap Just fieldInt
@@ -408,6 +408,7 @@ extensions = pName (U.fromString "extensions") >> do
   let e = D.ExtensionRange
             { D.ExtensionRange.start = start
             , D.ExtensionRange.end = end
+            , D.ExtensionRange.unknown'field = mergeEmpty
             }
   update' (\s -> s {D.DescriptorProto.extension_range=D.DescriptorProto.extension_range s |> e})
 
@@ -431,6 +432,7 @@ service = pName (U.fromString "service") >> do
                          , D.MethodDescriptorProto.input_type=Just input
                          , D.MethodDescriptorProto.output_type=Just output
                          , D.MethodDescriptorProto.options=Nothing
+                         , D.MethodDescriptorProto.unknown'field = mergeEmpty
                          }
                update' (\s -> s {D.ServiceDescriptorProto.method=D.ServiceDescriptorProto.method s |> m})
        setOption optName = do

@@ -3,30 +3,34 @@ import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
-data EnumOptions = EnumOptions{}
+data EnumOptions = EnumOptions{unknown'field :: P'.UnknownField}
                  deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
+instance P'.UnknownMessage EnumOptions where
+  getUnknownField = unknown'field
+  putUnknownField u'f msg = msg{unknown'field = u'f}
+ 
 instance P'.Mergeable EnumOptions where
-  mergeEmpty = EnumOptions
-  mergeAppend (EnumOptions) (EnumOptions) = EnumOptions
+  mergeEmpty = EnumOptions P'.mergeEmpty
+  mergeAppend (EnumOptions x'1) (EnumOptions y'1) = EnumOptions (P'.mergeAppend x'1 y'1)
  
 instance P'.Default EnumOptions where
-  defaultValue = EnumOptions
+  defaultValue = EnumOptions P'.defaultValue
  
 instance P'.Wire EnumOptions where
-  wireSize ft' self'@(EnumOptions)
+  wireSize ft' self'@(EnumOptions x'1)
     = case ft' of
         10 -> calc'Size
         11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
-        calc'Size = 0
-  wirePut ft' self'@(EnumOptions)
+        calc'Size = (P'.wireSizeUnknownField x'1)
+  wirePut ft' self'@(EnumOptions x'1)
     = case ft' of
         10 -> put'Fields
         11
           -> do
-               P'.putSize (P'.wireSize 11 self')
+               P'.putSize (P'.wireSize 10 self')
                put'Fields
         _ -> P'.wirePutErr ft' self'
     where
@@ -35,8 +39,8 @@ instance P'.Wire EnumOptions where
               P'.return ()
   wireGet ft'
     = case ft' of
-        10 -> P'.getBareMessage update'Self
-        11 -> P'.getMessage update'Self
+        10 -> P'.getBareMessageWith P'.loadUnknown update'Self
+        11 -> P'.getMessageWith P'.loadUnknown update'Self
         _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
@@ -51,4 +55,4 @@ instance P'.GPB EnumOptions
 instance P'.ReflectDescriptor EnumOptions where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"EnumOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"EnumOptions.hs\"], isGroup = False, fields = fromList [], keys = fromList [], extRanges = [], knownKeys = fromList []}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"EnumOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"EnumOptions.hs\"], isGroup = False, fields = fromList [], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"

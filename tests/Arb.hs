@@ -7,7 +7,10 @@ import qualified Data.Sequence as Seq
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.UTF8 as U
 import Text.ProtocolBuffers.Basic
+import Text.ProtocolBuffers.Header(UnknownField)
 import Data.Word(Word8)
+
+instance Arbitrary UnknownField where arbitrary = return defaultValue
 
 arb :: Gen a -> IO a
 arb g = do

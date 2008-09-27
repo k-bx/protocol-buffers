@@ -1,14 +1,8 @@
-Add the rest of the documentation for the public API.
+How does protoc parse enum options and enum value options??  In the new version!
 
-Next task: re-organize code
-  Goals:
-    1) A command-line code generation tool
-       a) CLI input
-       b) lexer - parsers - resolver - reflector - generator
-       c) importer
-    2) Refine Header API used by generated classes
-    3) A master API module to expose:
-       a) Get/Set/Has/Ext/Default/Merge API
-       b) Wire API
-       c) Reflection API
-       d) API for extensions?
+Add even more of the documentation for the public API.
+add check to getBareMessageWith for fieldId of stop group tag?
+delete commented out code
+add strictness annotations to internal data types.
+benchmark
+performance measure

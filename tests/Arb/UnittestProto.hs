@@ -62,7 +62,7 @@ prop_Size1 a =
   let predicted = messageSize a
       written = L.length (messagePut a)
   in if predicted == written then True
-       else trace ("Wrong size: "++show(predicted,written)) False
+       else trace ("Wrong size: "++show (predicted,written)) False
 
 -- quickCheck : TestAllTypes passes 100
 prop_Size2 :: forall msg. (ReflectDescriptor msg, Wire msg) => msg -> Bool
@@ -79,7 +79,7 @@ prop_WireArb1 a =
      Right (a',b) | L.null b -> if a==a' then True
                                   else trace ("Unequal\n" ++ show a ++ "\n\n" ++show a') False
                   | otherwise -> trace ("Not all input consumed: "++show (L.length b)++"\n"++ show a ++ "\n\n" ++show (L.unpack (messagePut a))) False
-     Left msg -> trace msg False
+     Left msg -> trace (unlines [msg,show a,show . L.unpack $ messagePut a]) False
 
 type G x = Either String (x,ByteString)
 

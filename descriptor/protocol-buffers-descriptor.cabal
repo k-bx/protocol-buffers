@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        0.2.9
+version:        0.3.1
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -62,7 +62,7 @@ Library
   else
         build-depends: base < 3
 
-  build-depends:   protocol-buffers == 0.2.9
+  build-depends:   protocol-buffers == 0.3.1
   extensions:      DeriveDataTypeable,
                    EmptyDataDecls,
                    FlexibleInstances,

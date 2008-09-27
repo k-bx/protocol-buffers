@@ -40,10 +40,10 @@ import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag,runPut)
 import qualified Data.Foldable as F(foldr,toList)
 import qualified Data.ByteString as S(concat)
 import qualified Data.ByteString.Char8 as SC(spanEnd)
-import qualified Data.ByteString.Lazy.Char8 as LC(toChunks,fromChunks,length,init)
+import qualified Data.ByteString.Lazy.Char8 as LC(toChunks,fromChunks,length,init,empty)
 import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.List(partition,unfoldr)
-import qualified Data.Sequence as Seq(fromList,empty,singleton)
+import qualified Data.Sequence as Seq(fromList,empty,singleton,null)
 import Numeric(readHex,readOct,readDec)
 import Data.Monoid(mconcat,mappend)
 import qualified Data.Map as M(fromListWith,lookup)
@@ -89,25 +89,25 @@ pnPath :: ProtoName -> [FilePath]
 pnPath (ProtoName a b c) = splitDirectories .flip addExtension "hs" . joinPath . splitDot $ dotPre a (dotPre b c)
 
 dotPre :: String -> String -> String
-dotPre "" x = x
-dotPre x "" = x
-dotPre s x@('.':xs)  | '.' == last s = s ++ xs
+dotPre "" x = x -- after this the value of s cannot be []
+dotPre s "" = s
+dotPre s x@('.':xs)  | '.' == last s = s ++ xs -- s cannnot be [], so last is safe
                      | otherwise = s ++ x
-dotPre s x | '.' == last s = s++x
+dotPre s x | '.' == last s = s++x -- s cannnot be [], so last is safe
            | otherwise = s++('.':x)
 
 serializeFDP :: D.FileDescriptorProto -> ByteString
-serializeFDP fdp = runPut (wirePut 11 fdp)
+serializeFDP fdp = LC.empty -- XXX runPut (wirePut 11 fdp)
 
-makeProtoInfo :: String -> [String] -> D.FileDescriptorProto -> ProtoInfo
-makeProtoInfo prefix names
+makeProtoInfo :: Bool -> String -> [String] -> D.FileDescriptorProto -> ProtoInfo
+makeProtoInfo unknownField prefix names
               fdp@(D.FileDescriptorProto
                     { D.FileDescriptorProto.name = Just rawName })
      = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allKeys where
   protoName = case names of
-                [] -> ProtoName prefix "" ""
+                [] -> ProtoName prefix "" "" -- after this the value of names cannot be []
                 [name] -> ProtoName prefix "" name
-                _ -> ProtoName prefix (foldr1 (\a bs -> a  ++ ('.' : bs)) (init names)) (last names)
+                _ -> ProtoName prefix (foldr1 (\a bs -> a  ++ ('.' : bs)) (init names)) (last names) -- names cannot be []
   keyInfos = Seq.fromList . map (\f -> (keyExtendee prefix f,toFieldInfo protoName f))
              . F.toList . D.FileDescriptorProto.extension $ fdp
   allMessages = concatMap (processMSG False) (F.toList $ D.FileDescriptorProto.message_type fdp)
@@ -122,13 +122,13 @@ makeProtoInfo prefix names
         checkGroup x = elem (fromMaybe (imp $ "no message name in makeProtoInfo.processMSG.checkGroup:\n"++show msg)
                                        (D.DescriptorProto.name x))
                             groups
-    in makeDescriptorInfo getKnownKeys prefix msgIsGroup msg
+    in makeDescriptorInfo getKnownKeys prefix msgIsGroup unknownField msg
        : concatMap (\x -> processMSG (checkGroup x) x)
                    (F.toList (D.DescriptorProto.nested_type msg))
   processENM msg = foldr ((:) . makeEnumInfo prefix) nested
                          (F.toList (D.DescriptorProto.enum_type msg))
     where nested = concatMap processENM (F.toList (D.DescriptorProto.nested_type msg))
-makeProtoInfo prefix names fdp = imp $ "no name in fdp passed to makeProtoInfo: " ++ show (prefix,names,fdp)
+makeProtoInfo unknownField prefix names fdp = imp $ "no name in fdp passed to makeProtoInfo: " ++ show (unknownField,prefix,names,fdp)
 
 collectedGroups :: D.DescriptorProto -> [Utf8] 
 collectedGroups = catMaybes
@@ -139,13 +139,13 @@ collectedGroups = catMaybes
 
 makeEnumInfo :: String -> D.EnumDescriptorProto -> EnumInfo
 makeEnumInfo prefix e@(D.EnumDescriptorProto.EnumDescriptorProto
-                        { D.EnumDescriptorProto.name = Just rawName })
+                        { D.EnumDescriptorProto.name = Just rawName
+                        , D.EnumDescriptorProto.value = value })
     = let protoName = toProtoName prefix rawName
-      in EnumInfo protoName (toPath prefix rawName) (enumVals e)
-  where enumVals :: D.EnumDescriptorProto -> [(EnumCode,String)]
-        enumVals (D.EnumDescriptorProto.EnumDescriptorProto
-                    { D.EnumDescriptorProto.value = value}) 
-            = F.foldr ((:) . oneValue) [] value
+      in if Seq.null value then imp $ "enum has no values: "++show (prefix,e)
+           else EnumInfo protoName (toPath prefix rawName) enumVals
+  where enumVals ::[(EnumCode,String)]
+        enumVals = F.foldr ((:) . oneValue) [] value
           where oneValue  :: D.EnumValueDescriptorProto -> (EnumCode,String)
                 oneValue (D.EnumValueDescriptorProto.EnumValueDescriptorProto
                           { D.EnumValueDescriptorProto.name = Just name
@@ -155,14 +155,16 @@ makeEnumInfo prefix e@(D.EnumDescriptorProto.EnumDescriptorProto
 makeEnumInfo prefix e = imp $ "no name for enum passed to makeEnumInfo: " ++ show (prefix,e)
 
 makeDescriptorInfo :: (ProtoName -> Seq FieldInfo)
-                   -> String -> Bool -> D.DescriptorProto -> DescriptorInfo
-makeDescriptorInfo getKnownKeys prefix msgIsGroup
+                   -> String -> Bool -> Bool
+                   -> D.DescriptorProto -> DescriptorInfo
+makeDescriptorInfo getKnownKeys prefix msgIsGroup unknownField
                    (D.DescriptorProto.DescriptorProto
                      { D.DescriptorProto.name = Just rawName
                      , D.DescriptorProto.field = rawFields
                      , D.DescriptorProto.extension_range = extension_range })
     = let di = DescriptorInfo protoName (toPath prefix rawName) msgIsGroup
                               fieldInfos keyInfos extRangeList (getKnownKeys protoName)
+                              unknownField
       in di -- trace (toString rawName ++ "\n" ++ show di ++ "\n\n") $ di
   where protoName = toProtoName prefix rawName
         (msgFields,keysHere) = partition (\ f -> Nothing == (D.FieldDescriptorProto.extendee f)) . F.toList $ rawFields
@@ -177,14 +179,13 @@ makeDescriptorInfo getKnownKeys prefix msgIsGroup
                             { D.DescriptorProto.ExtensionRange.start = start
                             , D.DescriptorProto.ExtensionRange.end = end }) =
                   (maybe minBound FieldId start, maybe maxBound FieldId end)
-makeDescriptorInfo _ prefix msgIsGroup d =
-  imp $ "No name passed in dp passed to makeDescriptorInfo: "++show (prefix,msgIsGroup,d)
+makeDescriptorInfo _ prefix msgIsGroup unknownField d =
+  imp $ "No name passed in dp passed to makeDescriptorInfo: "++show (prefix,msgIsGroup,unknownField,d)
 
-  
 keyExtendee :: String -> D.FieldDescriptorProto.FieldDescriptorProto -> ProtoName
 keyExtendee prefix f
     = case D.FieldDescriptorProto.extendee f of
-        Nothing -> error "Impossible? keyExtendee expected Just but found Nothing"
+        Nothing -> imp $ "keyExtendee expected Just but found Nothing: "++show (prefix,f)
         Just extName -> toProtoName prefix extName
 
 toFieldInfo :: ProtoName ->  D.FieldDescriptorProto -> FieldInfo

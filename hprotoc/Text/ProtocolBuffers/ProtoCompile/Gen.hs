@@ -55,11 +55,11 @@ noWhere = [] -- YYY noWhere = (HsBDecls [])
 infixl 1 $$
 
 dotPre :: String -> String -> String
-dotPre "" x = x
-dotPre x "" = x
-dotPre s x@('.':xs)  | '.' == last s = s ++ xs
+dotPre "" x = x -- after this the value of s cannot be []
+dotPre s "" = s
+dotPre s x@('.':xs)  | '.' == last s = s ++ xs -- s cannnot be [], so last is safe
                      | otherwise = s ++ x
-dotPre s x | '.' == last s = s++x
+dotPre s x | '.' == last s = s++x -- s cannnot be [], so last is safe
            | otherwise = s++('.':x)
 
 src :: SrcLoc
@@ -141,7 +141,7 @@ instanceMergeableEnum ei
 instanceBounded :: EnumInfo -> HsDecl
 instanceBounded ei
     = HsInstDecl src [] (private "Bounded") [HsTyCon (unqualName (enumName ei))] 
-        [set "minBound" (head values),set "maxBound" (last values)]
+        [set "minBound" (head values),set "maxBound" (last values)] -- values cannot be null in a well formed enum
   where values = enumValues ei
         set f (_,n) = inst f [] (HsCon (UnQual (HsIdent n)))
 
@@ -340,10 +340,12 @@ descriptorX di = HsDataDecl src [] name [] [con] derives
         name = HsIdent (baseName self)
         con = HsRecDecl src name eFields
                 where eFields = F.foldr ((:) . fieldX) end (fields di)
-                      end = if hasExt di then [extfield] else []
+                      end = (if hasExt di then (extfield:) else id) 
+                          $ (if storeUnknown di then [unknownField] else [])
         extfield :: ([HsName],HsBangType)
         extfield = ([HsIdent "ext'field"],HsUnBangedTy (HsTyCon (Qual (Module "P'") (HsIdent "ExtField"))))
-
+        unknownField :: ([HsName],HsBangType)
+        unknownField = ([HsIdent "unknown'field"],HsUnBangedTy (HsTyCon (Qual (Module "P'") (HsIdent "UnknownField"))))
         fieldX :: FieldInfo -> ([HsName],HsBangType)
         fieldX fi = ([HsIdent (baseName $ fieldName fi)],HsUnBangedTy (labeled (HsTyCon typed)))
           where labeled | canRepeat fi = typeApp "Seq"
@@ -360,6 +362,7 @@ descriptorX di = HsDataDecl src [] name [] [con] derives
 instancesDescriptor :: DescriptorInfo -> [HsDecl]
 instancesDescriptor di = map ($ di) $
    (if hasExt di then (instanceExtendMessage:) else id) $
+   (if storeUnknown di then (instanceUnknownMessage:) else id) $
    [ instanceMergeable
    , instanceDefault
    , instanceWireDescriptor
@@ -377,6 +380,14 @@ instanceExtendMessage di
         ]
   where putextfield = HsRecUpdate (lvar "msg") [ HsFieldUpdate (UnQual (HsIdent "ext'field")) (lvar "e'f") ]
 
+instanceUnknownMessage :: DescriptorInfo -> HsDecl
+instanceUnknownMessage di
+    = HsInstDecl src [] (private "UnknownMessage") [HsTyCon (UnQual (HsIdent (baseName (descName di))))]
+        [ inst "getUnknownField" [] (lvar "unknown'field")
+        , inst "putUnknownField" [HsPVar (HsIdent "u'f"),HsPVar (HsIdent "msg")] putunknownfield
+        ]
+  where putunknownfield = HsRecUpdate (lvar "msg") [ HsFieldUpdate (UnQual (HsIdent "unknown'field")) (lvar "u'f") ]
+
 instanceMergeable :: DescriptorInfo -> HsDecl
 instanceMergeable di
     = HsInstDecl src [] (private "Mergeable") [HsTyCon un]
@@ -385,7 +396,9 @@ instanceMergeable di
                              (foldl' HsApp (HsCon un) (zipWith append vars1 vars2))
         ]
   where un = UnQual (HsIdent (baseName (descName di)))
-        len = (if hasExt di then succ else id) $ Seq.length (fields di)
+        len = (if hasExt di then succ else id)
+            $ (if storeUnknown di then succ else id)
+            $ Seq.length (fields di)
         patternVars1,patternVars2 :: [HsPat]
         patternVars1 = take len inf
             where inf = map (\n -> HsPVar (HsIdent ("x'" ++ show n))) [1..]
@@ -404,7 +417,8 @@ instanceDefault di
         [ inst "defaultValue" [] (foldl' HsApp (HsCon un) deflistExt) ]
   where un = UnQual (HsIdent (baseName (descName di)))
         deflistExt = F.foldr ((:) . defX) end (fields di)
-        end = if hasExt di then [pvar "defaultValue"] else []
+        end = (if hasExt di then (pvar "defaultValue":) else id) 
+            $ (if storeUnknown di then [pvar "defaultValue"] else [])
 
         defX :: FieldInfo -> HsExp
         defX fi | isRequired fi = dv1
@@ -425,22 +439,24 @@ instanceMessageAPI protoName
 mkOp :: String -> HsExp -> HsExp -> HsExp
 mkOp s a b = HsInfixApp a (HsQVarOp (UnQual (HsSymbol s))) b
 
-{-
-        isAllowed x = pvar "or" $$ HsList ranges where
-          (<=!) = mkOp "<="; (&&!) = mkOp "&&"; -- (||!) = mkOp "||"
-          ranges = map (\(FieldId lo,FieldId hi) -> (litInt lo <=! x) &&! (x <=! litInt hi)) allowedExts
--}
 instanceWireDescriptor :: DescriptorInfo -> HsDecl
-instanceWireDescriptor (DescriptorInfo { descName = protoName
-                                       , fields = fieldInfos
-                                       , extRanges = allowedExts
-                                       , knownKeys = fieldExts })
+instanceWireDescriptor di@(DescriptorInfo { descName = protoName
+                                          , fields = fieldInfos
+                                          , extRanges = allowedExts
+                                          , knownKeys = fieldExts })
   = let me = unqualName protoName
         extensible = not (null allowedExts)
-        len = (if extensible then succ else id) $ Seq.length fieldInfos
+        len = (if extensible then succ else id) 
+            $ (if storeUnknown di then succ else id)
+            $ Seq.length fieldInfos
         mine = HsPApp me . take len . map (\n -> HsPVar (HsIdent ("x'" ++ show n))) $ [1..]
         vars = take len . map (\n -> lvar ("x'" ++ show n)) $ [1..]
+        mExt | extensible = Just (vars !! Seq.length fieldInfos)
+             | otherwise = Nothing
+        mUnknown | storeUnknown di = Just (last vars)
+                 | otherwise = Nothing
 
+        -- first case is for Group behavior, second case is for Message behavior, last is error handler
         cases g m e = HsCase (lvar "ft'") [ HsAlt src (litIntP 10) (HsUnGuardedAlt g) noWhere
                                           , HsAlt src (litIntP 11) (HsUnGuardedAlt m) noWhere
                                           , HsAlt src HsPWildCard (HsUnGuardedAlt e) noWhere
@@ -450,12 +466,14 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
                                            (pvar "prependMessageSize" $$ lvar "calc'Size")
                                            (pvar "wireSizeErr" $$ lvar "ft'" $$ lvar "self'")
         whereCalcSize = [HsFunBind [HsMatch src (HsIdent "calc'Size") [] (HsUnGuardedRhs sizes) noWhere]]
-        sizes | null sizesListExt = HsLit (HsInt 0)
-              | otherwise = HsParen (foldl1' (+!) sizesListExt)
+        sizes | null sizesList = HsLit (HsInt 0)
+              | otherwise = HsParen (foldl1' (+!) sizesList)
           where (+!) = mkOp "+"
-                sizesListExt | extensible = sizesList ++ [ pvar "wireSizeExtField" $$ last vars ]
-                             | otherwise = sizesList
-                sizesList =  zipWith toSize vars . F.toList $ fieldInfos
+                sizesList | Just v <- mUnknown = sizesListExt ++ [ pvar "wireSizeUnknownField" $$ v ]
+                          | otherwise = sizesListExt
+                sizesListExt | Just v <- mExt = sizesListFields ++ [ pvar "wireSizeExtField" $$ v ] 
+                             | otherwise = sizesListFields
+                sizesListFields =  zipWith toSize vars . F.toList $ fieldInfos
         toSize var fi = let f = if isRequired fi then "wireSizeReq"
                                   else if canRepeat fi then "wireSizeRep"
                                       else "wireSizeOpt"
@@ -471,9 +489,11 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
           (pvar "wirePutErr" $$ lvar "ft'" $$ lvar "self'")
         wherePutFields = [HsFunBind [HsMatch src (HsIdent "put'Fields") [] (HsUnGuardedRhs (HsDo putStmts)) noWhere]]
         putStmts = putStmtsContent
-          where putStmtsContent | null putStmtsListExt = [HsQualifier $ pvar "return" $$ HsCon (Special HsUnitCon)]
-                                | otherwise = putStmtsListExt
-                putStmtsListExt | extensible = sortedPutStmtsList ++ [ HsQualifier $ pvar "wirePutExtField" $$ last vars ]
+          where putStmtsContent | null putStmtsAll = [HsQualifier $ pvar "return" $$ HsCon (Special HsUnitCon)]
+                                | otherwise = putStmtsAll
+                putStmtsAll | Just v <- mUnknown = putStmtsListExt ++ [ HsQualifier $ pvar "wirePutUnknownField" $$ v ]
+                             | otherwise = putStmtsListExt
+                putStmtsListExt | Just v <- mExt = sortedPutStmtsList ++ [ HsQualifier $ pvar "wirePutExtField" $$ v ]
                                 | otherwise = sortedPutStmtsList
                 sortedPutStmtsList = map snd                                          -- remove number
                                      . sortBy (compare `on` fst)                      -- sort by number
@@ -489,13 +509,31 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
                                                 , var]
 
         getCases = HsUnGuardedRhs $ cases
-          (pvar (if extensible then "getBareMessageExt" else "getBareMessage") $$ lvar "update'Self")
-          (pvar (if extensible then "getMessageExt" else "getMessage") $$ lvar "update'Self")
+          (pvar "getBareMessageWith" $$ otherField $$ lvar "update'Self")
+          (pvar "getMessageWith" $$ otherField $$ lvar "update'Self")
           (pvar "wireGetErr" $$ lvar "ft'")
-        whereUpdateSelf = [HsFunBind [HsMatch src (HsIdent "update'Self")
-                            [HsPVar (HsIdent "field'Number") ,HsPVar (HsIdent "old'Self")]
-                            (HsUnGuardedRhs (HsCase (lvar "field'Number") updateAlts)) noWhere]]
-        updateAlts = map toUpdate (F.toList fieldInfos) 
+        whereDecls | extensible = [whereUpdateSelf,processExt]
+                   | otherwise  = [whereUpdateSelf]
+        whereUpdateSelf = HsFunBind [HsMatch src (HsIdent "update'Self")
+                           [HsPVar (HsIdent "field'Number") ,HsPVar (HsIdent "old'Self")]
+                           (HsUnGuardedRhs (HsCase (lvar "field'Number") updateAlts)) noWhere]
+        otherField | extensible = lvar "other'Field"
+                   | otherwise = processUnknown
+        processUnknown | storeUnknown di = pvar "loadUnknown"
+                       | otherwise = pvar "unknown"
+        processExt =
+          HsFunBind [HsMatch src (HsIdent "other'Field")
+                       [HsPVar (HsIdent "field'Number"), HsPVar (HsIdent "wire'Type"), HsPVar (HsIdent "old'Self")]
+                       (HsUnGuardedRhs (HsParen (HsIf (isAllowed (lvar "field'Number"))
+                                                      (pvar "loadExtension")
+                                                      (processUnknown))
+                                        $$ lvar "field'Number" $$ lvar "wire'Type" $$ lvar "old'Self")) noWhere]
+        isAllowed x = pvar "or" $$ HsList ranges where
+          (<=!) = mkOp "<="; (&&!) = mkOp "&&";
+          ranges = map (\(FieldId lo,FieldId hi) -> if hi < maxHi then (litInt lo <=! x) &&! (x <=! litInt hi)
+                                                      else litInt lo <=! x) allowedExts
+             where FieldId maxHi = maxBound
+        updateAlts = map toUpdate (F.toList fieldInfos)
                      ++ (if extensible && (not (Seq.null fieldExts)) then map toUpdateExt (F.toList fieldExts) else [])
                      ++ [HsAlt src HsPWildCard (HsUnGuardedAlt $
                            pvar "unknownField" $$ (lvar "field'Number")) noWhere]
@@ -514,13 +552,14 @@ instanceWireDescriptor (DescriptorInfo { descName = protoName
             where qMerge x | fromIntegral (getFieldType (typeCode fi)) `elem` [10,11] =
                                pvar "mergeAppend" $$ HsParen ((lvar . baseName . fieldName $ fi) $$ lvar "old'Self") $$ (HsParen x)
                            | otherwise = x
-         
+
     in HsInstDecl src [] (private "Wire") [HsTyCon me]
         [ HsFunBind [HsMatch src (HsIdent "wireSize") [HsPVar (HsIdent "ft'"),HsPAsPat (HsIdent "self'") (HsPParen mine)] sizeCases whereCalcSize]
         , HsFunBind [HsMatch src (HsIdent "wirePut")  [HsPVar (HsIdent "ft'"),HsPAsPat (HsIdent "self'") (HsPParen mine)] putCases wherePutFields]
-        , HsFunBind [HsMatch src (HsIdent "wireGet") [HsPVar (HsIdent "ft'")] getCases whereUpdateSelf]
+        , HsFunBind [HsMatch src (HsIdent "wireGet") [HsPVar (HsIdent "ft'")] getCases whereDecls]
         ]
 
+-- TODO : Encode allow as a proper set of numbers!
 instanceReflectDescriptor :: DescriptorInfo -> HsDecl
 instanceReflectDescriptor di
     = HsInstDecl src [] (private "ReflectDescriptor") [HsTyCon (UnQual (HsIdent (baseName (descName di))))]

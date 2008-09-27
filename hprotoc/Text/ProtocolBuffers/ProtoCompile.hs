@@ -18,7 +18,7 @@ import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serialize
 -- | Version of protocol-buffers.
 -- The version tags that I have used are ["unreleased"]
 version :: Version
-version = Version { versionBranch = [0,2,9]
+version = Version { versionBranch = [0,3,1]
                   , versionTags = [] }
 
 data Options = Options { optPrefix :: String
@@ -26,7 +26,7 @@ data Options = Options { optPrefix :: String
                        , optInclude :: [FilePath]
                        , optProto :: FilePath
                        , optVerbose :: Bool
-                       , optUnkownFields :: Bool }
+                       , optUnknownFields :: Bool }
   deriving Show
 
 setPrefix,setTarget,setInclude,setProto :: String -> Options -> Options
@@ -36,7 +36,7 @@ setTarget   s o = o { optTarget = s }
 setInclude  s o = o { optInclude = s : optInclude o }
 setProto    s o = o { optProto = s }
 setVerbose    o = o { optVerbose = True }
-setUnknown    o = o { optUnkownFields = True }
+setUnknown    o = o { optUnknownFields = True }
 
 data OptionAction = Mutate (Options->Options) | Run (Options->Options) | Switch Flag
 
@@ -51,7 +51,7 @@ optionList =
   , Option ['p'] ["prefix"] (ReqArg (Mutate . setPrefix) "MODULE")
                "dotted haskell MODULE name to use as prefix (default is none); last flag used"
   , Option ['u'] ["unknown-fields"] (NoArg (Mutate setUnknown))
-               "UNIMPLEMENTED: generated messages and groups all support unknown fields"
+               "generated messages and groups all support unknown fields"
   , Option ['v'] ["verbose"] (NoArg (Mutate  setVerbose))
                "increase amount of printed information"
   , Option [] ["version"]  (NoArg (Switch VersionInfo))
@@ -81,7 +81,7 @@ processOptions argv =
 defaultOptions :: IO Options
 defaultOptions = do
   pwd <- getCurrentDirectory
-  return $ Options { optPrefix = "", optTarget = pwd, optInclude = [pwd], optProto = "", optVerbose = False, optUnkownFields = False }
+  return $ Options { optPrefix = "", optTarget = pwd, optInclude = [pwd], optProto = "", optVerbose = False, optUnknownFields = False }
 
 main :: IO ()
 main = do
@@ -116,7 +116,7 @@ run options = do
   print options
   protos <- loadProto (optInclude options) (optProto options)
   let (Just (fdp,_,names)) = M.lookup (optProto options) protos
-      protoInfo = makeProtoInfo (optPrefix options) names fdp
+      protoInfo = makeProtoInfo (optUnknownFields options) (optPrefix options) names fdp
   let produceMSG di = do
         let file = combine (optTarget options) . joinPath . descFilePath $ di
         print file

@@ -27,29 +27,30 @@ module Text.ProtocolBuffers.WireMessage
     , wirePutReq,wirePutOpt,wirePutRep
     , wireSizeErr,wirePutErr,wireGetErr
     , getMessage,getBareMessage,getMessageWith,getBareMessageWith
-    , unknownField,unknown
+    , unknownField,unknown,wireGetFromWire
     , castWord64ToDouble,castWord32ToFloat,castDoubleToWord64,castFloatToWord32
     , zzEncode64,zzEncode32,zzDecode64,zzDecode32
     ) where
 
 -- GHC internals for getting at Double and Float representation as Word64 and Word32
 import Control.Monad(when)
+import Control.Monad.ST
+import Data.Array.ST
 import Data.Bits (Bits(..))
 import qualified Data.ByteString.Lazy as BS (length)
 import qualified Data.Foldable as F(foldl',forM_)
 import Data.List (genericLength)
 import qualified Data.Set as Set(notMember,delete,null)
 import Data.Typeable (Typeable(..))
-import Foreign(alloca,peek,poke,castPtr)
-import GHC.Exts (Double(D#),Float(F#),unsafeCoerce#)
-import GHC.Word (Word64(W64#)) -- ,Word32(W32#))
-import System.IO.Unsafe(unsafePerformIO)
+--import GHC.Exts (Double(D#),Float(F#),unsafeCoerce#)
+--import GHC.Word (Word64(W64#)) -- ,Word32(W32#))
 
 -- binary package
 import Data.Binary.Put (Put,runPut,putWord8,putWord32le,putWord64le,putLazyByteString)
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,bytesRead,isReallyEmpty
+                                       ,spanOf,skip,lookAhead
                                        ,getWord8,getWord32le,getWord64le,getLazyByteString)
 import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
@@ -173,7 +174,7 @@ runGetOnLazy parser bs = resolve (runGet parser bs)
   where resolve :: Result r -> Either String (r,ByteString)
         resolve (Failed i s) = Left ("Failed at "++show i++" : "++s)
         resolve (Finished bsOut _i r) = Right (r,bsOut)
-        resolve (Partial {}) = Left ("Not enough input")
+        resolve (Partial op) = resolve (op Nothing)
 
 -- | Used in generated code.
 prependMessageSize :: WireSize -> WireSize
@@ -345,17 +346,21 @@ unknownField fieldId = do
 {-# INLINE castWord32ToFloat #-}
 castWord32ToFloat :: Word32 -> Float
 --castWord32ToFloat (W32# w) = F# (unsafeCoerce# w)
-castWord32ToFloat x = unsafePerformIO $ alloca $ \p -> poke p x >> peek (castPtr p)
+--castWord32ToFloat x = unsafePerformIO $ alloca $ \p -> poke p x >> peek (castPtr p)
+castWord32ToFloat x = runST (newArray (0::Int,0) x >>= castSTUArray >>= flip readArray 0)
 {-# INLINE castFloatToWord32 #-}
 castFloatToWord32 :: Float -> Word32
 --castFloatToWord32 (F# f) = W32# (unsafeCoerce# f)
-castFloatToWord32 x = unsafePerformIO $ alloca $ \p -> poke p x >> peek (castPtr p)
+castFloatToWord32 x = runST (newArray (0::Int,0) x >>= castSTUArray >>= flip readArray 0)
+
 {-# INLINE castWord64ToDouble #-}
 castWord64ToDouble :: Word64 -> Double
-castWord64ToDouble (W64# w) = D# (unsafeCoerce# w)
+-- castWord64ToDouble (W64# w) = D# (unsafeCoerce# w)
+castWord64ToDouble x = runST (newArray (0::Int,0) x >>= castSTUArray >>= flip readArray 0)
 {-# INLINE castDoubleToWord64 #-}
 castDoubleToWord64 :: Double -> Word64
-castDoubleToWord64 (D# d) = W64# (unsafeCoerce# d)
+-- castDoubleToWord64 (D# d) = W64# (unsafeCoerce# d)
+castDoubleToWord64 x = runST (newArray (0::Int,0) x >>= castSTUArray >>= flip readArray 0)
 
 -- These error handlers are exported to the generated code
 wireSizeErr :: Typeable a => FieldType -> a -> WireSize
@@ -554,7 +559,44 @@ putVarUInt b = let go i | i < 0x80 = putWord8 (fromIntegral i)
                         | otherwise = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7)
                in go b
 
+-- | This reads in the raw bytestring corresponding to an field known
+-- only through the wiretag's 'FieldId' and 'WireType'.
+wireGetFromWire :: FieldId -> WireType -> Get ByteString
+wireGetFromWire fi wt = getLazyByteString =<< calcLen where
+  calcLen = case wt of
+              0 -> lenOf (spanOf (>=128) >> skip 1)
+              1 -> return 8
+              2 -> lookAhead $ do
+                     here <- bytesRead
+                     len <- getVarInt
+                     there <- bytesRead
+                     return ((there-here)+len)
+              3 -> lenOf (skipGroup fi)
+              4 -> fail $ "Cannot wireGetFromWire with wireType of STOP_GROUP: "++show (fi,wt)
+              5 -> return 4
+              wtf -> fail $ "Invalid wire type (expected 0,1,2,3,or 5) found: "++show (fi,wtf)
+  lenOf g = do here <- bytesRead
+               there <- lookAhead (g >> bytesRead)
+               return (there-here)
           
+-- | After a group start tag with the given 'FieldId' this will skip
+-- ahead in the stream past the end tag of that group.  Used by
+-- 'wireGetFromWire' to help compule the length of an unknown field
+-- when loading an extension.
+skipGroup :: FieldId -> Get ()
+skipGroup start_fi = go where
+  go = do
+    (fieldId,wireType) <- fmap (splitWireTag . WireTag) getVarInt
+    case wireType of
+      0 -> spanOf (>=128) >> skip 1 >> go
+      1 -> skip 8 >> go
+      2 -> getVarInt >>= skip >> go
+      3 -> skipGroup fieldId >> go
+      4 | start_fi /= fieldId -> fail $ "skipGroup failed, fieldId mismatch bewteen START_GROUP and STOP_GROUP: "++show (start_fi,(fieldId,wireType))
+        | otherwise -> return ()
+      5 -> skip 4 >> go
+      wtf -> fail $ "Invalid wire type (expected 0,1,2,3,4,or 5) found: "++show (fieldId,wtf)
+
 {-
   enum WireType {
     WIRETYPE_VARINT           = 0,
