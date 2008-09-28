@@ -164,11 +164,11 @@ getFromBS parser bs = case runGetOnLazy parser bs of
                         Left msg -> error msg
                         Right (r,_) -> r
 
--- This is like 'runGet' but any 'Result' of 'Partial' is converted in
--- a @ Left "Not enoguh input" @ error.  Thus the 'ByteString'
--- argument is taken to be the entire input.  To be able to
--- incrementally feed in more input you should use 'runGet' and
--- respond to 'Partial' differently.
+-- This is like 'runGet', without the ability to pass in more input
+-- beyond the initial ByteString.  Thus the 'ByteString' argument is
+-- taken to be the entire input.  To be able to incrementally feed in
+-- more input you should use 'runGet' and respond to 'Partial'
+-- differently.
 runGetOnLazy :: Get r -> ByteString -> Either String (r,ByteString)
 runGetOnLazy parser bs = resolve (runGet parser bs)
   where resolve :: Result r -> Either String (r,ByteString)
