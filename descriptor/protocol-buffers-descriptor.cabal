@@ -16,12 +16,6 @@ category:       Text
 Tested-With:    GHC ==6.8.3
 data-files:     descriptor.proto
 extra-source-files: Setup.hs
-                    doc.txt
-                    TODO
-                    README
-                    Skeleton.hs-boot
-                    google/protobuf/unittest.proto
-                    google/protobuf/unittest_import.proto
 -- extra-tmp-files:
 
 flag small_base
