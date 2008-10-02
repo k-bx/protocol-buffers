@@ -7,31 +7,26 @@ import qualified Text.DescriptorProtos.ServiceOptions as DescriptorProtos (Servi
  
 data ServiceDescriptorProto = ServiceDescriptorProto{name :: P'.Maybe P'.Utf8,
                                                      method :: P'.Seq DescriptorProtos.MethodDescriptorProto,
-                                                     options :: P'.Maybe DescriptorProtos.ServiceOptions,
-                                                     unknown'field :: P'.UnknownField}
+                                                     options :: P'.Maybe DescriptorProtos.ServiceOptions}
                             deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
-instance P'.UnknownMessage ServiceDescriptorProto where
-  getUnknownField = unknown'field
-  putUnknownField u'f msg = msg{unknown'field = u'f}
- 
 instance P'.Mergeable ServiceDescriptorProto where
-  mergeEmpty = ServiceDescriptorProto P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty
-  mergeAppend (ServiceDescriptorProto x'1 x'2 x'3 x'4) (ServiceDescriptorProto y'1 y'2 y'3 y'4)
-    = ServiceDescriptorProto (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
+  mergeEmpty = ServiceDescriptorProto P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty
+  mergeAppend (ServiceDescriptorProto x'1 x'2 x'3) (ServiceDescriptorProto y'1 y'2 y'3)
+    = ServiceDescriptorProto (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3)
  
 instance P'.Default ServiceDescriptorProto where
-  defaultValue = ServiceDescriptorProto P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue
+  defaultValue = ServiceDescriptorProto P'.defaultValue P'.defaultValue P'.defaultValue
  
 instance P'.Wire ServiceDescriptorProto where
-  wireSize ft' self'@(ServiceDescriptorProto x'1 x'2 x'3 x'4)
+  wireSize ft' self'@(ServiceDescriptorProto x'1 x'2 x'3)
     = case ft' of
         10 -> calc'Size
         11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
-        calc'Size = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeRep 1 11 x'2 + P'.wireSizeOpt 1 11 x'3 + P'.wireSizeUnknownField x'4)
-  wirePut ft' self'@(ServiceDescriptorProto x'1 x'2 x'3 x'4)
+        calc'Size = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeRep 1 11 x'2 + P'.wireSizeOpt 1 11 x'3)
+  wirePut ft' self'@(ServiceDescriptorProto x'1 x'2 x'3)
     = case ft' of
         10 -> put'Fields
         11
@@ -45,11 +40,10 @@ instance P'.Wire ServiceDescriptorProto where
               P'.wirePutOpt 10 9 x'1
               P'.wirePutRep 18 11 x'2
               P'.wirePutOpt 26 11 x'3
-              P'.wirePutUnknownField x'4
   wireGet ft'
     = case ft' of
-        10 -> P'.getBareMessageWith P'.loadUnknown update'Self
-        11 -> P'.getMessageWith P'.loadUnknown update'Self
+        10 -> P'.getBareMessageWith P'.unknown update'Self
+        11 -> P'.getMessageWith P'.unknown update'Self
         _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
@@ -68,4 +62,4 @@ instance P'.GPB ServiceDescriptorProto
 instance P'.ReflectDescriptor ServiceDescriptorProto where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"ServiceDescriptorProto\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"ServiceDescriptorProto.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.ServiceDescriptorProto\", baseName = \"name\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.ServiceDescriptorProto\", baseName = \"method\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 18}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MethodDescriptorProto\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.ServiceDescriptorProto\", baseName = \"options\"}, fieldNumber = FieldId {getFieldId = 3}, wireTag = WireTag {getWireTag = 26}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"ServiceOptions\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"ServiceDescriptorProto\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"ServiceDescriptorProto.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.ServiceDescriptorProto\", baseName = \"name\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.ServiceDescriptorProto\", baseName = \"method\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 18}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MethodDescriptorProto\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.ServiceDescriptorProto\", baseName = \"options\"}, fieldNumber = FieldId {getFieldId = 3}, wireTag = WireTag {getWireTag = 26}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"ServiceOptions\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = False}"

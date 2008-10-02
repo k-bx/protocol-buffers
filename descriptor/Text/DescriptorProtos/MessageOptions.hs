@@ -1,31 +1,35 @@
 module Text.DescriptorProtos.MessageOptions (MessageOptions(..)) where
-import Prelude ((+))
+import Prelude ((+), (<=), (&&), ( || ))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
+import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
  
-data MessageOptions = MessageOptions{message_set_wire_format :: P'.Maybe P'.Bool, unknown'field :: P'.UnknownField}
+data MessageOptions = MessageOptions{message_set_wire_format :: P'.Maybe P'.Bool,
+                                     uninterpreted_option :: P'.Seq DescriptorProtos.UninterpretedOption, ext'field :: P'.ExtField}
                     deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
-instance P'.UnknownMessage MessageOptions where
-  getUnknownField = unknown'field
-  putUnknownField u'f msg = msg{unknown'field = u'f}
+instance P'.ExtendMessage MessageOptions where
+  getExtField = ext'field
+  putExtField e'f msg = msg{ext'field = e'f}
+  validExtRanges msg = P'.extRanges (P'.reflectDescriptorInfo msg)
  
 instance P'.Mergeable MessageOptions where
-  mergeEmpty = MessageOptions P'.mergeEmpty P'.mergeEmpty
-  mergeAppend (MessageOptions x'1 x'2) (MessageOptions y'1 y'2) = MessageOptions (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2)
+  mergeEmpty = MessageOptions P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty
+  mergeAppend (MessageOptions x'1 x'2 x'3) (MessageOptions y'1 y'2 y'3)
+    = MessageOptions (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3)
  
 instance P'.Default MessageOptions where
-  defaultValue = MessageOptions (P'.Just P'.False) P'.defaultValue
+  defaultValue = MessageOptions (P'.Just P'.False) P'.defaultValue P'.defaultValue
  
 instance P'.Wire MessageOptions where
-  wireSize ft' self'@(MessageOptions x'1 x'2)
+  wireSize ft' self'@(MessageOptions x'1 x'2 x'3)
     = case ft' of
         10 -> calc'Size
         11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
-        calc'Size = (P'.wireSizeOpt 1 8 x'1 + P'.wireSizeUnknownField x'2)
-  wirePut ft' self'@(MessageOptions x'1 x'2)
+        calc'Size = (P'.wireSizeOpt 1 8 x'1 + P'.wireSizeRep 2 11 x'2 + P'.wireSizeExtField x'3)
+  wirePut ft' self'@(MessageOptions x'1 x'2 x'3)
     = case ft' of
         10 -> put'Fields
         11
@@ -37,17 +41,26 @@ instance P'.Wire MessageOptions where
         put'Fields
           = do
               P'.wirePutOpt 8 8 x'1
-              P'.wirePutUnknownField x'2
+              P'.wirePutRep 7994 11 x'2
+              P'.wirePutExtField x'3
   wireGet ft'
     = case ft' of
-        10 -> P'.getBareMessageWith P'.loadUnknown update'Self
-        11 -> P'.getMessageWith P'.loadUnknown update'Self
+        10 -> P'.getBareMessageWith other'Field update'Self
+        11 -> P'.getMessageWith other'Field update'Self
         _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
           = case field'Number of
               1 -> P'.fmap (\ new'Field -> old'Self{message_set_wire_format = P'.Just new'Field}) (P'.wireGet 8)
+              999
+                -> P'.fmap (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
+                     (P'.wireGet 11)
               _ -> P'.unknownField field'Number
+        other'Field field'Number wire'Type old'Self
+          = (if P'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then P'.loadExtension else P'.unknown)
+              field'Number
+              wire'Type
+              old'Self
  
 instance P'.MessageAPI msg' (msg' -> MessageOptions) MessageOptions where
   getVal m' f' = f' m'
@@ -57,4 +70,4 @@ instance P'.GPB MessageOptions
 instance P'.ReflectDescriptor MessageOptions where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MessageOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"MessageOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.MessageOptions\", baseName = \"message_set_wire_format\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MessageOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"MessageOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.MessageOptions\", baseName = \"message_set_wire_format\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)},FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.MessageOptions\", baseName = \"uninterpreted_option\"}, fieldNumber = FieldId {getFieldId = 999}, wireTag = WireTag {getWireTag = 7994}, wireTagLength = 2, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"UninterpretedOption\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [(FieldId {getFieldId = 1000},FieldId {getFieldId = 18999}),(FieldId {getFieldId = 20000},FieldId {getFieldId = 536870911})], knownKeys = fromList [], storeUnknown = False}"

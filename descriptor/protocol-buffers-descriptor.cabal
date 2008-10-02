@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        0.3.1
+version:        0.4.0
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -36,6 +36,7 @@ Library
                    Text.DescriptorProtos.FieldOptions
                    Text.DescriptorProtos.FieldOptions.CType
                    Text.DescriptorProtos.FileDescriptorProto
+                   Text.DescriptorProtos.FileDescriptorSet
                    Text.DescriptorProtos.FileOptions
                    Text.DescriptorProtos.FileOptions.OptimizeMode
                    Text.DescriptorProtos.MessageOptions
@@ -43,6 +44,9 @@ Library
                    Text.DescriptorProtos.MethodOptions
                    Text.DescriptorProtos.ServiceDescriptorProto
                    Text.DescriptorProtos.ServiceOptions
+                   Text.DescriptorProtos.UninterpretedOption
+                   Text.DescriptorProtos.UninterpretedOption.NamePart
+
 
   if flag(small_base)
         build-depends: base >= 3,
