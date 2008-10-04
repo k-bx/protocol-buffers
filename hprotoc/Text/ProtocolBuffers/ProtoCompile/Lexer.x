@@ -32,7 +32,7 @@ $d = [0-9]
 @inStr = @hexEscape | @octEscape | @charEscape | [^'\"\0\n]
 @strLit = ['] (@inStr | [\"])* ['] | [\"] (@inStr | ['])* [\"]
 
-$special    = [=\(\)\,\;\[\]\{\}]
+$special    = [=\(\)\,\;\[\]\{\}\.]
 
 :-
 
