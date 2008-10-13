@@ -54,10 +54,12 @@ err :: forall b. String -> b
 err s = error $ "Text.ProtocolBuffers.Resolve fatal error encountered, message:\n"++indent s
   where indent = unlines . map (\str -> ' ':' ':str) . lines
 
+-- insert '.' between each item and convert to utf8 bytes
 encodeModuleNames :: [String] -> Utf8
 encodeModuleNames [] = Utf8 mempty
 encodeModuleNames xs = Utf8 . U.fromString . foldr1 (\a b -> a ++ '.':b) $ xs
 
+-- up-case the first letter after each '.', Nothing -> ""
 mangleCap :: Maybe Utf8 -> [String]
 mangleCap = mangleModuleNames . fromMaybe (Utf8 mempty)
   where mangleModuleNames :: Utf8 -> [String]
@@ -68,17 +70,26 @@ mangleCap = mangleModuleNames . fromMaybe (Utf8 mempty)
           s [] = Nothing
           s xs = Just (span ('.'/=) xs)
 
+-- up-case the first letter after each '.', Nothing -> Nothing
+mangleCaps :: Maybe Utf8 -> String
+mangleCaps Nothing = ""
+mangleCaps x = foldr1 (\a b -> a ++ '.':b) (mangleCap x)
+
+-- up-case the first letter, Nothing -> Nothing
 mangleCap1 :: Maybe Utf8 -> String
 mangleCap1 Nothing = ""
 mangleCap1 (Just u) = mangleModuleName . toString $ u
 
+-- up-case the first letter of each value name
 mangleEnums :: Seq D.EnumValueDescriptorProto -> Seq D.EnumValueDescriptorProto
 mangleEnums s =  fmap fixEnum s
   where fixEnum v = v { D.EnumValueDescriptorProto.name = mangleEnum (D.EnumValueDescriptorProto.name v)}
 
+-- up-case the first letter
 mangleEnum :: Maybe Utf8 -> Maybe Utf8
 mangleEnum = fmap (Utf8 . U.fromString . mangleModuleName . toString)
 
+-- up-case the first letter
 mangleModuleName :: String -> String
 mangleModuleName [] = "Empty'Name" -- XXX
 mangleModuleName ('_':xs) = "U'"++xs
@@ -87,6 +98,7 @@ mangleModuleName (x:xs) | isLower x = let x' = toUpper x
                                            else x': xs
 mangleModuleName xs = xs
 
+-- down-case the first letter, add single quote if it is a reserved word
 mangleFieldName :: Maybe Utf8 -> Maybe Utf8
 mangleFieldName = fmap (Utf8 . U.fromString . fixname . toString)
   where fixname [] = "empty'name" -- XXX
@@ -174,32 +186,32 @@ loadProto protoDirs protoFile = fmap answer $ execStateT (load Set.empty protoFi
       Just result -> return result
       Nothing -> do
         mayToRead <- liftIO $ findFile protoDirs file
-        when (Nothing == mayToRead) $
-           loadFailed file (unlines (["loading failed, could not find file: "++show file
-                                     ,"Searched paths were:"] ++ map ("  "++) protoDirs))
-        let (Just toRead) = mayToRead
-        proto <- liftIO $ do print ("Loading filepath: "++toRead)
-                             LC.readFile toRead
-        parsed <- either (loadFailed toRead . show) return (parseProto toRead proto)
-        let (context,imports,names) = toContext parsed
-        contexts <- fmap (concatMap fst)    -- keep only the fst Context's
-                    . mapM (load parents)   -- recursively chase imports
-                    . Set.toList $ imports
-        let result = ( withPackage context parsed ++ contexts
-                     , ( resolveWithContext (context++contexts) parsed
-                       , imports
-                       , names ) )
-        -- add to memorized results, the "load" above may have updated/invalidated the "built <- get" state above
-        modify (\built' -> M.insert file result built')
-        return result
+        case mayToRead of
+          Nothing -> loadFailed file (unlines (["loading failed, could not find file: "++show file
+                                               ,"Searched paths were:"] ++ map ("  "++) protoDirs))
+          Just toRead -> do
+            proto <- liftIO $ do print ("Loading filepath: "++toRead)
+                                 LC.readFile toRead
+            parsed <- either (loadFailed toRead . show) return (parseProto toRead proto)
+            let (context,imports,names) = toContext parsed
+            contexts <- fmap (concatMap fst)    -- keep only the fst Context's
+                        . mapM (load parents)   -- recursively chase imports
+                        . Set.toList $ imports
+            let result = ( withPackage context parsed ++ contexts
+                         , ( resolveWithContext (context++contexts) parsed
+                           , imports
+                           , names ) )
+            -- add to memorized results, the "load" above may have updated/invalidated the "built <- get" state above
+            modify (\built' -> M.insert file result built')
+            return result
 
 -- Imported names must be fully qualified in the .proto file by the
 -- target's package name, but the resolved name might be fully
 -- quilified by something else (e.g. one of the java options).
 withPackage :: Context -> D.FileDescriptorProto -> Context
-withPackage (cx:_) (D.FileDescriptorProto {D.FileDescriptorProto.package=Just package}) =
-  let prepend = mangleCap1 . Just $ package
-  in [NameSpace (M.singleton prepend ([prepend],Void,Just cx))]
+withPackage (nsIn:_) (D.FileDescriptorProto {D.FileDescriptorProto.package=Just package}) =
+  let prepends = mangleCap . Just $ package
+  in [foldr (\name nsRest -> NameSpace (M.singleton name ([name],Void,Just nsRest))) nsIn prepends]
 withPackage (_:_) (D.FileDescriptorProto {D.FileDescriptorProto.name=n}) =  err $
   "withPackage given an imported FDP without a package declaration: "++show n
 withPackage [] (D.FileDescriptorProto {D.FileDescriptorProto.name=n}) =  err $

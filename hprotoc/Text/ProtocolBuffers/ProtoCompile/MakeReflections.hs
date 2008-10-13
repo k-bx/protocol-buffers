@@ -40,7 +40,7 @@ import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag,runPut)
 import qualified Data.Foldable as F(foldr,toList)
 import qualified Data.ByteString as S(concat)
 import qualified Data.ByteString.Char8 as SC(spanEnd)
-import qualified Data.ByteString.Lazy.Char8 as LC(toChunks,fromChunks,length,init,empty)
+import qualified Data.ByteString.Lazy.Char8 as LC(toChunks,fromChunks,length,init)
 import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.List(partition,unfoldr)
 import qualified Data.Sequence as Seq(fromList,empty,singleton,null)
@@ -97,7 +97,7 @@ dotPre s x | '.' == last s = s++x -- s cannnot be [], so last is safe
            | otherwise = s++('.':x)
 
 serializeFDP :: D.FileDescriptorProto -> ByteString
-serializeFDP fdp = LC.empty -- XXX runPut (wirePut 11 fdp)
+serializeFDP fdp = runPut (wirePut 11 fdp)
 
 makeProtoInfo :: Bool -> String -> [String] -> D.FileDescriptorProto -> ProtoInfo
 makeProtoInfo unknownField prefix names

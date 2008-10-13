@@ -24,7 +24,7 @@ flag small_base
 Executable hprotoc
   Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
   build-tools:     alex
-  ghc-options:     -O2 -Wall
+  ghc-options:     -Wall
   build-depends:   protocol-buffers == 0.3.1, protocol-buffers-descriptor == 0.4.0
   build-depends:   binary, utf8-string
   build-depends:   parsec, haskell-src

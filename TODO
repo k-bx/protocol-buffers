@@ -1,7 +1,9 @@
+Change Resolve to separate the conversion to fully qualified names from the name mangling.
+  This should allow hprotoc to create FileDescriptorSet output that mimics protoc
+
 How does protoc parse enum options and enum value options??  In the new version!
 
 Add even more of the documentation for the public API.
-add check to getBareMessageWith for fieldId of stop group tag?
 delete commented out code
 add strictness annotations to internal data types.
 benchmark

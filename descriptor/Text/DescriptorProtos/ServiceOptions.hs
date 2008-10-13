@@ -4,7 +4,8 @@ import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
  
-data ServiceOptions = ServiceOptions{uninterpreted_option :: P'.Seq DescriptorProtos.UninterpretedOption, ext'field :: P'.ExtField}
+data ServiceOptions = ServiceOptions{uninterpreted_option :: P'.Seq DescriptorProtos.UninterpretedOption, ext'field :: P'.ExtField,
+                                     unknown'field :: P'.UnknownField}
                     deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
 instance P'.ExtendMessage ServiceOptions where
@@ -12,22 +13,27 @@ instance P'.ExtendMessage ServiceOptions where
   putExtField e'f msg = msg{ext'field = e'f}
   validExtRanges msg = P'.extRanges (P'.reflectDescriptorInfo msg)
  
+instance P'.UnknownMessage ServiceOptions where
+  getUnknownField = unknown'field
+  putUnknownField u'f msg = msg{unknown'field = u'f}
+ 
 instance P'.Mergeable ServiceOptions where
-  mergeEmpty = ServiceOptions P'.mergeEmpty P'.mergeEmpty
-  mergeAppend (ServiceOptions x'1 x'2) (ServiceOptions y'1 y'2) = ServiceOptions (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2)
+  mergeEmpty = ServiceOptions P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty
+  mergeAppend (ServiceOptions x'1 x'2 x'3) (ServiceOptions y'1 y'2 y'3)
+    = ServiceOptions (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3)
  
 instance P'.Default ServiceOptions where
-  defaultValue = ServiceOptions P'.defaultValue P'.defaultValue
+  defaultValue = ServiceOptions P'.defaultValue P'.defaultValue P'.defaultValue
  
 instance P'.Wire ServiceOptions where
-  wireSize ft' self'@(ServiceOptions x'1 x'2)
+  wireSize ft' self'@(ServiceOptions x'1 x'2 x'3)
     = case ft' of
         10 -> calc'Size
         11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
-        calc'Size = (P'.wireSizeRep 2 11 x'1 + P'.wireSizeExtField x'2)
-  wirePut ft' self'@(ServiceOptions x'1 x'2)
+        calc'Size = (P'.wireSizeRep 2 11 x'1 + P'.wireSizeExtField x'2 + P'.wireSizeUnknownField x'3)
+  wirePut ft' self'@(ServiceOptions x'1 x'2 x'3)
     = case ft' of
         10 -> put'Fields
         11
@@ -40,6 +46,7 @@ instance P'.Wire ServiceOptions where
           = do
               P'.wirePutRep 7994 11 x'1
               P'.wirePutExtField x'2
+              P'.wirePutUnknownField x'3
   wireGet ft'
     = case ft' of
         10 -> P'.getBareMessageWith other'Field update'Self
@@ -53,7 +60,8 @@ instance P'.Wire ServiceOptions where
                      (P'.wireGet 11)
               _ -> P'.unknownField field'Number
         other'Field field'Number wire'Type old'Self
-          = (if P'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then P'.loadExtension else P'.unknown)
+          = (if P'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then P'.loadExtension else
+               P'.loadUnknown)
               field'Number
               wire'Type
               old'Self
@@ -66,4 +74,4 @@ instance P'.GPB ServiceOptions
 instance P'.ReflectDescriptor ServiceOptions where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"ServiceOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"ServiceOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.ServiceOptions\", baseName = \"uninterpreted_option\"}, fieldNumber = FieldId {getFieldId = 999}, wireTag = WireTag {getWireTag = 7994}, wireTagLength = 2, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"UninterpretedOption\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [(FieldId {getFieldId = 1000},FieldId {getFieldId = 18999}),(FieldId {getFieldId = 20000},FieldId {getFieldId = 536870911})], knownKeys = fromList [], storeUnknown = False}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"ServiceOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"ServiceOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.ServiceOptions\", baseName = \"uninterpreted_option\"}, fieldNumber = FieldId {getFieldId = 999}, wireTag = WireTag {getWireTag = 7994}, wireTagLength = 2, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"UninterpretedOption\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [(FieldId {getFieldId = 1000},FieldId {getFieldId = 18999}),(FieldId {getFieldId = 20000},FieldId {getFieldId = 536870911})], knownKeys = fromList [], storeUnknown = True}"

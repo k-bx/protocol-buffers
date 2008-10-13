@@ -64,15 +64,15 @@ readType = choice [ return TYPE_DOUBLE << string "double"
                   , return TYPE_BOOL << string "bool"
                   , return TYPE_STRING << string "string"
                   , return TYPE_GROUP << string "group"
-                  , return TYPE_MESSAGE << string "message"
                   , return TYPE_BYTES << string "bytes"
                   , return TYPE_UINT32 << string "uint32"
-                  , return TYPE_ENUM << string "enum"
                   , return TYPE_SFIXED32 << string "sfixed32"
                   , return TYPE_SFIXED64 << string "sfixed64"
                   , return TYPE_SINT32 << string "sint32"
                   , return TYPE_SINT64 << string "sint64"
                   ]
+--                , return TYPE_MESSAGE << string "..."
+--                , return TYPE_ENUM << string "..."
 
 (<<) :: Monad m => m a -> m b -> m a
 (<<) = flip (>>)

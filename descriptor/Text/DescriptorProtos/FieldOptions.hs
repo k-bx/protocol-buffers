@@ -6,7 +6,8 @@ import qualified Text.DescriptorProtos.FieldOptions.CType as DescriptorProtos.Fi
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
  
 data FieldOptions = FieldOptions{ctype :: P'.Maybe DescriptorProtos.FieldOptions.CType, experimental_map_key :: P'.Maybe P'.Utf8,
-                                 uninterpreted_option :: P'.Seq DescriptorProtos.UninterpretedOption, ext'field :: P'.ExtField}
+                                 uninterpreted_option :: P'.Seq DescriptorProtos.UninterpretedOption, ext'field :: P'.ExtField,
+                                 unknown'field :: P'.UnknownField}
                   deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
 instance P'.ExtendMessage FieldOptions where
@@ -14,23 +15,30 @@ instance P'.ExtendMessage FieldOptions where
   putExtField e'f msg = msg{ext'field = e'f}
   validExtRanges msg = P'.extRanges (P'.reflectDescriptorInfo msg)
  
+instance P'.UnknownMessage FieldOptions where
+  getUnknownField = unknown'field
+  putUnknownField u'f msg = msg{unknown'field = u'f}
+ 
 instance P'.Mergeable FieldOptions where
-  mergeEmpty = FieldOptions P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty
-  mergeAppend (FieldOptions x'1 x'2 x'3 x'4) (FieldOptions y'1 y'2 y'3 y'4)
+  mergeEmpty = FieldOptions P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty
+  mergeAppend (FieldOptions x'1 x'2 x'3 x'4 x'5) (FieldOptions y'1 y'2 y'3 y'4 y'5)
     = FieldOptions (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
+        (P'.mergeAppend x'5 y'5)
  
 instance P'.Default FieldOptions where
-  defaultValue = FieldOptions P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue
+  defaultValue = FieldOptions P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue
  
 instance P'.Wire FieldOptions where
-  wireSize ft' self'@(FieldOptions x'1 x'2 x'3 x'4)
+  wireSize ft' self'@(FieldOptions x'1 x'2 x'3 x'4 x'5)
     = case ft' of
         10 -> calc'Size
         11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
-        calc'Size = (P'.wireSizeOpt 1 14 x'1 + P'.wireSizeOpt 1 9 x'2 + P'.wireSizeRep 2 11 x'3 + P'.wireSizeExtField x'4)
-  wirePut ft' self'@(FieldOptions x'1 x'2 x'3 x'4)
+        calc'Size
+          = (P'.wireSizeOpt 1 14 x'1 + P'.wireSizeOpt 1 9 x'2 + P'.wireSizeRep 2 11 x'3 + P'.wireSizeExtField x'4 +
+               P'.wireSizeUnknownField x'5)
+  wirePut ft' self'@(FieldOptions x'1 x'2 x'3 x'4 x'5)
     = case ft' of
         10 -> put'Fields
         11
@@ -45,6 +53,7 @@ instance P'.Wire FieldOptions where
               P'.wirePutOpt 74 9 x'2
               P'.wirePutRep 7994 11 x'3
               P'.wirePutExtField x'4
+              P'.wirePutUnknownField x'5
   wireGet ft'
     = case ft' of
         10 -> P'.getBareMessageWith other'Field update'Self
@@ -60,7 +69,8 @@ instance P'.Wire FieldOptions where
                      (P'.wireGet 11)
               _ -> P'.unknownField field'Number
         other'Field field'Number wire'Type old'Self
-          = (if P'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then P'.loadExtension else P'.unknown)
+          = (if P'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then P'.loadExtension else
+               P'.loadUnknown)
               field'Number
               wire'Type
               old'Self
@@ -73,4 +83,4 @@ instance P'.GPB FieldOptions
 instance P'.ReflectDescriptor FieldOptions where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"FieldOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"FieldOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.FieldOptions\", baseName = \"ctype\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just (ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.FieldOptions\", baseName = \"CType\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.FieldOptions\", baseName = \"experimental_map_key\"}, fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 74}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.FieldOptions\", baseName = \"uninterpreted_option\"}, fieldNumber = FieldId {getFieldId = 999}, wireTag = WireTag {getWireTag = 7994}, wireTagLength = 2, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"UninterpretedOption\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [(FieldId {getFieldId = 1000},FieldId {getFieldId = 18999}),(FieldId {getFieldId = 20000},FieldId {getFieldId = 536870911})], knownKeys = fromList [], storeUnknown = False}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"FieldOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"FieldOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.FieldOptions\", baseName = \"ctype\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just (ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.FieldOptions\", baseName = \"CType\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.FieldOptions\", baseName = \"experimental_map_key\"}, fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 74}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.FieldOptions\", baseName = \"uninterpreted_option\"}, fieldNumber = FieldId {getFieldId = 999}, wireTag = WireTag {getWireTag = 7994}, wireTagLength = 2, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"UninterpretedOption\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [(FieldId {getFieldId = 1000},FieldId {getFieldId = 18999}),(FieldId {getFieldId = 20000},FieldId {getFieldId = 536870911})], knownKeys = fromList [], storeUnknown = True}"

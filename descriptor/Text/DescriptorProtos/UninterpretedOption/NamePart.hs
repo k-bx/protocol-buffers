@@ -3,25 +3,30 @@ import Prelude ((+))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
-data NamePart = NamePart{name_part :: P'.Utf8, is_extension :: P'.Bool}
+data NamePart = NamePart{name_part :: P'.Utf8, is_extension :: P'.Bool, unknown'field :: P'.UnknownField}
               deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
+instance P'.UnknownMessage NamePart where
+  getUnknownField = unknown'field
+  putUnknownField u'f msg = msg{unknown'field = u'f}
+ 
 instance P'.Mergeable NamePart where
-  mergeEmpty = NamePart P'.mergeEmpty P'.mergeEmpty
-  mergeAppend (NamePart x'1 x'2) (NamePart y'1 y'2) = NamePart (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2)
+  mergeEmpty = NamePart P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty
+  mergeAppend (NamePart x'1 x'2 x'3) (NamePart y'1 y'2 y'3)
+    = NamePart (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3)
  
 instance P'.Default NamePart where
-  defaultValue = NamePart P'.defaultValue P'.defaultValue
+  defaultValue = NamePart P'.defaultValue P'.defaultValue P'.defaultValue
  
 instance P'.Wire NamePart where
-  wireSize ft' self'@(NamePart x'1 x'2)
+  wireSize ft' self'@(NamePart x'1 x'2 x'3)
     = case ft' of
         10 -> calc'Size
         11 -> P'.prependMessageSize calc'Size
         _ -> P'.wireSizeErr ft' self'
     where
-        calc'Size = (P'.wireSizeReq 1 9 x'1 + P'.wireSizeReq 1 8 x'2)
-  wirePut ft' self'@(NamePart x'1 x'2)
+        calc'Size = (P'.wireSizeReq 1 9 x'1 + P'.wireSizeReq 1 8 x'2 + P'.wireSizeUnknownField x'3)
+  wirePut ft' self'@(NamePart x'1 x'2 x'3)
     = case ft' of
         10 -> put'Fields
         11
@@ -34,10 +39,11 @@ instance P'.Wire NamePart where
           = do
               P'.wirePutReq 10 9 x'1
               P'.wirePutReq 16 8 x'2
+              P'.wirePutUnknownField x'3
   wireGet ft'
     = case ft' of
-        10 -> P'.getBareMessageWith P'.unknown update'Self
-        11 -> P'.getMessageWith P'.unknown update'Self
+        10 -> P'.getBareMessageWith P'.loadUnknown update'Self
+        11 -> P'.getMessageWith P'.loadUnknown update'Self
         _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
@@ -54,4 +60,4 @@ instance P'.GPB NamePart
 instance P'.ReflectDescriptor NamePart where
   reflectDescriptorInfo _
     = P'.read
-        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.UninterpretedOption\", baseName = \"NamePart\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"UninterpretedOption\",\"NamePart.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.UninterpretedOption.NamePart\", baseName = \"name_part\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = True, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.UninterpretedOption.NamePart\", baseName = \"is_extension\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 16}, wireTagLength = 1, isRequired = True, canRepeat = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = False}"
+        "DescriptorInfo {descName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.UninterpretedOption\", baseName = \"NamePart\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"UninterpretedOption\",\"NamePart.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.UninterpretedOption.NamePart\", baseName = \"name_part\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = True, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.UninterpretedOption.NamePart\", baseName = \"is_extension\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 16}, wireTagLength = 1, isRequired = True, canRepeat = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"

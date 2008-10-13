@@ -44,7 +44,7 @@ newtype FieldId = FieldId { getFieldId :: Int32 } -- really 29 bits
 
 -- Note that values 19000-19999 are forbidden for FieldId
 instance Bounded FieldId where
-  minBound = 0
+  minBound = 1
   maxBound = 536870911 -- 2^29-1
 
 -- | 'WireType' is the 3 bit wire encoding value, and is currently in
