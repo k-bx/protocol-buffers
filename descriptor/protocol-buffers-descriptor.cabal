@@ -60,7 +60,7 @@ Library
   else
         build-depends: base < 3
 
-  build-depends:   protocol-buffers == 0.3.1
+  build-depends:   protocol-buffers == 0.4.0
   extensions:      DeriveDataTypeable,
                    EmptyDataDecls,
                    FlexibleInstances,

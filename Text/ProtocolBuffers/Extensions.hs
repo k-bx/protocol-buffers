@@ -23,7 +23,7 @@ module Text.ProtocolBuffers.Extensions
   , Key(..),ExtKey(..),MessageAPI(..)
   -- * Internal types, functions, and classes
   , wireSizeExtField,wirePutExtField,getMessageExt,getBareMessageExt,loadExtension
-  , GPB,ExtField(..),ExtendMessage(..)
+  , GPB,ExtField(..),ExtendMessage(..),ExtFieldValue(..)
   ) where
 
 import qualified Data.ByteString.Lazy as L
