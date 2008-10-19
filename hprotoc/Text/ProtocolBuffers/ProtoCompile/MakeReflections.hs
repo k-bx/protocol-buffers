@@ -68,11 +68,13 @@ splitMod (Utf8 bs) = case spanEndL ('.'/=) bs of
 toString :: Utf8 -> String
 toString = U.toString . utf8
 
+xxx = Utf8 (U.fromString "MakeReflections.xxx")
+
 toProtoName :: String -> Utf8 -> ProtoName
 toProtoName prefix rawName =
   case splitMod rawName of
-    Left (m,b) -> ProtoName prefix (toString m) (toString b)
-    Right b    -> ProtoName prefix ""           (toString b)
+    Left (m,b) -> ProtoName xxx prefix (toString m) (toString b)
+    Right b    -> ProtoName xxx prefix ""           (toString b)
 
 toPath :: String -> Utf8 -> [FilePath]
 toPath prefix name = splitDirectories (combine a b)
@@ -86,7 +88,7 @@ splitDot = unfoldr s where
     s xs = Just (span ('.'/=) xs)
 
 pnPath :: ProtoName -> [FilePath]
-pnPath (ProtoName a b c) = splitDirectories .flip addExtension "hs" . joinPath . splitDot $ dotPre a (dotPre b c)
+pnPath (ProtoName xxx a b c) = splitDirectories .flip addExtension "hs" . joinPath . splitDot $ dotPre a (dotPre b c)
 
 dotPre :: String -> String -> String
 dotPre "" x = x -- after this the value of s cannot be []
@@ -105,9 +107,9 @@ makeProtoInfo unknownField prefix names
                     { D.FileDescriptorProto.name = Just rawName })
      = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allKeys where
   protoName = case names of
-                [] -> ProtoName prefix "" "" -- after this the value of names cannot be []
-                [name] -> ProtoName prefix "" name
-                _ -> ProtoName prefix (foldr1 (\a bs -> a  ++ ('.' : bs)) (init names)) (last names) -- names cannot be []
+                [] -> ProtoName xxx prefix "" "" -- after this the value of names cannot be []
+                [name] -> ProtoName xxx prefix "" name
+                _ -> ProtoName xxx prefix (foldr1 (\a bs -> a  ++ ('.' : bs)) (init names)) (last names) -- names cannot be []
   keyInfos = Seq.fromList . map (\f -> (keyExtendee prefix f,toFieldInfo protoName f))
              . F.toList . D.FileDescriptorProto.extension $ fdp
   allMessages = concatMap (processMSG False) (F.toList $ D.FileDescriptorProto.message_type fdp)
@@ -189,7 +191,7 @@ keyExtendee prefix f
         Just extName -> toProtoName prefix extName
 
 toFieldInfo :: ProtoName ->  D.FieldDescriptorProto -> FieldInfo
-toFieldInfo (ProtoName prefix modName parent)
+toFieldInfo (ProtoName xxx prefix modName parent)
             f@(D.FieldDescriptorProto.FieldDescriptorProto
                 { D.FieldDescriptorProto.name = Just name
                 , D.FieldDescriptorProto.number = Just number
@@ -200,7 +202,7 @@ toFieldInfo (ProtoName prefix modName parent)
                 , D.FieldDescriptorProto.default_value = mayRawDef })
     = fieldInfo
   where mayDef = parseDefaultValue f
-        fieldInfo = let fullName = ProtoName prefix (dotPre modName parent) (toString name)
+        fieldInfo = let fullName = ProtoName xxx prefix (dotPre modName parent) (toString name)
                         fieldId = (FieldId (fromIntegral number))
                         fieldType = (FieldType (fromEnum type'))
                         wt = toWireTag fieldId fieldType

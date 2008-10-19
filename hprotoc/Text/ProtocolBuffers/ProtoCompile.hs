@@ -12,7 +12,7 @@ import System.FilePath
 import Text.ProtocolBuffers.Reflections(ProtoInfo(..),DescriptorInfo(..),EnumInfo(..))
 
 import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModule,enumModule)
-import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto)
+import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadProto')
 import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 
 -- | Version of protocol-buffers.
@@ -114,6 +114,7 @@ myMode = PPHsMode 2 2 2 2 4 2 True PPOffsideRule False True
 run :: Options -> IO ()
 run options = do
   print options
+  loadProto' (optPrefix options) (optInclude options) (optProto options)
   protos <- loadProto (optInclude options) (optProto options)
   let (Just (fdp,_,names)) = M.lookup (optProto options) protos
       protoInfo = makeProtoInfo (optUnknownFields options) (optPrefix options) names fdp

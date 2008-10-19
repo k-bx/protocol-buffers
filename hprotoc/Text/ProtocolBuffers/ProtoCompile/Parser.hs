@@ -5,7 +5,7 @@
 -- reliably total function of the input.
 --
 -- The inernals have been updated to handle Google's protobuf-
-module Text.ProtocolBuffers.ProtoCompile.Parser(parseProto) where
+module Text.ProtocolBuffers.ProtoCompile.Parser(parseProto,isValidUTF8) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
@@ -53,12 +53,13 @@ import Text.ProtocolBuffers.ProtoCompile.Instances(parseLabel,parseType)
 import Control.Monad(when,liftM2,liftM3,replicateM)
 import qualified Data.ByteString.Lazy as L(unpack)
 import qualified Data.ByteString.Lazy.Char8 as LC(notElem,head,uncons)
-import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString,uncons)
+import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.Char(isUpper,toLower)
 import Data.Ix(inRange)
 import Data.Maybe(fromMaybe)
 import Data.Sequence((|>))
 import qualified Data.Sequence as Seq(fromList)
+import System.FilePath(takeFileName)
 import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName,anyToken
                                     ,getInput,setInput,getPosition,setPosition,getState,setState
                                     ,(<?>),(<|>),token,choice,between,eof,unexpected,skipMany)
@@ -83,7 +84,7 @@ utf8ToString :: Utf8 -> String
 utf8ToString = U.toString . utf8
 
 initState :: String -> D.FileDescriptorProto
-initState filename = defaultValue {D.FileDescriptorProto.name=utf8FromString filename}
+initState filename = defaultValue {D.FileDescriptorProto.name=utf8FromString (takeFileName filename)}
 
 {-# INLINE mayRead #-}
 mayRead :: ReadS a -> String -> Maybe a
@@ -255,7 +256,7 @@ makeUninterpetedOption nameParts = defaultValue { D.UninterpretedOption.name = S
                                                              , D.NamePart.is_extension =  is_extension }
 
 fileOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
-  getOld = fmap (fromMaybe defaultValue . D.FileDescriptorProto.options) getState
+  getOld = fmap (fromMaybe mergeEmpty . D.FileDescriptorProto.options) getState
   setNew p = update' (\s -> s {D.FileDescriptorProto.options=Just p})
   setOption (Left uno,old) =
     return' (old {D.FileOptions.uninterpreted_option = D.FileOptions.uninterpreted_option old |> uno})
@@ -287,7 +288,7 @@ subMessage = (pChar '}') <|> (choice [ eol
         upExtField f    = update' (\s -> s {D.DescriptorProto.extension=D.DescriptorProto.extension s |> f})
 
 messageOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
-  getOld = fmap (fromMaybe defaultValue . D.DescriptorProto.options) getState
+  getOld = fmap (fromMaybe mergeEmpty . D.DescriptorProto.options) getState
   setNew p = update' (\s -> s {D.DescriptorProto.options=Just p})
   setOption (Left uno,old) =
     return' (old {D.MessageOptions.uninterpreted_option = D.MessageOptions.uninterpreted_option old |> uno })
@@ -407,7 +408,7 @@ isValidUTF8 ws = go 0 (L.unpack ws) 0 where
 
 fieldOption :: Maybe Type -> P D.FieldDescriptorProto ()
 fieldOption mt = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where
-  getOld = fmap (fromMaybe defaultValue . D.FieldDescriptorProto.options) getState
+  getOld = fmap (fromMaybe mergeEmpty . D.FieldDescriptorProto.options) getState
   setNew p = update' (\s -> s { D.FieldDescriptorProto.options = Just p })
   setOption (Left uno,old) =
     return' (old {D.FieldOptions.uninterpreted_option = D.FieldOptions.uninterpreted_option old |> uno })
@@ -429,7 +430,7 @@ subEnum = eols >> rest -- Note: Must check enumOption before enumVal
   where rest = (enumOption <|> enumVal) >> eols >> (pChar '}' <|> rest)
 
 enumOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
-  getOld = fmap (fromMaybe defaultValue . D.EnumDescriptorProto.options) getState
+  getOld = fmap (fromMaybe mergeEmpty . D.EnumDescriptorProto.options) getState
   setNew p = update' (\s -> s {D.EnumDescriptorProto.options=Just p})
   setOption (Left uno,old) =
     return' $  (old {D.EnumOptions.uninterpreted_option = D.EnumOptions.uninterpreted_option old |> uno })
@@ -450,7 +451,7 @@ subEnumValue,enumValueOption :: P D.EnumValueDescriptorProto ()
 subEnumValue = pChar '}' <|> (choice [ eol, enumValueOption ] >> subEnumValue)
 
 enumValueOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
-  getOld = fmap (fromMaybe defaultValue . D.EnumValueDescriptorProto.options) getState
+  getOld = fmap (fromMaybe mergeEmpty . D.EnumValueDescriptorProto.options) getState
   setNew p = update' (\s -> s {D.EnumValueDescriptorProto.options=Just p})
   setOption (Left uno,old) =
     return' $  (old {D.EnumValueOptions.uninterpreted_option = D.EnumValueOptions.uninterpreted_option old |> uno })
@@ -459,11 +460,11 @@ enumValueOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
       _ -> unexpected $ "EnumValueOptions has no option named "++optName
 
 extensions = pName (U.fromString "extensions") >> do
-  start <- fmap Just fieldInt
+  start <- fieldInt
   pName (U.fromString "to")
-  end <- (fmap Just fieldInt <|> fmap (const Nothing) (pName (U.fromString "max")))
-  let e = defaultValue { D.ExtensionRange.start = start
-                       , D.ExtensionRange.end = end }
+  end <- fieldInt <|> (pName (U.fromString "max") >> return (getFieldId maxBound))
+  let e = defaultValue { D.ExtensionRange.start = Just start
+                       , D.ExtensionRange.end = Just (succ end) }  -- One _past_ the end!
   update' (\s -> s {D.DescriptorProto.extension_range=D.DescriptorProto.extension_range s |> e})
 
 service = pName (U.fromString "service") >> do
@@ -475,7 +476,7 @@ service = pName (U.fromString "service") >> do
 
 serviceOption,rpc :: P D.ServiceDescriptorProto ()
 serviceOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
-  getOld = fmap (fromMaybe defaultValue . D.ServiceDescriptorProto.options) getState
+  getOld = fmap (fromMaybe mergeEmpty . D.ServiceDescriptorProto.options) getState
   setNew p = update' (\s -> s {D.ServiceDescriptorProto.options=Just p})
   setOption (Left uno,old) =
     return' (old {D.ServiceOptions.uninterpreted_option = D.ServiceOptions.uninterpreted_option old |> uno })
@@ -498,7 +499,7 @@ subRpc,rpcOption :: P D.MethodDescriptorProto ()
 subRpc = pChar '}' <|> (choice [ eol, rpcOption ] >> subRpc)
 
 rpcOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
-  getOld = fmap (fromMaybe defaultValue . D.MethodDescriptorProto.options) getState
+  getOld = fmap (fromMaybe mergeEmpty . D.MethodDescriptorProto.options) getState
   setNew p = update' (\s -> s {D.MethodDescriptorProto.options=Just p})
   setOption (Left uno,old) =
     return' $  (old {D.MethodOptions.uninterpreted_option = D.MethodOptions.uninterpreted_option old |> uno })

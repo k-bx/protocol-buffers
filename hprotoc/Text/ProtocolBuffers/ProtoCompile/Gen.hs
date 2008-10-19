@@ -89,17 +89,17 @@ inst :: String -> [HsPat] -> HsExp -> HsDecl
 inst s p r  = HsFunBind [HsMatch src (HsIdent s) p (HsUnGuardedRhs r) noWhere]
 
 fqName :: ProtoName -> String
-fqName (ProtoName a b c) = dotPre a (dotPre b c)
+fqName (ProtoName xxx a b c) = dotPre a (dotPre b c)
 
 qualName :: ProtoName -> HsQName
-qualName (ProtoName _prefix "" base) = UnQual (HsIdent base)
-qualName (ProtoName _prefix parent base) = Qual (Module parent) (HsIdent base)
+qualName (ProtoName xxx _prefix "" base) = UnQual (HsIdent base)
+qualName (ProtoName xxx _prefix parent base) = Qual (Module parent) (HsIdent base)
 
 unqualName :: ProtoName -> HsQName
-unqualName (ProtoName _prefix _parent base) = UnQual (HsIdent base)
+unqualName (ProtoName xxx _prefix _parent base) = UnQual (HsIdent base)
 
 mayQualName :: ProtoName -> ProtoName -> HsQName
-mayQualName context name@(ProtoName prefix modname base) =
+mayQualName context name@(ProtoName xxx prefix modname base) =
   if fqName context == dotPre prefix modname then UnQual (HsIdent base)
     else qualName name
 
@@ -201,7 +201,8 @@ instanceReflectEnum ei
     = HsInstDecl src [] (private "ReflectEnum") [HsTyCon (unqualName (enumName ei))]
         [ inst "reflectEnum" [] ascList
         , inst "reflectEnumInfo" [ HsPWildCard ] ei' ]
-  where (ProtoName a b c) = enumName ei
+  where (ProtoName xxx a b c) = enumName ei
+        xxx'Exp = HsParen (pvar "Utf8" $$ (HsParen $ pvar "pack" $$ HsLit (HsString (LC.unpack (utf8 xxx)))))
         values = enumValues ei
         ascList,ei',protoNameExp :: HsExp
         ascList = HsList (map one values)
@@ -210,7 +211,7 @@ instanceReflectEnum ei
                                                         ,HsList $ map (HsLit . HsString) (enumFilePath ei)
                                                         ,HsList (map two values)]
           where two (v,ns) = HsTuple [litInt (getEnumCode v),HsLit (HsString ns)]
-        protoNameExp = HsParen $ foldl' HsApp (HsCon (private "ProtoName")) . map (HsLit . HsString) $ [a,b,c]
+        protoNameExp = HsParen $ foldl' HsApp (HsCon (private "ProtoName")) . (xxx'Exp :) . map (HsLit . HsString) $ [a,b,c]
 
 --------------------------------------------
 -- DescriptorProto module creation is unfinished
@@ -244,8 +245,8 @@ protoImport (ProtoInfo protoName _ _ keyInfos _ _ _)
       . concatMap withMod
       $ allNames
   where selfName = (parentModule protoName, baseName protoName)
-        withMod (ProtoName _prefix "" _base) = []
-        withMod (ProtoName _prefix modname base) = [(modname,base)]
+        withMod (ProtoName xxx _prefix "" _base) = []
+        withMod (ProtoName xxx _prefix modname base) = [(modname,base)]
         allNames = F.foldr (\(e,fi) rest -> e : addName fi rest) [] keyInfos
         addName fi rest = maybe rest (:rest) (typeName fi)
 
@@ -289,8 +290,8 @@ toImport di
   where isForeign = let here = fqName protoName
                     in (\((a,_),_) -> a/=here)
         protoName = descName di
-        withMod p@(ProtoName prefix modname base) | isUpper (head base) = ((fqName p,modname),S.singleton base)
-                                                  | otherwise = ((dotPre prefix modname,modname),S.singleton base)
+        withMod p@(ProtoName xxx prefix modname base) | isUpper (head base) = ((fqName p,modname),S.singleton base)
+                                                      | otherwise = ((dotPre prefix modname,modname),S.singleton base)
         allNames = F.foldr addName keyNames (fields di)
         keyNames = F.foldr (\(e,fi) rest -> e : addName fi rest) keysKnown (keys di)
         keysKnown = F.foldr (\fi rest -> fieldName fi : rest) [] (knownKeys di)
