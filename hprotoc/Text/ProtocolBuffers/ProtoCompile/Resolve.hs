@@ -69,6 +69,8 @@ import qualified Data.Map as M
 import qualified Data.Set as Set
 import qualified Data.Traversable as T
 
+import Debug.Trace(trace)
+
 -- Used by err and throw
 errMsg :: String -> String
 errMsg s = "Text.ProtocolBuffers.ResolveM fatal error encountered, message:\n"++indent s
@@ -173,8 +175,8 @@ mangleModuleName (x:xs) | isLower x = let x' = toUpper x
 mangleModuleName xs = xs
 
 -- down-case the first letter, add single quote if it is a reserved word
-mangleFieldName :: Maybe Utf8 -> Maybe Utf8
-mangleFieldName = fmap (Utf8 . U.fromString . fixname . toString)
+mangleFieldName' :: String -> String
+mangleFieldName' = fixname
   where fixname [] = "empty'name" -- XXX
         fixname ('_':xs) = "u'"++xs
         fixname (x:xs) | isUpper x = let x' = toLower x
@@ -186,6 +188,10 @@ mangleFieldName = fmap (Utf8 . U.fromString . fixname . toString)
         reserved = ["case","class","data","default","deriving","do","else","foreign"
                    ,"if","import","in","infix","infixl","infixr","instance"
                    ,"let","module","newtype","of","then","type","where"] -- also reserved is "_"
+
+-- down-case the first letter, add single quote if it is a reserved word
+mangleFieldName :: Maybe Utf8 -> Maybe Utf8
+mangleFieldName = fmap (Utf8 . U.fromString . mangleFieldName' . toString)
 
 checkER :: [(Int32,Int32)] -> Int32 -> Bool
 checkER ers fid = any (`inRange` fid) ers
@@ -266,6 +272,9 @@ type RE a = ReaderT Env (Either String) a
 data SEnv = SEnv { my'Parent :: [String]
                  , my'Env :: Env
                  , my'Template :: ProtoName }
+
+instance Show SEnv where
+  show (SEnv p e t) = "(SEnv "++show p++" ; "++ whereEnv e ++ " ; "++show (haskellPrefix t,parentModule t)++ " )"
 
 type SE a = ReaderT SEnv (ErrorT String (State ReMap)) a
 
@@ -393,18 +402,30 @@ maybeM :: Monad m => (x -> m a) -> (Maybe x) -> m (Maybe a)
 maybeM f mx = maybe (return Nothing) (liftM Just . f) mx
 
 runSE :: ReMap -> SEnv -> SE a -> (Either String a,ReMap)
-runSE s sEnv m = runState (runErrorT (runReaderT m sEnv)) s
+runSE reMap sEnv m = runState (runErrorT (runReaderT m sEnv)) reMap
 
 -- XXX create ProtoNames and add to ReMap (require more reader info ?)
-getNames :: String -> (a -> Maybe Utf8) -> a -> SE (String,[String])
-getNames s f a = do names <- asks my'Parent
-                    name <- fmap toString $ getJust s (f a)
-                    return (name,names++[name])
+getNames :: (String->String) -> String -> (a -> Maybe Utf8) -> a -> SE (String,[String])
+getNames mangle s f a = do
+  parent <- asks my'Parent
+  template <- asks my'Template
+  self <- fmap toString $ getJust s (f a)
+--  trace ("getName.self: "++self) $ do
+--  trace ("getName.parent: "++show parent) $ do
+  let names = parent ++ [ self ]
+      key = encodeModuleNames names
+      value = template { protobufName = key
+                       , baseName = mangle self }
+  reMap <- get
+  let reMap' = M.insert key value reMap
+  trace ("getNames.(key,value): "++show (key,value)) $ do
+  seq reMap' $ put reMap'
+  return (self,names)
 
-descend :: Entity -> SE a -> SE a
-descend entity act = local mutate act
-  where mutate (SEnv parent env template) = SEnv parent' env' template'
-          where parent' = eName entity
+descend :: [String] -> Entity -> SE a -> SE a
+descend names entity act = local mutate act
+  where mutate (SEnv _parent env template) = SEnv parent' env' template'
+          where parent' = names -- cannot call eName ename, will cause <<loop>> with "getNames"
                 env' = Local entity env
                 template' = template { parentModule = (parentModule template) `dot` (mangleModuleName (last parent')) }
 
@@ -413,8 +434,10 @@ descend entity act = local mutate act
 kids :: (x -> SE (String,Entity)) -> Seq x -> SE ([String],[(String,Entity)])
 kids f xs = do reMap <- get
                sEnv <- ask
-               let (ans,reMaps) = unzip . map (runSE reMap sEnv) . map f . F.toList $ xs
-               put (M.unions reMaps)
+               let (ans,reMaps) = unzip . map (runSE mempty sEnv) . map f . F.toList $ xs
+               let reMap' = M.unions (reMap:reMaps)
+--             trace ("kids delta M.size: "++show (M.size reMap, map M.size reMaps,M.size reMap')) $ do
+               seq reMap' $ put reMap'
                return (partEither ans)
 
 -- | 'makeTopLevel' takes a .proto file's FileDescriptorProto and the
@@ -432,7 +455,7 @@ kids f xs = do reMap <- get
 --
 -- Also caught: name collisions in Enum definitions.
 makeTopLevel :: ReMap -> String -> D.FileDescriptorProto -> [String] -> [TopLevel] -> (Either String Env {- Global -},ReMap)
-makeTopLevel s hPrefix fdp packageName imports = flip runState s (runErrorT (mdo
+makeTopLevel reMap hPrefix fdp packageName imports = flip runState reMap (runErrorT (mdo
   filePath <- getJust "makeTopLevel.filePath" (D.FileDescriptorProto.name fdp)
   let parentM = mangleCap . msum $
         [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options fdp)
@@ -471,14 +494,14 @@ are reported by hopefully sensible (Left String) messages.
 
 entityMsg :: (String -> Bool) -> D.DescriptorProto -> SE (String,Entity)
 entityMsg isGroup dp = annErr ("entityMsg "++show (D.DescriptorProto.name dp)) $ mdo
-  (self,names) <- getNames "entityMsg.name" D.DescriptorProto.name dp
+  (self,names) <- getNames mangleModuleName "entityMsg.name" D.DescriptorProto.name dp
   numbers <- fmap Set.fromList . mapM (getJust "entityMsg.field.number" . D.FieldDescriptorProto.number) . F.toList . D.DescriptorProto.field $ dp
   when (Set.size numbers /= Seq.length (D.DescriptorProto.field dp)) $
     throwError $ "entityMsg.field.number: There must be duplicate field numbers for "++show names++"\n "++show numbers
   let groupNames = map toString . mapMaybe D.FieldDescriptorProto.type_name
                  . filter (maybe False (TYPE_GROUP ==) . D.FieldDescriptorProto.type') 
                  . F.toList . D.DescriptorProto.field $ dp
-  entity <- descend entity $ do
+  entity <- descend names entity $ do
     (bads,children) <- fmap unzip . sequence $
       [ kids entityEnum                      (D.DescriptorProto.enum_type   dp)
       , kids (entityField True)              (D.DescriptorProto.extension   dp)
@@ -496,7 +519,7 @@ annErr s act = catchError act (\e -> throwError ("annErr: "++s++'\n':e))
 
 entityField :: Bool -> D.FieldDescriptorProto -> SE (String,Entity)
 entityField isKey fdp = annErr ("entityField "++show fdp) $ do
-  (self,names) <- getNames "entityField.name" D.FieldDescriptorProto.name fdp
+  (self,names) <- getNames mangleFieldName' "entityField.name" D.FieldDescriptorProto.name fdp
   let isKey' = maybe False (const True) (D.FieldDescriptorProto.extendee fdp)
   when (isKey/=isKey') $
     throwError $ "entityField: Impossible? Expected key and got field or vice-versa:\n  "++show ((isKey,isKey'),names,fdp)
@@ -509,7 +532,7 @@ entityField isKey fdp = annErr ("entityField "++show fdp) $ do
 
 entityEnum :: D.EnumDescriptorProto -> SE (String,Entity)
 entityEnum edp@(D.EnumDescriptorProto {D.EnumDescriptorProto.value=vs}) = do
-  (self,names) <- getNames "entityEnum.name" D.EnumDescriptorProto.name edp
+  (self,names) <- getNames mangleModuleName "entityEnum.name" D.EnumDescriptorProto.name edp
   values <- mapM (getJust "entityEnum.value.number" . D.EnumValueDescriptorProto.number) . F.toList $ vs
   when (Set.size (Set.fromList values) /= Seq.length vs) $
     throwError $ "entityEnum.value.number: There must be duplicate enum values for "++show names++"\n "++show values
@@ -521,9 +544,9 @@ entityEnum edp@(D.EnumDescriptorProto {D.EnumDescriptorProto.value=vs}) = do
 
 entityService :: D.ServiceDescriptorProto -> SE (String,Entity)
 entityService sdp = mdo
-  (self,names) <- getNames "entityService.name" D.ServiceDescriptorProto.name sdp
+  (self,names) <- getNames mangleModuleName "entityService.name" D.ServiceDescriptorProto.name sdp
   let entity = E'Service names (M.fromListWithKey unique methods)
-  (badMethods,methods) <- descend entity $
+  (badMethods,methods) <- descend names entity $
                           kids entityMethod (D.ServiceDescriptorProto.method sdp)
   when (not (null badMethods)) $
     throwError $ "entityService.badMethods: Some methods failed for "++show names++"\n"++unlines badMethods
@@ -531,7 +554,7 @@ entityService sdp = mdo
 
 entityMethod :: D.MethodDescriptorProto -> SE (String,Entity)
 entityMethod mdp = do
-  (self,names) <- getNames "entityMethod.name" D.MethodDescriptorProto.name mdp
+  (self,names) <- getNames mangleFieldName' "entityMethod.name" D.MethodDescriptorProto.name mdp
   inputType <- getType "entityMethod.input_type" D.MethodDescriptorProto.input_type mdp
   outputType <- getType "entityMethod.output_type" D.MethodDescriptorProto.output_type mdp
   return (self,E'Method names inputType outputType)
@@ -962,7 +985,9 @@ asImport :: Stuff -> TopLevel
 asImport (_,env,_) = let (Global topLevel _) = toGlobal env in topLevel
 
 loadProto' :: String -> [FilePath] -> FilePath -> IO Stuff
-loadProto' hPrefix protoDirs protoFile = evalStateT (load Set.empty protoFile) mempty where
+loadProto' hPrefix protoDirs protoFile = goState (load Set.empty protoFile) where
+  goState act = do (ans,(_,reMap)) <- runStateT act mempty
+                   return ans
   loadFailed f msg = fail . unlines $ ["Parsing proto:",f,"has failed with message",msg]
   load :: Set.Set FilePath -> FilePath -> StateT (Map FilePath Stuff,ReMap) IO Stuff
   load parentsIn file = do
