@@ -31,7 +31,8 @@ import Data.Map(Map)
 --
 -- The name components are likely to have been mangled to ensure the
 -- 'baseName' started with an uppercase letter, in @ ['A'..'Z'] @.
-data ProtoName = ProtoName { haskellPrefix :: String  -- ^ Haskell specific prefix to module hierarchy (e.g. Text.Foo)
+data ProtoName = ProtoName { protobufName :: Utf8     -- ^ fully qualified name using "package" prefix (no mangling)
+                           , haskellPrefix :: String  -- ^ Haskell specific prefix to module hierarchy (e.g. Text.Foo)
                            , parentModule :: String   -- ^ Proto specified namespace (like Com.Google.Bar)
                            , baseName :: String       -- ^ unqualfied name of this thing (with no periods)
                            }
@@ -43,7 +44,7 @@ data ProtoInfo = ProtoInfo { protoMod :: ProtoName
                            , extensionKeys :: Seq KeyInfo
                            , messages :: [DescriptorInfo]
                            , enums :: [EnumInfo]
-                           , knownKeyMap :: Map ProtoName (Seq FieldInfo)
+                           , knownKeyMap :: Map ProtoName (Seq FieldInfo) -- All keys in namespace of protoFilePath
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
@@ -70,7 +71,7 @@ data GetMessageInfo = GetMessageInfo { requiredTags :: Set WireTag
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
-type KeyInfo = (ProtoName,FieldInfo)
+type KeyInfo = (ProtoName,FieldInfo) -- Extendee and FieldInfo
 
 data FieldInfo = FieldInfo { fieldName     :: ProtoName
                            , fieldNumber   :: FieldId
