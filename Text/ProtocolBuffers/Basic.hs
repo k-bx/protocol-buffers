@@ -18,6 +18,7 @@ import Data.Foldable as F(Foldable(foldl))
 import Data.Generics(Data(..))
 import Data.Int(Int32,Int64)
 import Data.Ix(Ix)
+import Data.Monoid(Monoid(..))
 import Data.Sequence(Seq)
 import Data.Typeable(Typeable(..))
 import Data.Word(Word32,Word64)
@@ -30,6 +31,10 @@ import Text.ProtocolBuffers.Get(Get)
 -- 'TYPE_STRING' values.
 newtype Utf8 = Utf8 {utf8 :: ByteString}
   deriving (Read,Show,Data,Typeable,Eq,Ord)
+
+instance Monoid Utf8 where
+  mempty = Utf8 mempty
+  mappend (Utf8 x) (Utf8 y) = Utf8 (mappend x y)
 
 -- | 'WireTag' is the 32 bit value with the upper 29 bits being the
 -- 'FieldId' and the lower 3 bits being the 'WireType'

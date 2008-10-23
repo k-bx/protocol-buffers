@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        0.4.1
+version:        0.4.2
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -41,6 +41,7 @@ Library
                    Text.ProtocolBuffers.Reflections
                    Text.ProtocolBuffers.Unknown
                    Text.ProtocolBuffers.WireMessage
+                   Text.ProtocolBuffers.Identifiers
 
   if flag(small_base)
         build-depends: base >= 3,
@@ -67,4 +68,5 @@ Library
                    ScopedTypeVariables,
                    TypeSynonymInstances,
                    MultiParamTypeClasses,
+                   FlexibleContexts,
                    FunctionalDependencies

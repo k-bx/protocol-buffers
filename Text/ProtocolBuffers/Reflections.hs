@@ -15,6 +15,7 @@ module Text.ProtocolBuffers.Reflections
   ) where
 
 import Text.ProtocolBuffers.Basic
+import Text.ProtocolBuffers.Identifiers
 
 import Data.List(sort)
 import qualified Data.Foldable as F(toList)
@@ -31,20 +32,20 @@ import Data.Map(Map)
 --
 -- The name components are likely to have been mangled to ensure the
 -- 'baseName' started with an uppercase letter, in @ ['A'..'Z'] @.
-data ProtoName = ProtoName { protobufName :: Utf8     -- ^ fully qualified name using "package" prefix (no mangling)
-                           , haskellPrefix :: String  -- ^ Haskell specific prefix to module hierarchy (e.g. Text.Foo)
-                           , parentModule :: String   -- ^ Proto specified namespace (like Com.Google.Bar)
-                           , baseName :: String       -- ^ unqualfied name of this thing (with no periods)
+data ProtoName = ProtoName { protobufName :: FIName Utf8     -- ^ fully qualified name using "package" prefix (no mangling)
+                           , haskellPrefix :: [MName String] -- ^ Haskell specific prefix to module hierarchy (e.g. Text.Foo)
+                           , parentModule :: [MName String]  -- ^ .proto specified namespace (like Com.Google.Bar)
+                           , baseName :: Either (MName a) (FName a) -- ^ unqualfied name of this thing (with no periods)
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
-data ProtoInfo = ProtoInfo { protoMod :: ProtoName
-                           , protoFilePath :: [FilePath]
-                           , protoSource :: String
-                           , extensionKeys :: Seq KeyInfo
-                           , messages :: [DescriptorInfo]
-                           , enums :: [EnumInfo]
-                           , knownKeyMap :: Map ProtoName (Seq FieldInfo) -- All keys in namespace of protoFilePath
+data ProtoInfo = ProtoInfo { protoMod :: ProtoName        -- ^ blank protobufName, maybe blank haskellPrefix and/or parentModule
+                           , protoFilePath :: [FilePath]  -- ^ path to haskell module
+                           , protoSource :: FilePath      -- ^ filename without path of .proto file
+                           , extensionKeys :: Seq KeyInfo -- ^ top level keys
+                           , messages :: [DescriptorInfo] -- ^ all messages and groups
+                           , enums :: [EnumInfo]          -- ^ all enums
+                           , knownKeyMap :: Map ProtoName (Seq FieldInfo) -- all keys in namespace
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
