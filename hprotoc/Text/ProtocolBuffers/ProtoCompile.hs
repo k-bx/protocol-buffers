@@ -9,10 +9,11 @@ import System.Environment
 import System.Directory
 import System.FilePath
 
+import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections(ProtoInfo(..),DescriptorInfo(..),EnumInfo(..))
 
 import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModule,enumModule)
-import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadProto')
+import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,makeNameMap)
 import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 
 -- | Version of protocol-buffers.
@@ -21,7 +22,7 @@ version :: Version
 version = Version { versionBranch = [0,3,1]
                   , versionTags = [] }
 
-data Options = Options { optPrefix :: String
+data Options = Options { optPrefix :: [MName String]
                        , optTarget :: FilePath
                        , optInclude :: [FilePath]
                        , optProto :: FilePath
@@ -31,12 +32,18 @@ data Options = Options { optPrefix :: String
 
 setPrefix,setTarget,setInclude,setProto :: String -> Options -> Options
 setVerbose,setUnknown :: Options -> Options
-setPrefix   s o = o { optPrefix = s }
+setPrefix   s o = o { optPrefix = toPrefix s }
 setTarget   s o = o { optTarget = s }
 setInclude  s o = o { optInclude = s : optInclude o }
 setProto    s o = o { optProto = s }
 setVerbose    o = o { optVerbose = True }
 setUnknown    o = o { optUnknownFields = True }
+
+toPrefix :: String -> [MName String]
+toPrefix s = case checkDIString s of
+               Left msg -> error $ "Bad -p or --prefix:"++show s++"\n"++msg
+               Right (True,_) -> error $ "Bad -p or --prefix (cannot start with '.'): "++show s
+               Right (False,ms) -> map mangle ms
 
 data OptionAction = Mutate (Options->Options) | Run (Options->Options) | Switch Flag
 
@@ -81,7 +88,7 @@ processOptions argv =
 defaultOptions :: IO Options
 defaultOptions = do
   pwd <- getCurrentDirectory
-  return $ Options { optPrefix = "", optTarget = pwd, optInclude = [pwd], optProto = "", optVerbose = False, optUnknownFields = False }
+  return $ Options { optPrefix = [], optTarget = pwd, optInclude = [pwd], optProto = "", optVerbose = False, optUnknownFields = False }
 
 main :: IO ()
 main = do
@@ -114,6 +121,30 @@ myMode = PPHsMode 2 2 2 2 4 2 True PPOffsideRule False True
 run :: Options -> IO ()
 run options = do
   print options
+  (env,fdp) <- loadProto (optInclude options) (optProto options)
+  nameMap <- either error return $ makeNameMap (optPrefix options) fdp
+  let protoInfo = makeProtoInfo (optUnknownFields options) nameMap fdp
+  let produceMSG di = do
+        let file = combine (optTarget options) . joinPath . descFilePath $ di
+        print file
+        mkdirFor file
+        writeFile file (prettyPrintStyleMode style myMode (descriptorModule di))
+      produceENM ei = do
+        let file = combine (optTarget options) . joinPath . enumFilePath $ ei
+        print file
+        mkdirFor file
+        writeFile file (prettyPrintStyleMode style myMode (enumModule ei))
+  mapM_ produceMSG (messages protoInfo)
+  mapM_ produceENM (enums protoInfo)
+
+  let file = combine (optTarget options) . joinPath . protoFilePath $ protoInfo
+  print file
+  writeFile file (prettyPrintStyleMode style myMode (protoModule protoInfo (serializeFDP fdp)))
+
+{-
+run :: Options -> IO ()
+run options = do
+  print options
   loadProto' (optPrefix options) (optInclude options) (optProto options)
   protos <- loadProto (optInclude options) (optProto options)
   let (Just (fdp,_,names)) = M.lookup (optProto options) protos
@@ -135,3 +166,4 @@ run options = do
   print file
   writeFile file (prettyPrintStyleMode style myMode (protoModule protoInfo (serializeFDP fdp)))
 
+-}

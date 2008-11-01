@@ -1,4 +1,4 @@
-module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadProto') where
+module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,makeNameMap,Env(..),TopLevel(..),ReMap,NameMap(..)) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
@@ -16,8 +16,6 @@ import qualified Text.DescriptorProtos.FileDescriptorProto            as D(FileD
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D.FileDescriptorProto(FileDescriptorProto(..))
 import qualified Text.DescriptorProtos.FileDescriptorSet              as D(FileDescriptorSet(FileDescriptorSet))
 import qualified Text.DescriptorProtos.FileDescriptorSet              as D.FileDescriptorSet(FileDescriptorSet(..))
-import qualified Text.DescriptorProtos.FileOptions                    as D(FileOptions)
-import qualified Text.DescriptorProtos.FileOptions                    as D.FileOptions(FileOptions(..))
 import qualified Text.DescriptorProtos.MethodDescriptorProto          as D(MethodDescriptorProto)
 import qualified Text.DescriptorProtos.MethodDescriptorProto          as D.MethodDescriptorProto(MethodDescriptorProto(..))
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D(ServiceDescriptorProto)
@@ -27,21 +25,22 @@ import qualified Text.DescriptorProtos.UninterpretedOption            as D.Unint
 import qualified Text.DescriptorProtos.UninterpretedOption.NamePart   as D(NamePart(NamePart))
 import qualified Text.DescriptorProtos.UninterpretedOption.NamePart   as D.NamePart(NamePart(..))
 import qualified Text.DescriptorProtos.EnumOptions      as D(EnumOptions)
-import qualified Text.DescriptorProtos.EnumValueOptions as D(EnumValueOptions)
-import qualified Text.DescriptorProtos.FieldOptions     as D(FieldOptions)
-import qualified Text.DescriptorProtos.FileOptions      as D(FileOptions)
-import qualified Text.DescriptorProtos.MessageOptions   as D(MessageOptions)
-import qualified Text.DescriptorProtos.MethodOptions    as D(MethodOptions)
-import qualified Text.DescriptorProtos.ServiceOptions   as D(ServiceOptions)
 import qualified Text.DescriptorProtos.EnumOptions      as D.EnumOptions(EnumOptions(uninterpreted_option))
+import qualified Text.DescriptorProtos.EnumValueOptions as D(EnumValueOptions)
 import qualified Text.DescriptorProtos.EnumValueOptions as D.EnumValueOptions(EnumValueOptions(uninterpreted_option))
+import qualified Text.DescriptorProtos.FieldOptions     as D(FieldOptions)
 import qualified Text.DescriptorProtos.FieldOptions     as D.FieldOptions(FieldOptions(uninterpreted_option))
-import qualified Text.DescriptorProtos.FileOptions      as D.FileOptions(FileOptions(uninterpreted_option))
+import qualified Text.DescriptorProtos.FileOptions      as D(FileOptions)
+import qualified Text.DescriptorProtos.FileOptions      as D.FileOptions(FileOptions(..))
+import qualified Text.DescriptorProtos.MessageOptions   as D(MessageOptions)
 import qualified Text.DescriptorProtos.MessageOptions   as D.MessageOptions(MessageOptions(uninterpreted_option))
+import qualified Text.DescriptorProtos.MethodOptions    as D(MethodOptions)
 import qualified Text.DescriptorProtos.MethodOptions    as D.MethodOptions(MethodOptions(uninterpreted_option))
+import qualified Text.DescriptorProtos.ServiceOptions   as D(ServiceOptions)
 import qualified Text.DescriptorProtos.ServiceOptions   as D.ServiceOptions(ServiceOptions(uninterpreted_option))
 
 import Text.ProtocolBuffers.Header
+import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Extensions
 import Text.ProtocolBuffers.WireMessage
 import Text.ProtocolBuffers.ProtoCompile.Instances
@@ -51,6 +50,7 @@ import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Error
+import Control.Monad.Writer
 import Data.Char
 import Data.Ratio
 import Data.Ix(inRange)
@@ -72,9 +72,14 @@ import qualified Data.Traversable as T
 import Debug.Trace(trace)
 
 -- Used by err and throw
+indent :: String -> String
+indent = unlines . map (\str -> ' ':' ':str) . lines
+
+ishow :: Show a => a -> String
+ishow = indent . show
+
 errMsg :: String -> String
 errMsg s = "Text.ProtocolBuffers.ResolveM fatal error encountered, message:\n"++indent s
-  where indent = unlines . map (\str -> ' ':' ':str) . lines
 
 err :: forall b. String -> b
 err = error . errMsg 
@@ -82,32 +87,29 @@ err = error . errMsg
 throw :: (Error e, MonadError e m) =>  String -> m a
 throw s = throwError (strMsg (errMsg s))
 
-just :: Typeable a => String -> Maybe a -> a
-just s ma@Nothing = err $ "Impossible? Expected Just of type "++show (typeOf ma)++"but got nothing:\n  "++s
-just s (Just a) = a
+-- | 'annErr' allows 
+annErr :: (Show e, Error e,MonadError e m) => String -> m a -> m a
+annErr s act = catchError act (\e -> throwError (strMsg ("annErr: "++s++'\n':ishow e)))
 
 getJust :: (Error e,MonadError e m, Typeable a) => String -> Maybe a -> m a
 {-#  INLINE getJust #-}
-getJust s ma@Nothing = throw $ "Impossible? Expected Just of type "++show (typeOf ma)++"but got nothing:\n  "++s
-getJust s (Just a) = return a
+getJust s ma@Nothing = throw $ "Impossible? Expected Just of type "++show (typeOf ma)++"but got nothing:\n"++indent s
+getJust _s (Just a) = return a
 
 -- insert '.' between each item and convert to utf8 bytes
 encodeModuleNames :: [String] -> Utf8
 encodeModuleNames [] = Utf8 mempty
 encodeModuleNames xs = Utf8 . U.fromString . foldr1 (\a b -> a ++ '.':b) $ xs
 
--- up-case the first letter after each '.', Nothing -> ""
-mangleCap :: Maybe Utf8 -> [String]
-mangleCap = mangleModuleNames . fromMaybe (Utf8 mempty)
-  where mangleModuleNames :: Utf8 -> [String]
-        mangleModuleNames bs = map mangleModuleName . splitDot $ bs
-
 splitDot :: Utf8 -> [String]
-splitDot = unfoldr s . toString where
+splitDot = splitDot' . toString
+
+splitDot' :: String -> [String]
+splitDot' = unfoldr s where
   s ('.':xs) = s xs
   s [] = Nothing
   s xs = Just (span ('.'/=) xs)
-
+{-
 -- By construction in the Lexer.x file, the use of parseIdent here cannot go wrong.
 -- But I will be paranoid and write a total function anyway.
 -- Call to 'parts' are with a non-empty string that should not start with a '.'
@@ -123,75 +125,11 @@ parseIdent bs = case LC.uncons (utf8 bs) of
                     ("",  _) -> throw $ "parseIdent: Invalid Utf8 because it contains two '.' in a row: "++show (toString bs)
                     ( x, "") -> return (x : [])
                     ( x,_:y) -> liftM (x :) (parts y)
-
--- This removes a leading dot if the input is non-empty
-noDot :: String -> String
-noDot ('.':xs) = xs
-noDot xs = xs
-
+-}
 -- This adds a leading dot if the input is non-empty
-preDot :: String -> String
-preDot [] = []
-preDot xs@('.':_) = xs
-preDot xs = '.':xs
-
--- This merges two '.'d names
-dot :: String -> String -> String
-dot [] b = b
-dot a b | '.' == last a = a ++ noDot b
-dot a b = a ++ preDot b
-
--- This adds a leading dot if the input is non-empty
-joinDot :: [String] -> String
-joinDot [] = []
-joinDot xs = preDot (foldr1 dot xs)
-
--- up-case the first letter after each '.', Nothing -> Nothing
-mangleCaps :: Maybe Utf8 -> String
-mangleCaps Nothing = ""
-mangleCaps x = foldr1 (\a b -> a ++ '.':b) (mangleCap x)
-
--- up-case the first letter, Nothing -> Nothing
-mangleCap1 :: Maybe Utf8 -> String
-mangleCap1 Nothing = ""
-mangleCap1 (Just u) = mangleModuleName . toString $ u
-
--- up-case the first letter of each value name
-mangleEnums :: Seq D.EnumValueDescriptorProto -> Seq D.EnumValueDescriptorProto
-mangleEnums s =  fmap fixEnum s
-  where fixEnum v = v { D.EnumValueDescriptorProto.name = mangleEnum (D.EnumValueDescriptorProto.name v)}
-
--- up-case the first letter
-mangleEnum :: Maybe Utf8 -> Maybe Utf8
-mangleEnum = fmap (Utf8 . U.fromString . mangleModuleName . toString)
-
--- up-case the first letter
-mangleModuleName :: String -> String
-mangleModuleName [] = "Empty'Name" -- XXX
-mangleModuleName ('_':xs) = "U'"++xs
-mangleModuleName (x:xs) | isLower x = let x' = toUpper x
-                                      in if isLower x' then err ("subborn lower case"++show (x:xs))
-                                           else x': xs
-mangleModuleName xs = xs
-
--- down-case the first letter, add single quote if it is a reserved word
-mangleFieldName' :: String -> String
-mangleFieldName' = fixname
-  where fixname [] = "empty'name" -- XXX
-        fixname ('_':xs) = "u'"++xs
-        fixname (x:xs) | isUpper x = let x' = toLower x
-                                     in if isUpper x' then err ("stubborn upper case: "++show (x:xs))
-                                          else fixname (x':xs)
-        fixname xs | xs `elem` reserved = xs ++ "'"
-        fixname xs = xs
-        reserved :: [String]
-        reserved = ["case","class","data","default","deriving","do","else","foreign"
-                   ,"if","import","in","infix","infixl","infixr","instance"
-                   ,"let","module","newtype","of","then","type","where"] -- also reserved is "_"
-
--- down-case the first letter, add single quote if it is a reserved word
-mangleFieldName :: Maybe Utf8 -> Maybe Utf8
-mangleFieldName = fmap (Utf8 . U.fromString . mangleFieldName' . toString)
+joinDot :: [IName String] -> FIName String
+joinDot [] = err $ "joinDot on an empty list of IName!"
+joinDot (x:xs) = fqAppend (promoteFI x) xs
 
 checkER :: [(Int32,Int32)] -> Int32 -> Bool
 checkER ers fid = any (`inRange` fid) ers
@@ -221,12 +159,6 @@ getExtRanges d = concatMap check unchecked
                     , D.ExtensionRange.end = end }) =
           (maybe minBound FieldId start, maybe maxBound (FieldId . pred) end)
 
-newtype NameSpace = NameSpace {unNameSpace::(Map String ([String],NameType,Maybe NameSpace))}
-  deriving (Show,Read)
-data NameType = Message [(Int32,Int32)] | Enumeration [Utf8] | Service | Void 
-  deriving (Show,Read)
-type Context = [NameSpace]
-
 -- | By construction Env is 0 or more Local Entity namespaces followed
 -- by 1 or more Global TopLevel namespaces (self and imported files).
 -- Entities in first Global TopLevel namespace can refer to each other
@@ -236,50 +168,69 @@ data Env = Local Entity {- E'Message -} Env | Global TopLevel [TopLevel]  derivi
 -- includes the FileOptions since this will be consulted when
 -- generating the Haskel module names, and the imported files are only
 -- known through their TopLevel data.
-data TopLevel = TopLevel FilePath [String] ProtoName EMap {- E'Message,Enum,Key,Service -} deriving Show
+data TopLevel = TopLevel { top'Path :: FilePath
+                         , top'Package :: [IName String]
+                         , top'FDP :: Either ErrStr D.FileDescriptorProto -- resolvedFDP'd
+                         , top'mVals :: EMap } deriving Show
 -- | The EMap type is a local namespace attached to an entity
-type EMap = Map String Entity
+type EMap = Map (IName String) Entity
 -- | An Entity is some concrete item in the namespace of a proto file.
 -- All Entity values have a leading-dot fully-qualified with the package "eName".
 -- The E'Message,Group,Service have EMap namespaces to inner Entity items.
-data Entity = E'Message { eName :: [String], validExtensions :: [(FieldId,FieldId)]
-                                           , mVals :: EMap {- E'Message,Group,Field,Key,Enum -} }
-            | E'Group   { eName :: [String], mVals :: EMap {- E'Message,Group,Field,Key,Enum -} }
-            | E'Field   { eName :: [String], fNumber :: FieldId, fType :: Maybe D.Type
-                                           , mVal :: Maybe (Either String Entity) {- E'Message,Group,Enum -} }
-            | E'Key     { eName :: [String], eMsg :: Either String Entity         {- E'Message -}
-                                           , fNumber :: FieldId, fType :: Maybe D.Type
-                                           , mVal :: Maybe (Either String Entity) {- E'Message,Group,Enum -} }
-            | E'Enum    { eName :: [String], eVals :: Map Utf8 Int32 }
-            | E'Service { eName :: [String], mVals :: EMap {- E'Method -} }
-            | E'Method  { eName :: [String], eMsgIn,eMsgOut :: Maybe (Either String Entity) {- E'Message -} }
+data Entity = E'Message { eName :: [IName String], validExtensions :: [(FieldId,FieldId)]
+                                                 , mVals :: EMap {- E'Message,Group,Field,Key,Enum -} }
+            | E'Group   { eName :: [IName String], mVals :: EMap {- E'Message,Group,Field,Key,Enum -} }
+            | E'Field   { eName :: [IName String], fNumber :: FieldId, fType :: Maybe D.Type
+                                                 , mVal :: Maybe (Either ErrStr Entity) {- E'Message,Group,Enum -} }
+            | E'Key     { eName :: [IName String], eMsg :: Either ErrStr Entity         {- E'Message -}
+                                                 , fNumber :: FieldId, fType :: Maybe D.Type
+                                                 , mVal :: Maybe (Either ErrStr Entity) {- E'Message,Group,Enum -} }
+            | E'Enum    { eName :: [IName String], eVals :: Map (IName Utf8) Int32 }
+            | E'Service { eName :: [IName String], mVals :: EMap {- E'Method -} }
+            | E'Method  { eName :: [IName String], eMsgIn,_eMsgOut :: Maybe (Either ErrStr Entity) {- E'Message -} }
             | E'Error String [Entity]
   deriving (Show)
 
-allowed :: Env -> [([String],[String])]
+allowed :: Env -> [([IName String],[IName String])]
 allowed (Local entity env) = allowedE entity : allowed env
 allowed (Global t ts) = map allowedT (t:ts)
+allowedE :: Entity -> ([IName String], [IName String])
 allowedE entity = ((,)  (eName entity)) $
   case get'mVals entity of
     Nothing -> []
     Just m -> M.keys m
-allowedT (TopLevel _ names _ m) = (names,M.keys m)
+allowedT :: TopLevel -> ([IName String], [IName String])
+allowedT tl = (top'Package tl,M.keys (top'mVals tl))
 
-type ReMap = Map Utf8 ProtoName -- Create a mapping from the "official" name to the Haskell hierarchy and mangled name
+data NameMap = NameMap (FIName Utf8,[MName String],[MName String]) ReMap
 
-type RE a = ReaderT Env (Either String) a
+-- Create a mapping from the "official" name to the Haskell hierarchy mangled name
+type ReMap = Map (FIName Utf8) ProtoName
 
-data SEnv = SEnv { my'Parent :: [String]
-                 , my'Env :: Env
-                 , my'Template :: ProtoName }
+type RE a = ReaderT Env (Either ErrStr) a
+
+data SEnv = SEnv { my'Parent :: [IName String]
+                 , my'Env :: Env }
+--                 , my'Template :: ProtoName }
 
 instance Show SEnv where
-  show (SEnv p e t) = "(SEnv "++show p++" ; "++ whereEnv e ++ " ; "++show (haskellPrefix t,parentModule t)++ " )"
+  show (SEnv p e) = "(SEnv "++show p++" ; "++ whereEnv e ++ ")" --" ; "++show (haskellPrefix t,parentModule t)++ " )"
 
-type SE a = ReaderT SEnv (ErrorT String (State ReMap)) a
+type ErrStr = String
 
-fqName :: Entity -> Utf8
-fqName = Utf8 . U.fromString . joinDot . eName
+type SE a = ReaderT SEnv (Either ErrStr) a
+
+fqName :: Entity -> FIName Utf8
+fqName = fiFromString . joinDot . eName
+
+fiFromString :: FIName String -> FIName Utf8
+fiFromString = FIName . fromString . fiName
+
+diToString :: DIName Utf8 -> DIName String
+diToString = DIName . toString . diName
+
+iToString :: IName Utf8 -> IName String
+iToString = IName . toString . iName
 
 -- Three entities provide child namespaces: E'Message, E'Group, and E'Service
 get'mVals :: Entity -> Maybe EMap
@@ -289,32 +240,34 @@ get'mVals (E'Service {mVals = x}) = Just x
 get'mVals _ = Nothing
 
 -- | This is a helper for resolveEnv
-toGlobal (Local _ env) = toGlobal env
+toGlobal :: Env -> Env
+toGlobal (Local _entity env) = toGlobal env
 toGlobal x@(Global {}) = x
+
+getTL :: Env -> TopLevel
+getTL (Local _entity env) = getTL env
+getTL (Global tl _tls) = tl
 
 -- | This is used for resolving some UninterpretedOption names
 resolveHere :: Entity -> Utf8 -> RE Entity
 resolveHere parent nameU = do
-  let rFail msg = throw ("Could not lookup "++show (toString nameU)++"\n  "++msg)
-  (isGlobal,xs) <- parseIdent nameU
-  when isGlobal $ rFail "because only local name expected (no leading '.')"
-  case xs of
-    [x] -> case get'mVals parent of
-             Just vals -> case M.lookup x vals of
-                            Just entity -> return entity
-                            Nothing -> rFail ("because there is no such name here:  "++show (eName parent))
-             Nothing -> rFail ("because environment has no local names:\n  "++show (eName parent))
-    _ -> rFail "because only a simple name expected (no internal '.'s)"
+  let rFail msg = throw ("Could not lookup "++show (toString nameU)++"\n"++indent msg)
+  x <- getJust ("resolveHere: validI nameU failed for "++show nameU) (fmap iToString (validI nameU))
+  case get'mVals parent of
+    Just vals -> case M.lookup x vals of
+                   Just entity -> return entity
+                   Nothing -> rFail ("because there is no such name here:  "++show (eName parent))
+    Nothing -> rFail ("because environment has no local names:\n"++ishow (eName parent))
 
 -- | 'resolveEnv' is the query operation for the Env namespace.  It
 -- recorgnizes names beginning with a '.' as already being
 -- fully-qualified names. This is called from the different monads via
 -- resolveRE, resolveSE, or getType.
-resolveEnv :: Utf8 -> Env -> Either String Entity
+resolveEnv :: Utf8 -> Env -> Either ErrStr Entity
 resolveEnv nameU envIn = do
-  (isGlobal,xs) <- parseIdent nameU
-  let mResult = if isGlobal then lookupEnv xs (toGlobal envIn)
-                            else lookupEnv xs envIn
+  (isGlobal,xs) <- checkDIUtf8 nameU
+  let mResult = if isGlobal then lookupEnv (map iToString xs) (toGlobal envIn)
+                            else lookupEnv (map iToString xs) envIn
   case mResult of
     Nothing -> throw . unlines $ [ "Could not lookup "++show (nameU,(isGlobal,xs))
                                  , "in environment: "++(whereEnv envIn)
@@ -325,11 +278,11 @@ resolveEnv nameU envIn = do
 resolveRE :: Utf8 -> RE Entity
 resolveRE nameU = lift . (resolveEnv nameU) =<< ask
 
-resolveSE :: Utf8 -> SE (Either String Entity)
+resolveSE :: Utf8 -> SE (Either ErrStr Entity)
 resolveSE nameU = fmap (resolveEnv nameU) (asks my'Env)
 
 -- | 'getType' is used to lookup the type strings in service method records.
-getType :: Show a => String -> (a -> Maybe Utf8) -> a -> SE (Maybe (Either String Entity))
+getType :: Show a => String -> (a -> Maybe Utf8) -> a -> SE (Maybe (Either ErrStr Entity))
 getType s f a = do
   typeU <- getJust s (f a)
   case parseType (toString typeU) of
@@ -338,44 +291,44 @@ getType s f a = do
                   return (Just (expectMGE ee))
 
 -- | 'expectMGE' is used by getType and 'entityField'
-expectMGE :: Either String Entity -> Either String Entity
+expectMGE :: Either ErrStr Entity -> Either ErrStr Entity
 expectMGE ee@(Left {}) = ee
 expectMGE ee@(Right e) = if isMGE e then ee
-                           else Left $ "expectMGE: Name resolution failed to find a Message, Group, or Enum:\n  "++show e
-  where isMGE e = case e of E'Message {} -> True
-                            E'Group {} -> True
-                            E'Enum {} -> True
-                            _ -> False
+                           else Left $ "expectMGE: Name resolution failed to find a Message, Group, or Enum:\n"++ishow e
+  where isMGE e' = case e' of E'Message {} -> True
+                              E'Group {} -> True
+                              E'Enum {} -> True
+                              _ -> False
 
 -- | 'expectM' is used by 'entityField'
-expectM :: Either String Entity -> Either String Entity
+expectM :: Either ErrStr Entity -> Either ErrStr Entity
 expectM ee@(Left {}) = ee
 expectM ee@(Right e) = if isMGE e then ee
-                         else Left $ "expectMGE: Name resolution failed to find a Message, Group, or Enum:\n  "++show e
-  where isMGE e = case e of E'Message {} -> True
-                            _ -> False
+                         else Left $ "expectMGE: Name resolution failed to find a Message, Group, or Enum:\n"++ishow e
+  where isMGE e' = case e' of E'Message {} -> True
+                              _ -> False
 
 -- | This is a helper for resolveEnv for error messages
 whereEnv :: Env -> String
-whereEnv (Local entity env) = joinDot (eName entity) ++ " in "++show ( (\(Global (TopLevel filePath _ _ _ ) _)-> filePath) (toGlobal env))
-whereEnv (Global (TopLevel filePath names _ _) _) = joinDot names ++ " in " ++ show filePath
+whereEnv (Local entity env) = fiName (joinDot (eName entity)) ++ " in "++show (top'Path . getTL $ env)
+whereEnv (Global tl _) = fiName (joinDot (top'Package tl)) ++ " in " ++ show (top'Path tl)
 
 -- | lookupEnv is used only by resolveEnv
-lookupEnv :: [String] -> Env -> Maybe Entity
+lookupEnv :: [IName String] -> Env -> Maybe Entity
 lookupEnv xs (Global tl tls) = lookupTopLevel xs tl <|> msum (map (lookupTopLevel xs) tls)
-lookupEnv xs (Local e@(E'Error {}) _env) = return e
+lookupEnv _xs (Local e@(E'Error {}) _env) = return e
 lookupEnv xs (Local entity env) = case get'mVals entity of
                                     Just vals -> lookupVals vals xs <|> lookupEnv xs env
                                     Nothing -> Nothing
 
 -- | lookupTopLeve is used only by lookupEnv
-lookupTopLevel :: [String] -> TopLevel -> Maybe Entity
-lookupTopLevel xs (TopLevel _filePath names _fileOptions vals) =
-  lookupVals vals xs <|> (stripPrefix names xs >>= lookupVals vals)
+lookupTopLevel :: [IName String] -> TopLevel -> Maybe Entity
+lookupTopLevel xs tl =
+  lookupVals (top'mVals tl) xs <|> (stripPrefix (top'Package tl) xs >>= lookupVals (top'mVals tl))
 
 -- | lookupVals is used by lookupEnv and lookupTopLevel
-lookupVals :: EMap -> [String] -> Maybe Entity
-lookupVals vals [] = Nothing
+lookupVals :: EMap -> [IName String] -> Maybe Entity
+lookupVals _vals [] = Nothing
 lookupVals vals [x] = M.lookup x vals
 lookupVals vals (x:xs) = do entity <-  M.lookup x vals
                             case get'mVals entity of
@@ -392,55 +345,114 @@ partEither (Right b:xs) = let ~(ls,rs) = partEither xs
 
 -- | The 'unique' function is used with Data.Map.fromListWithKey to detect
 -- name collisions and record this as E'Error entries in the map.
-unique :: String -> Entity -> Entity -> Entity
-unique name (E'Error _ a) (E'Error _ b) = E'Error ("Namespace collision for "++name) (a++b)
-unique name (E'Error _ a) b = E'Error ("Namespace collision for "++name) (a++[b])
-unique name a (E'Error _ b) = E'Error ("Namespace collision for "++name) (a:b)
-unique name a b = E'Error ("Namespace collision for "++name) [a,b]
+unique :: IName String -> Entity -> Entity -> Entity
+unique name (E'Error _ a) (E'Error _ b) = E'Error ("Namespace collision for "++show name) (a++b)
+unique name (E'Error _ a) b = E'Error ("Namespace collision for "++show name) (a++[b])
+unique name a (E'Error _ b) = E'Error ("Namespace collision for "++show name) (a:b)
+unique name a b = E'Error ("Namespace collision for "++show name) [a,b]
 
 maybeM :: Monad m => (x -> m a) -> (Maybe x) -> m (Maybe a)
 maybeM f mx = maybe (return Nothing) (liftM Just . f) mx
 
-runSE :: ReMap -> SEnv -> SE a -> (Either String a,ReMap)
-runSE reMap sEnv m = runState (runErrorT (runReaderT m sEnv)) reMap
+runSE :: SEnv -> SE a -> Either ErrStr a
+runSE sEnv m = runReaderT m sEnv
 
--- XXX create ProtoNames and add to ReMap (require more reader info ?)
-getNames :: (String->String) -> String -> (a -> Maybe Utf8) -> a -> SE (String,[String])
-getNames mangle s f a = do
+-- | 'makeNameMap' conservatively checks its input.
+makeNameMap :: [MName String] -> D.FileDescriptorProto -> Either ErrStr NameMap
+makeNameMap hPrefix fdp = go (makeOne fdp) where
+  go = fmap ((\(a,w) -> NameMap a (M.fromList w))) . runWriterT
+--  makeOne :: D.FileDescriptorProto -> WriterT [(FIName Utf8,ProtoName)] (Either ErrStr) ()
+  makeOne fdp = do
+    -- Create 'template' :: ProtoName using "Text.ProtocolBuffers.Identifiers"
+    rawPackage <- getJust "makeNameMap.makeOne: D.FileDescriptorProto.package"
+                  (D.FileDescriptorProto.package fdp)
+    lift (checkDIUtf8 rawPackage) -- guard-like effect
+    let packageName = difi (DIName rawPackage)
+{- XXX
+    diPrefix <- getJust ("makeNameMap.makeOne: Invalid parent prefix: "++show rawPrefix)
+                  (validDI rawPrefix)
+    let hPrefix = map (mangle :: IName String -> MName String) . splitDI $ diPrefix
+-}
+    rawParent <- getJust "makeNameMap.makeOne: " . msum $
+        [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options fdp)
+        , D.FileOptions.java_package =<< (D.FileDescriptorProto.options fdp)
+        , D.FileDescriptorProto.package fdp]
+    diParent <- getJust ("makeNameMap.makeOne: invalid character in: "++show rawParent)
+                  (validDI rawParent)
+    let hParent = map (mangle :: IName Utf8 -> MName String) . splitDI $ diParent
+        template = ProtoName packageName hPrefix hParent
+                     (error "makeNameMap.makeOne.template.baseName undefined")
+    list <- runReaderT (mrmFile fdp) template
+    return (packageName,hPrefix,hParent)
+  -- Traversal of the named DescriptorProto types
+  mrmFile :: D.FileDescriptorProto -> MRM ()
+  mrmFile fdp = do
+    F.mapM_ mrmMsg     (D.FileDescriptorProto.message_type fdp)
+    F.mapM_ mrmField   (D.FileDescriptorProto.extension    fdp)
+    F.mapM_ mrmEnum    (D.FileDescriptorProto.enum_type    fdp)
+    F.mapM_ mrmService (D.FileDescriptorProto.service      fdp)
+  mrmMsg dp = do
+    template <- mrmName "mrmMsg.name" D.DescriptorProto.name dp
+    local (const template) $ do
+      F.mapM_ mrmEnum    (D.DescriptorProto.enum_type   dp)
+      F.mapM_ mrmField   (D.DescriptorProto.extension   dp)
+      F.mapM_ mrmField   (D.DescriptorProto.field       dp)
+      F.mapM_ mrmMsg     (D.DescriptorProto.nested_type dp)
+  mrmField fdp = mrmName "mrmField.name" D.FieldDescriptorProto.name fdp
+  mrmEnum edp = do
+    template <- mrmName "mrmEnum.name" D.EnumDescriptorProto.name edp
+    local (const template) $ F.mapM_ mrmEnumValue (D.EnumDescriptorProto.value edp)
+  mrmEnumValue evdp = mrmName "mrmEnumValue.name" D.EnumValueDescriptorProto.name evdp
+  mrmService sdp = do
+    template <- mrmName "entityService.name" D.ServiceDescriptorProto.name sdp
+    local (const template) $ F.mapM_ mrmMethod (D.ServiceDescriptorProto.method sdp)
+  mrmMethod mdp = mrmName "entityMethod.name" D.MethodDescriptorProto.name mdp
+
+type MRM a = ReaderT ProtoName (WriterT [(FIName Utf8,ProtoName)] (Either ErrStr)) a
+
+mrmName :: String -> (a -> Maybe Utf8) -> a -> MRM ProtoName
+mrmName s f a = do
+  template <- ask
+  iSelf <- getJust s (validI =<< f a)
+  let mSelf = mangle iSelf
+      fqSelf = fqAppend (protobufName template) [iSelf]
+      self = template { protobufName = fqSelf
+                      , baseName = mSelf }
+      template' = template { protobufName = fqSelf
+                           , parentModule = parentModule template ++ [mSelf] }
+  tell [(fqSelf,self)]
+  return template'
+
+-- XXX really need to clean this up once this module compiles!
+getNames :: String -> (a -> Maybe Utf8) -> a -> SE (IName String,[IName String])
+getNames errorMessage accessor record = do
   parent <- asks my'Parent
-  template <- asks my'Template
-  self <- fmap toString $ getJust s (f a)
---  trace ("getName.self: "++self) $ do
---  trace ("getName.parent: "++show parent) $ do
-  let names = parent ++ [ self ]
-      key = encodeModuleNames names
-      value = template { protobufName = key
-                       , baseName = mangle self }
-  reMap <- get
-  let reMap' = M.insert key value reMap
-  trace ("getNames.(key,value): "++show (key,value)) $ do
-  seq reMap' $ put reMap'
-  return (self,names)
-
-descend :: [String] -> Entity -> SE a -> SE a
+  iSelf <- getJust errorMessage (validI =<< accessor record)
+  let names@(n:ns) = parent ++ [ iToString iSelf ]
+      key = fiFromString . joinDot $ names -- use (protobufName template?) XXX or loop?
+  return (iToString iSelf,names)
+{-
+descend :: [IName String] -> Entity -> SE a -> SE a
 descend names entity act = local mutate act
   where mutate (SEnv _parent env template) = SEnv parent' env' template'
-          where parent' = names -- cannot call eName ename, will cause <<loop>> with "getNames"
+          where parent' = names -- cannot call eName ename, will cause <<loop>> with "getNames" -- XXX revisit
                 env' = Local entity env
-                template' = template { parentModule = (parentModule template) `dot` (mangleModuleName (last parent')) }
+                template' = template { parentModule = (parentModule template) ++ [mangle (last parent')] }
+-}
+descend :: [IName String] -> Entity -> SE a -> SE a
+descend names entity act = local mutate act
+  where mutate (SEnv _parent env) = SEnv parent' env'
+          where parent' = names -- cannot call eName ename, will cause <<loop>> with "getNames" -- XXX revisit
+                env' = Local entity env
 
 -- Run each element of (Seq x) as (f x) with same initial environment and state.
 -- Then merge the output states and sort out the failures and successes.
-kids :: (x -> SE (String,Entity)) -> Seq x -> SE ([String],[(String,Entity)])
-kids f xs = do reMap <- get
-               sEnv <- ask
-               let (ans,reMaps) = unzip . map (runSE mempty sEnv) . map f . F.toList $ xs
-               let reMap' = M.unions (reMap:reMaps)
---             trace ("kids delta M.size: "++show (M.size reMap, map M.size reMaps,M.size reMap')) $ do
-               seq reMap' $ put reMap'
+kids :: (x -> SE (IName String,Entity)) -> Seq x -> SE ([ErrStr],[(IName String,Entity)])
+kids f xs = do sEnv <- ask
+               let ans = map (runSE sEnv) . map f . F.toList $ xs
                return (partEither ans)
 
--- | 'makeTopLevel' takes a .proto file's FileDescriptorProto and the
+-- | XXX 'makeTopLevel' takes a .proto file's FileDescriptorProto and the
 -- TopLevel values of its directly imported file and constructs the
 -- TopLevel of the FileDescriptorProto in a Global Environment.
 --
@@ -454,25 +466,21 @@ kids f xs = do reMap <- get
 -- in the corresponding Entity.
 --
 -- Also caught: name collisions in Enum definitions.
-makeTopLevel :: ReMap -> String -> D.FileDescriptorProto -> [String] -> [TopLevel] -> (Either String Env {- Global -},ReMap)
-makeTopLevel reMap hPrefix fdp packageName imports = flip runState reMap (runErrorT (mdo
+--
+-- mdo notes: sEnv depends on global which depends on sEnv ...
+makeTopLevel :: D.FileDescriptorProto -> [IName String] -> [TopLevel] -> Either ErrStr Env {- Global -}
+makeTopLevel fdp packageName imports = mdo
   filePath <- getJust "makeTopLevel.filePath" (D.FileDescriptorProto.name fdp)
-  let parentM = mangleCap . msum $
-        [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options fdp)
-        , D.FileOptions.java_package =<< (D.FileDescriptorProto.options fdp)
-        , D.FileDescriptorProto.package fdp]
-      templatePN = ProtoName { protobufName = error "Bug! Failed to initialize ProtoName.protobufName"
-                             , haskellPrefix = hPrefix
-                             , parentModule = joinDot $ parentM
-                             , baseName = error "Bug! Failed to initialize ProtoName.baseName" }
-      sEnv = SEnv packageName global templatePN
-  global <- flip runReaderT sEnv (do
+  let sEnv = SEnv packageName global
+  global <- runSE sEnv (do
     (bads,children) <- fmap unzip . sequence $
       [ kids (entityMsg (const False)) (D.FileDescriptorProto.message_type fdp)
       , kids (entityField True)        (D.FileDescriptorProto.extension    fdp)
       , kids entityEnum                (D.FileDescriptorProto.enum_type    fdp)
       , kids entityService             (D.FileDescriptorProto.service      fdp) ]
-    let global' = Global (TopLevel (toString filePath) packageName templatePN
+    let global' = Global (TopLevel (toString filePath)
+                                   packageName
+                                   (resolveFDP fdp global')
                                    (M.fromListWithKey unique (concat children)))
                          imports
         bad = unlines (concat bads)
@@ -481,7 +489,6 @@ makeTopLevel reMap hPrefix fdp packageName imports = flip runState reMap (runErr
     return global'
    )
   return global
- ))
 
 {- ***
 
@@ -492,13 +499,13 @@ are reported by hopefully sensible (Left String) messages.
 
  *** -}
 
-entityMsg :: (String -> Bool) -> D.DescriptorProto -> SE (String,Entity)
+entityMsg :: (IName String -> Bool) -> D.DescriptorProto -> SE (IName String,Entity)
 entityMsg isGroup dp = annErr ("entityMsg "++show (D.DescriptorProto.name dp)) $ mdo
-  (self,names) <- getNames mangleModuleName "entityMsg.name" D.DescriptorProto.name dp
+  (self,names) <- getNames "entityMsg.name" D.DescriptorProto.name dp
   numbers <- fmap Set.fromList . mapM (getJust "entityMsg.field.number" . D.FieldDescriptorProto.number) . F.toList . D.DescriptorProto.field $ dp
   when (Set.size numbers /= Seq.length (D.DescriptorProto.field dp)) $
     throwError $ "entityMsg.field.number: There must be duplicate field numbers for "++show names++"\n "++show numbers
-  let groupNames = map toString . mapMaybe D.FieldDescriptorProto.type_name
+  let groupNames = mapMaybe validI . map toString . mapMaybe D.FieldDescriptorProto.type_name
                  . filter (maybe False (TYPE_GROUP ==) . D.FieldDescriptorProto.type') 
                  . F.toList . D.DescriptorProto.field $ dp
   entity <- descend names entity $ do
@@ -515,14 +522,12 @@ entityMsg isGroup dp = annErr ("entityMsg "++show (D.DescriptorProto.name dp)) $
     return entity'
   return (self,entity)
 
-annErr s act = catchError act (\e -> throwError ("annErr: "++s++'\n':e))
-
-entityField :: Bool -> D.FieldDescriptorProto -> SE (String,Entity)
+entityField :: Bool -> D.FieldDescriptorProto -> SE (IName String,Entity)
 entityField isKey fdp = annErr ("entityField "++show fdp) $ do
-  (self,names) <- getNames mangleFieldName' "entityField.name" D.FieldDescriptorProto.name fdp
+  (self,names) <- getNames "entityField.name" D.FieldDescriptorProto.name fdp
   let isKey' = maybe False (const True) (D.FieldDescriptorProto.extendee fdp)
   when (isKey/=isKey') $
-    throwError $ "entityField: Impossible? Expected key and got field or vice-versa:\n  "++show ((isKey,isKey'),names,fdp)
+    throwError $ "entityField: Impossible? Expected key and got field or vice-versa:\n"++ishow ((isKey,isKey'),names,fdp)
   number <- getJust "entityField.name" . D.FieldDescriptorProto.number $ fdp
   let mType = D.FieldDescriptorProto.type' fdp
   typeName <- maybeM (fmap expectMGE . resolveSE) (D.FieldDescriptorProto.type_name fdp)
@@ -530,21 +535,28 @@ entityField isKey fdp = annErr ("entityField "++show fdp) $ do
                    return (self,E'Key names extendee (FieldId number) mType typeName)
            else return (self,E'Field names (FieldId number) mType typeName)
 
-entityEnum :: D.EnumDescriptorProto -> SE (String,Entity)
+entityEnum :: D.EnumDescriptorProto -> SE (IName String,Entity)
 entityEnum edp@(D.EnumDescriptorProto {D.EnumDescriptorProto.value=vs}) = do
-  (self,names) <- getNames mangleModuleName "entityEnum.name" D.EnumDescriptorProto.name edp
+  (self,names) <- getNames "entityEnum.name" D.EnumDescriptorProto.name edp
   values <- mapM (getJust "entityEnum.value.number" . D.EnumValueDescriptorProto.number) . F.toList $ vs
   when (Set.size (Set.fromList values) /= Seq.length vs) $
     throwError $ "entityEnum.value.number: There must be duplicate enum values for "++show names++"\n "++show values
-  valNames <- mapM (getJust "entityEnum.value.name" . D.EnumValueDescriptorProto.name) . F.toList $ vs
+  valNames <- mapM (getJust "entityEnum.value.name" . (validI =<<) . D.EnumValueDescriptorProto.name) . F.toList $ vs
   let mapping = M.fromList (zip valNames values)
   when (M.size mapping /= Seq.length vs) $
-    throwError $ "entityEnum.value.name: There must be duplicate enum names for "++show names++"\n "++show (map toString valNames)
+    throwError $ "entityEnum.value.name: There must be duplicate enum names for "++show names++"\n "++show valNames
+  let entity = E'Enum names mapping
+  descend names entity $ F.mapM_ entityEnumValue vs
   return (self,E'Enum names mapping) -- discard values
 
-entityService :: D.ServiceDescriptorProto -> SE (String,Entity)
+entityEnumValue :: D.EnumValueDescriptorProto -> SE ()
+entityEnumValue evdp = do -- Merely use getNames to add mangled self to ReMap state
+  getNames "entityEnumValue.name" D.EnumValueDescriptorProto.name evdp
+  return ()
+
+entityService :: D.ServiceDescriptorProto -> SE (IName String,Entity)
 entityService sdp = mdo
-  (self,names) <- getNames mangleModuleName "entityService.name" D.ServiceDescriptorProto.name sdp
+  (self,names) <- getNames "entityService.name" D.ServiceDescriptorProto.name sdp
   let entity = E'Service names (M.fromListWithKey unique methods)
   (badMethods,methods) <- descend names entity $
                           kids entityMethod (D.ServiceDescriptorProto.method sdp)
@@ -552,9 +564,9 @@ entityService sdp = mdo
     throwError $ "entityService.badMethods: Some methods failed for "++show names++"\n"++unlines badMethods
   return (self,entity)
 
-entityMethod :: D.MethodDescriptorProto -> SE (String,Entity)
+entityMethod :: D.MethodDescriptorProto -> SE (IName String,Entity)
 entityMethod mdp = do
-  (self,names) <- getNames mangleFieldName' "entityMethod.name" D.MethodDescriptorProto.name mdp
+  (self,names) <- getNames "entityMethod.name" D.MethodDescriptorProto.name mdp
   inputType <- getType "entityMethod.input_type" D.MethodDescriptorProto.input_type mdp
   outputType <- getType "entityMethod.output_type" D.MethodDescriptorProto.output_type mdp
   return (self,E'Method names inputType outputType)
@@ -575,7 +587,7 @@ possible.
 
 *** -}
 
-resolveFDP :: D.FileDescriptorProto -> Env -> Either String D.FileDescriptorProto
+resolveFDP :: D.FileDescriptorProto -> Env -> Either ErrStr D.FileDescriptorProto
 resolveFDP = runReaderT . fqFileDP 
 
 fqFail :: Show a => String -> a -> Entity -> RE b
@@ -626,11 +638,11 @@ fqMethod mdp = do
     E'Method {} -> do mdp1 <- case eMsgIn entity of
                                 Nothing -> return mdp
                                 Just resolveIn -> do new <- fmap fqName (lift resolveIn)
-                                                     return (mdp {D.MethodDescriptorProto.input_type = Just new})
+                                                     return (mdp {D.MethodDescriptorProto.input_type = Just (fiName new)})
                       mdp2 <- case eMsgIn entity of
                                 Nothing -> return mdp1
                                 Just resolveIn -> do new <- fmap fqName (lift resolveIn)
-                                                     return (mdp1 {D.MethodDescriptorProto.input_type = Just new})
+                                                     return (mdp1 {D.MethodDescriptorProto.input_type = Just (fiName new)})
                       consumeUNO mdp2
     _ -> fqFail "fqMethod.entity: did not resolve to a Method:" mdp entity
 
@@ -643,7 +655,7 @@ fqField :: Bool -> D.FieldDescriptorProto -> RE D.FieldDescriptorProto
 fqField isKey fdp = annErr ("fqField "++show fdp) $ do
   let isKey' = maybe False (const True) (D.FieldDescriptorProto.extendee fdp)
   when (isKey/=isKey') $
-    ask >>= \env -> throwError $ "fqField.isKey: Expected key and got field or vice-versa:\n  "++show ((isKey,isKey'),whereEnv env,fdp)
+    ask >>= \env -> throwError $ "fqField.isKey: Expected key and got field or vice-versa:\n"++ishow ((isKey,isKey'),whereEnv env,fdp)
   entity <- resolveRE =<< getJust "fqField.name" (D.FieldDescriptorProto.name fdp)
   newExtendee <- case (isKey,entity) of
                    (True,E'Key {}) -> do
@@ -653,7 +665,7 @@ fqField isKey fdp = annErr ("fqField "++show fdp) $ do
                           throwError $ "fqField.newExtendee: Field Number of extention key invalid:\n"
                             ++unlines ["Number is "++show (fNumber entity),"Valid ranges: "++show (validExtensions ext),"Extendee: "++show (eName ext),"Descriptor: "++show fdp]
                         _ -> fqFail "fqField.ext: Key's target is not an E'Message:" fdp ext
-                      fmap (Just . fqName) . lift . eMsg $ entity
+                      fmap (Just . fiName . fqName) . lift . eMsg $ entity
                    (False,E'Field {}) -> return Nothing
                    _ -> fqFail "fqField.entity: did not resolve to expected E'Key or E'Field:" fdp entity
   mTypeName <- maybeM lift (mVal entity) -- "Just (Left _)" triggers a throwError here
@@ -666,16 +678,22 @@ fqField isKey fdp = annErr ("fqField "++show fdp) $ do
                   (mt,me) -> fqFail ("fqField.actualType: "++show mt++" and "++show (fmap eName me)++" is invalid") fdp entity
   -- Check that a default value of an TYPE_ENUM is valid
   case (mTypeName,D.FieldDescriptorProto.default_value fdp) of
-    (Just ee@(E'Enum {eVals = enumVals}),Just enumVal) -> when (M.notMember enumVal enumVals) $
-      throwError $ "fqField.default_value: Default enum value is invalid:\n"
-        ++unlines ["Value is "++show (toString enumVal),"Allowed values from "++show (eName ee)," are "++show (M.keys enumVals),"Descriptor: "++show fdp]
+    (Just ee@(E'Enum {eVals = enumVals}),Just enumVal) ->
+      let badVal = throwError $ "fqField.default_value: Default enum value is invalid:\n"
+                     ++unlines ["Value is "++show (toString enumVal)
+                               ,"Allowed values from "++show (eName ee)
+                               ," are "++show (M.keys enumVals)
+                               ,"Descriptor: "++show fdp]
+      in case validI enumVal of
+          Nothing -> badVal
+          Just iVal -> when (M.notMember iVal enumVals) badVal
     _ -> return ()
   consumeUNO $
     if isKey then (fdp { D.FieldDescriptorProto.extendee  = newExtendee
                        , D.FieldDescriptorProto.type'     = Just actualType
-                       , D.FieldDescriptorProto.type_name = fmap fqName mTypeName })
+                       , D.FieldDescriptorProto.type_name = fmap (fiName . fqName) mTypeName })
              else (fdp { D.FieldDescriptorProto.type'     = Just actualType
-                       , D.FieldDescriptorProto.type_name = fmap fqName mTypeName })
+                       , D.FieldDescriptorProto.type_name = fmap (fiName . fqName) mTypeName })
 
 fqEnum :: D.EnumDescriptorProto -> RE D.EnumDescriptorProto
 fqEnum edp = do
@@ -737,7 +755,8 @@ instance ConsumeUNO D.DescriptorProto where
 -- This prepends the ["google","protobuf"] and updates all the options into the ExtField of msg
 interpretOptions :: ExtendMessage msg => String -> msg -> Seq D.UninterpretedOption -> RE msg
 interpretOptions name msg unos = do
-  ios <- mapM (interpretOption ["google","protobuf",name]) . F.toList $ unos
+  name' <- getJust ("interpretOptions: invalid name "++show name) (validI name)
+  ios <- mapM (interpretOption [IName "google",IName "protobuf",name']) . F.toList $ unos
   let (ExtField ef) = getExtField msg
       ef' = foldl' (\m (k,v) -> seq v $ M.insert k v m) ef ios
       msg' = seq ef' (putExtField (ExtField ef') msg)
@@ -751,7 +770,7 @@ interpretOptions name msg unos = do
 -- And as usual, there are many ways thing could conceivable go wrong or be out of bounds.
 --
 -- The first parameter must be a name such as ["google","protobuf","FieldOption"]
-interpretOption :: [String] -> D.UninterpretedOption -> RE (FieldId,ExtFieldValue)
+interpretOption :: [IName String] -> D.UninterpretedOption -> RE (FieldId,ExtFieldValue)
 interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
                                 [] -> iFail $ "Empty name_part"
                                 (part:parts) -> go Nothing optName part parts
@@ -794,6 +813,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
                     TYPE_GROUP -> do putVarUInt tag'
                                      putLazyByteString bs'
                                      putVarUInt (succ tag')
+                    _ -> fail $ "bug! raw with type "++show t++" should be impossible"
     return (fid,ExtFromWire wt raw)
 
   -- This takes care of the acutal value of the option, which must be a basic type
@@ -826,9 +846,11 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
       TYPE_ENUM ->
         case (mVal entity,D.UninterpretedOption.identifier_value uno) of
           (Just (Right (E'Enum {eVals=enumVals})),Just enumVal) ->
-            case M.lookup enumVal enumVals of
-              Just val -> done (fromEnum val) -- fromEnum :: Int32 -> Int
-              Nothing -> iFail $ "enumVal lookup failed: "++show (enumVal,M.keys enumVals)
+            case validI enumVal of
+              Nothing -> iFail $ "invalid D.UninterpretedOption.identifier_value: "++show enumVal
+              Just iVal -> case M.lookup iVal enumVals of
+                             Nothing -> iFail $ "enumVal lookup failed: "++show (iVal,M.keys enumVals)
+                             Just val -> done (fromEnum val) -- fromEnum :: Int32 -> Int
           (Just (Right (E'Enum {})),Nothing) -> iFail $ "No identifer_value value to lookup in E'Enum"
           (me,_) -> iFail $ "Expected Just E'Enum, got: "++show me
       TYPE_STRING   -> do
@@ -849,6 +871,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
       TYPE_SINT32   -> done =<< (iVal :: RE Int32)
       TYPE_UINT32   -> done =<< (iVal :: RE Word32)
       TYPE_FIXED32  -> done =<< (iVal :: RE Word32)
+      _ -> iFail $ "bug! go with type "++show t++" should be impossible"
 
   -- Machinery needed by the final call of go
   bVal :: RE Bool
@@ -866,7 +889,8 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
            (Just n,_,_) -> return (fromIntegral n)
            _ -> iFail "No numeric value"
   asFloat :: Double -> RE Float
-  asFloat d = let fmax = (2-(1%2)^23) * (2^127)
+  asFloat d = let fmax :: Ratio Integer
+                  fmax = (2-(1%2)^(23::Int)) * (2^(127::Int))
                   d' = toRational d
               in if (negate fmax <= d') && (d' <= fmax)
                    then return (fromRational d')
@@ -887,33 +911,6 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
            (_,_,Just d) -> rangeCheck =<< asInt d
            _ -> iFail "No numeric value"
 
-{-
-
-New name resolution strategy:
-
-1) create FDS that mimics protoc (CANONICAL)
-
-Flow looks like
-* load the proto file
-** go off and load the imported files, get a Context from each
-** build a Context for the current file
-* 
-
-2) namespace the keys and fields
-3) resolve the (Seq UninterpretedOption.NamePart) references
-4) mangling pass no longer applied to Text.DescriptorProto*, only by MakeReflection.
-5) Expose Mangling API in protocol-buffers library
-
-Master Map of CANONICAL names to Entity
-
--}
-
-seeContext :: Context -> [String] 
-seeContext cx = map ((++"[]") . concatMap (\k -> show k ++ ", ") . M.keys . unNameSpace) cx
-
-toString :: Utf8 -> String
-toString = U.toString . utf8
-
 findFile :: [FilePath] -> FilePath -> IO (Maybe FilePath)
 findFile paths target = do
   let test [] = return Nothing
@@ -923,6 +920,116 @@ findFile paths target = do
         if found then return (Just fullname)
           else test rest
   test paths
+
+type Stuff = (Env,D.FileDescriptorProto) -- XXX will change
+
+loadProto :: [FilePath] -> FilePath -> IO Stuff
+loadProto protoDirs protoFile = goState (load Set.empty protoFile) where
+  goState act = evalStateT act mempty
+  loadFailed f msg = fail . unlines $ ["Parsing proto:",f,"has failed with message",msg]
+  load :: Set.Set FilePath -> FilePath -> StateT (Map FilePath Stuff) IO Stuff
+  load parentsIn file = do
+    built <- get
+    when (Set.member file parentsIn)
+         (loadFailed file (unlines ["imports failed: recursive loop detected"
+                                   ,unlines . map show . M.assocs $ built,show parentsIn]))
+    case M.lookup file built of
+      Just result -> return result
+      Nothing -> do
+        mayToRead <- liftIO $ findFile protoDirs file
+        case mayToRead of
+          Nothing -> loadFailed file (unlines (["loading failed, could not find file: "++show file
+                                               ,"Searched paths were:"] ++ map ("  "++) protoDirs))
+          Just toRead -> do
+            proto <- liftIO $ do print ("Loading filepath: "++toRead)
+                                 LC.readFile toRead
+            parsed'fdp <- either (loadFailed toRead . show) return $
+                          (parseProto toRead proto)
+            packageName <- either (loadFailed toRead . show) (return . map iToString . snd) $
+                           (checkDIUtf8 =<< getJust "makeTopLevel.packageName" (D.FileDescriptorProto.package parsed'fdp))
+            let parents = Set.insert file parentsIn
+                importList = map toString . F.toList . D.FileDescriptorProto.dependency $ parsed'fdp
+            imports <- mapM (fmap (getTL . fst) . load parents) importList
+            let eEnv = makeTopLevel parsed'fdp packageName imports
+            global'env <- either (loadFailed file) return eEnv
+            resolved'fdp <- either (loadFailed file) return (top'FDP . getTL $ global'env)
+            liftIO $ dump resolved'fdp
+            let result = (global'env, resolved'fdp)
+            modify (M.insert file result) -- add to memorized results
+            return result
+
+dump :: D.FileDescriptorProto -> IO ()
+dump fdp = do
+  let f = "/tmp/dumpfdp"
+  LC.writeFile f (messagePut $ defaultValue { D.FileDescriptorSet.file = Seq.singleton fdp })
+  print (show f++" has been dumped")
+
+{-
+-- up-case the first letter after each '.', Nothing -> Nothing
+-- mangleCaps :: Maybe Utf8 -> String
+-- mangleCaps Nothing = ""
+-- mangleCaps x = foldr1 (\a b -> a ++ '.':b) (mangleCap x)
+
+-- up-case the first letter, Nothing -> Nothing
+mangleCap1 :: Maybe Utf8 -> String
+mangleCap1 Nothing = ""
+mangleCap1 (Just u) = mangleModuleName . toString $ u
+
+-- up-case the first letter of each value name
+mangleEnums :: Seq D.EnumValueDescriptorProto -> Seq D.EnumValueDescriptorProto
+mangleEnums s =  fmap fixEnum s
+  where fixEnum v = v { D.EnumValueDescriptorProto.name = mangleEnum (D.EnumValueDescriptorProto.name v)}
+
+-- up-case the first letter
+mangleEnum :: Maybe Utf8 -> Maybe Utf8
+mangleEnum = fmap (Utf8 . U.fromString . mangleModuleName . toString)
+
+-- up-case the first letter
+mangleModuleName :: String -> String
+mangleModuleName [] = "Empty'Name" -- XXX
+mangleModuleName ('_':xs) = "U'"++xs
+mangleModuleName (x:xs) | isLower x = let x' = toUpper x
+                                      in if isLower x' then err ("subborn lower case"++show (x:xs))
+                                           else x': xs
+mangleModuleName xs = xs
+
+-- down-case the first letter, add single quote if it is a reserved word
+mangleFieldName' :: String -> String
+mangleFieldName' = fixname
+  where fixname [] = "empty'name" -- XXX
+        fixname ('_':xs) = "u'"++xs
+        fixname (x:xs) | isUpper x = let x' = toLower x
+                                     in if isUpper x' then err ("stubborn upper case: "++show (x:xs))
+                                          else fixname (x':xs)
+        fixname xs | xs `elem` reserved = xs ++ "'"
+        fixname xs = xs
+        reserved :: [String]
+        reserved = ["case","class","data","default","deriving","do","else","foreign"
+                   ,"if","import","in","infix","infixl","infixr","instance"
+                   ,"let","module","newtype","of","then","type","where"] -- also reserved is "_"
+
+-- down-case the first letter, add single quote if it is a reserved word
+mangleFieldName :: Maybe Utf8 -> Maybe Utf8
+mangleFieldName = fmap (Utf8 . U.fromString . mangleFieldName' . toString)
+
+
+-- up-case the first letter after each '.', Nothing -> ""
+mangleCap :: Maybe Utf8 -> [String]
+mangleCap = mangleModuleNames . fromMaybe (Utf8 mempty)
+  where mangleModuleNames :: Utf8 -> [String]
+        mangleModuleNames bs = map mangleModuleName . splitDot $ bs
+
+-}
+
+{-
+newtype NameSpace = NameSpace {unNameSpace::(Map String ([String],NameType,Maybe NameSpace))}
+  deriving (Show,Read)
+data NameType = Message [(Int32,Int32)] | Enumeration [Utf8] | Service | Void 
+  deriving (Show,Read)
+type Context = [NameSpace]
+
+seeContext :: Context -> [String] 
+seeContext cx = map ((++"[]") . concatMap (\k -> show k ++ ", ") . M.keys . unNameSpace) cx
 
 -- loadProto is a slight kludge.  It takes a single search directory
 -- and an initial .proto file path relative to this directory.  It
@@ -979,51 +1086,6 @@ loadProto protoDirs protoFile = fmap answer $ execStateT (load Set.empty protoFi
             modify (\built' -> M.insert file result built')
             return result
 
-type Stuff = (D.FileDescriptorProto,Env,D.FileDescriptorProto) -- XXX will change
-
-asImport :: Stuff -> TopLevel
-asImport (_,env,_) = let (Global topLevel _) = toGlobal env in topLevel
-
-loadProto' :: String -> [FilePath] -> FilePath -> IO Stuff
-loadProto' hPrefix protoDirs protoFile = goState (load Set.empty protoFile) where
-  goState act = do (ans,(_,reMap)) <- runStateT act mempty
-                   return ans
-  loadFailed f msg = fail . unlines $ ["Parsing proto:",f,"has failed with message",msg]
-  load :: Set.Set FilePath -> FilePath -> StateT (Map FilePath Stuff,ReMap) IO Stuff
-  load parentsIn file = do
-    built <- gets fst
-    when (Set.member file parentsIn)
-         (loadFailed file (unlines ["imports failed: recursive loop detected"
-                                   ,unlines . map show . M.assocs $ built,show parentsIn]))
-    case M.lookup file built of
-      Just result -> return result
-      Nothing -> do
-        mayToRead <- liftIO $ findFile protoDirs file
-        case mayToRead of
-          Nothing -> loadFailed file (unlines (["loading failed, could not find file: "++show file
-                                               ,"Searched paths were:"] ++ map ("  "++) protoDirs))
-          Just toRead -> do
-            proto <- liftIO $ do print ("Loading filepath: "++toRead)
-                                 LC.readFile toRead
-            parsed'fdp <- either (loadFailed toRead . show) return (parseProto toRead proto)
-            packageName <- fmap snd . parseIdent =<< getJust "makeTopLevel.packageName" (D.FileDescriptorProto.package parsed'fdp)
-            let parents = Set.insert file parentsIn
-                importList = map toString . F.toList . D.FileDescriptorProto.dependency $ parsed'fdp
-            imports <- mapM (fmap asImport . load parents) importList
-            (built',reMap) <- get
-            let (ans,reMap') = makeTopLevel reMap hPrefix parsed'fdp packageName imports
-            global'env <- either (loadFailed file) return ans
-            resolved'fdp <- either (loadFailed file) return (resolveFDP parsed'fdp global'env)
-            liftIO $ dump resolved'fdp
-            let result = (parsed'fdp, global'env, resolved'fdp) -- XXX will change
-            put (M.insert file result built',reMap') -- add to memorized results
-            return result
-
-dump :: D.FileDescriptorProto -> IO ()
-dump fdp = do
-  let f = "/tmp/dumpfdp"
-  LC.writeFile f (messagePut $ defaultValue { D.FileDescriptorSet.file = Seq.singleton fdp })
-  print (show f++" has been dumped")
 
 -- Imported names must be fully qualified in the .proto file by the
 -- target's package name, but the resolved name might be fully
@@ -1099,21 +1161,21 @@ resolveWithContext protoContext protoIn =
       resolveWithNameType :: Context -> Utf8 -> Maybe (Utf8,NameType)
       resolveWithNameType context bsIn =
         let nameIn = mangleCap (Just bsIn)
-            errMsg = "*** Name resolution failed:\n"
-                     ++unlines ["Unmangled name: "++show bsIn
-                               ,"Mangled name: "++show nameIn
-                               ,"List of known names:"]
-                     ++ unlines (seeContext context)
-            resolver [] (NameSpace _cx) = rerr $ "Impossible? case in Text.ProtocolBuffers.Resolve.resolveWithNameType.resolver []\n" ++ errMsg
+            rMsg = "*** Name resolution failed:\n"
+                   ++unlines ["Unmangled name: "++show bsIn
+                             ,"Mangled name: "++show nameIn
+                             ,"List of known names:"]
+                   ++ unlines (seeContext context)
+            resolver [] (NameSpace _cx) = rerr $ "Impossible? case in Text.ProtocolBuffers.Resolve.resolveWithNameType.resolver []\n" ++ rMsg
             resolver [name] (NameSpace cx) = case M.lookup name cx of
                                                Nothing -> Nothing
-                                               Just (fqName,nameType,_) -> Just (encodeModuleNames fqName,nameType)
+                                               Just (fullName,nameType,_) -> Just (encodeModuleNames fullName,nameType)
             resolver (name:rest) (NameSpace cx) = case M.lookup name cx of
                                                     Nothing -> Nothing
                                                     Just (_,_,Nothing) -> Nothing
                                                     Just (_,_,Just cx') -> resolver rest cx'
         in case msum . map (resolver nameIn) $ context of
-             Nothing -> rerr errMsg
+             Nothing -> rerr rMsg
              Just x -> Just x
       processFDP fdp = fdp
         { D.FileDescriptorProto.message_type = fmap (processMSG protoContext) (D.FileDescriptorProto.message_type fdp)
@@ -1179,3 +1241,5 @@ resolveWithContext protoContext protoIn =
                           , D.MethodDescriptorProto.input_type  = resolve cx (D.MethodDescriptorProto.input_type m)
                           , D.MethodDescriptorProto.output_type = resolve cx (D.MethodDescriptorProto.output_type m) }
   in processFDP protoIn
+
+-}

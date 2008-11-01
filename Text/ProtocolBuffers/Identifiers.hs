@@ -24,9 +24,9 @@ module Text.ProtocolBuffers.Identifiers
   , MName(..),FMName(..),PMName(..)
   , FName(..),FFName(..),PFName(..)
   , Dotted(..),Mangle(..)
-  , joinPM,joinPF,difi,splitFI
+  , joinPM,joinPF,difi,splitDI,splitFI,splitFM
   , checkDIString,checkDIUtf8
-  , promoteFM,promoteFF,dotFM,dotFF,fqAppend
+  , promoteDI,promoteFI,promoteFM,promoteFF,dotFM,dotFF,fqAppend
   ) where
 
 import qualified Data.ByteString.Lazy.Char8 as LC
@@ -59,7 +59,7 @@ newtype MName a = MName {mName::a} deriving (Data,Typeable,Show,Read,Eq,Ord)
 newtype FName a = FName {fName::a} deriving (Data,Typeable,Show,Read,Eq,Ord)
 -- | '.' separated identifier which may or may start with a dot.  There
 -- are never two or more '.'s in a row.  There is always at least one identifier.
-newtype DIName a = DIName {diName :: a}
+newtype DIName a = DIName {diName :: a} deriving (Data,Typeable,Show,Read,Eq,Ord)
 -- | Fully qualified identifier: repeated ('.' then identifier)
 newtype FIName a = FIName {fiName::a} deriving (Data,Typeable,Show,Read,Eq,Ord)
 -- | Full Haskell module name: MNames separated by '.', ending with a module
@@ -77,9 +77,10 @@ class (Monoid a) => Dotted a where
   uncons :: a -> Maybe (Char,a)
   cons :: Char -> a -> a
   dot :: a -> a -> a
+  validI :: a -> Maybe (IName a)
   -- | 'validDI' ensures the DIName is 
   validDI :: a -> Maybe (DIName a)
-  splitDI :: DIName a -> [IName a]
+  split :: a -> [a]
 
 -- These are also part of the external API, they are abstracted over
 -- Dotted.
@@ -97,9 +98,20 @@ difi (DIName a) = case uncons a of
                     Just ('.',_) -> FIName a
                     _ -> FIName (cons '.' a)
 
+splitDI :: Dotted a => DIName a -> [IName a]
+splitDI = map IName . split . diName
 
 splitFI :: Dotted a => FIName a -> [IName a]
-splitFI = splitDI . DIName . fiName
+splitFI = map IName . split . fiName
+
+splitFM :: Dotted a => FMName a -> [MName a]
+splitFM = map MName . split . fmName
+
+promoteDI :: Dotted a => IName a -> DIName a 
+promoteDI = DIName . iName
+
+promoteFI :: Dotted a => IName a -> FIName a 
+promoteFI = FIName . cons '.' . iName
 
 promoteFM :: Dotted a => MName a -> FMName a
 promoteFM = FMName . mName
@@ -163,11 +175,17 @@ instance Mangle (IName String) (MName String) where
 instance Mangle (IName Utf8) (MName String) where
   mangle (IName s) = MName (fixUp . toString $ s)
 
+instance Mangle (FName String) (MName String) where
+  mangle (FName s) = MName (fixUp s)
+
 instance Mangle (IName String) (FName String) where
   mangle (IName s) = FName (fixLow s)
 
 instance Mangle (IName Utf8) (FName String) where
   mangle (IName s) = FName (fixLow . toString $ s)
+
+instance Mangle (MName String) (FName String) where
+  mangle (MName s) = FName (fixLow s)
 
 instance Mangle (DIName Utf8) (PMName String) where
   mangle s = let ms = splitDI s in PMName (map mangle $ init ms) (mangle $ last ms)
@@ -189,24 +207,36 @@ dotUtf8 (Utf8 a) (Utf8 b) = Utf8 (LC.append a (LC.cons '.' b))
 dotString :: String -> String -> String
 dotString a b = a ++ ('.':b)
 
-splitUtf8 :: DIName Utf8 -> [IName Utf8]
-splitUtf8 = unfoldr s . utf8 . diName where
-  s :: ByteString -> Maybe (IName Utf8,ByteString)
+splitUtf8 :: Utf8 -> [Utf8]
+splitUtf8 = unfoldr s . utf8 where
+  s :: ByteString -> Maybe (Utf8,ByteString)
   s y | LC.null y = Nothing
       | otherwise = case U.span ('.'/=) y of
                       (a,b) | LC.null a -> s b
-                            | otherwise -> Just (IName (Utf8 a),b)
+                            | otherwise -> Just (Utf8 a,b)
 
-splitString :: DIName String -> [IName String]
-splitString = unfoldr s . diName where
+splitString :: String -> [String]
+splitString = unfoldr s where
   s [] = Nothing
   s ('.':xs) = s xs -- delete all '.' in the input
-  s xs = Just (let (a,b) = span ('.'/=) xs in (IName a,b))
+  s xs = Just (let (a,b) = span ('.'/=) xs in (a,b))
+
+validIUtf8 :: Utf8 -> Maybe (IName Utf8)
+validIUtf8 xs | unull xs = Nothing
+validIUtf8 xs@(Utf8 bs) = if LC.all (`S.member` validISet) bs
+                            then Just (IName xs)
+                            else Nothing
+
+validIString :: String -> Maybe (IName String)
+validIString [] = Nothing
+validIString xs = if all (`S.member` validISet) xs
+                    then Just (IName xs)
+                    else Nothing
 
 validDIUtf8 :: Utf8 -> Maybe (DIName Utf8)
 validDIUtf8 xs | unull xs = Nothing
 validDIUtf8 xs@(Utf8 bs) =
-  if LC.all (`S.member` validDISet) bs && LC.any ('.'/=) bs
+  if LC.all (`S.member` validDISet) bs && LC.any ('.'/=) bs && LC.last bs /= '.'
      && (all (\(x,y) -> '.'/=x || '.'/=y) . (\x -> zip (init x) (tail x)) . toString $ xs)
     then Just (DIName xs)
     else Nothing
@@ -214,10 +244,13 @@ validDIUtf8 xs@(Utf8 bs) =
 validDIString :: String -> Maybe (DIName String)
 validDIString []  = Nothing
 validDIString xs =
-  if all (`S.member` validDISet) xs && any ('.'/=) xs
+  if all (`S.member` validDISet) xs && any ('.'/=) xs && last xs /= '.'
      && all (\(x,y) -> '.'/=x || '.'/=y) (zip (init xs) (tail xs))
     then Just (DIName xs)
     else Nothing
+
+validISet :: Set Char
+validISet = S.fromDistinctAscList "ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 
 validDISet :: Set Char
 validDISet = S.fromDistinctAscList ".ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
@@ -229,22 +262,25 @@ instance Dotted Utf8 where
   cons b (Utf8 bs) | fromEnum b < 128 = Utf8 (LC.cons b bs)
                    | otherwise = Utf8 ((U.fromString [b]) `mappend` bs)
   dot = dotUtf8
+  split = splitUtf8
+  validI = validIUtf8
   validDI = validDIUtf8
-  splitDI = splitUtf8
 
 instance Dotted String where
   uncons [] = Nothing
   uncons (x:xs) = Just (x,xs)
   cons = (:)
   dot = dotString
+  split = splitString
+  validI = validIString
   validDI = validDIString
-  splitDI = splitString
 
 err :: String -> a
 err s = error ("Text.ProtocolBuffers.ProtoCompile.Identifiers: "++s)
 
 -- make leading upper case letter, and leanding "_" becomes "U'_"
 fixUp :: String -> String
+fixUp xs | last xs == '\'' = fixUp (init xs) -- in case this is mangling after "fixLow"
 fixUp ('_':xs) = "U'"++xs
 fixUp i@(x:xs) | isLower x =
   let x' = toUpper x

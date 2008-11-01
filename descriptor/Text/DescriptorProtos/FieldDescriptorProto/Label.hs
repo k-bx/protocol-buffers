@@ -44,6 +44,6 @@ instance P'.ReflectEnum Label where
   reflectEnum
     = [(1, "LABEL_OPTIONAL", LABEL_OPTIONAL), (2, "LABEL_REQUIRED", LABEL_REQUIRED), (3, "LABEL_REPEATED", LABEL_REPEATED)]
   reflectEnumInfo _
-    = P'.EnumInfo (P'.ProtoName (P'.Utf8 (P'.pack "MakeReflections.xxx")) "Text" "DescriptorProtos.FieldDescriptorProto" "Label")
+    = P'.EnumInfo (P'.makePNF (P'.pack "MakeReflections.xxx") ["Text"] ["DescriptorProtos","FieldDescriptorProto"] "Label")
         ["Text", "DescriptorProtos", "FieldDescriptorProto", "Label.hs"]
         [(1, "LABEL_OPTIONAL"), (2, "LABEL_REQUIRED"), (3, "LABEL_REPEATED")]

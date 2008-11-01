@@ -9,9 +9,10 @@
 -- names are somewhat descriptive.
 --
 module Text.ProtocolBuffers.Reflections
-  ( ProtoName(..),ProtoInfo(..),DescriptorInfo(..),FieldInfo(..),KeyInfo
+  ( ProtoName(..),ProtoFName(..),ProtoInfo(..),DescriptorInfo(..),FieldInfo(..),KeyInfo
   , HsDefault(..),EnumInfo(..),EnumInfoApp
   , ReflectDescriptor(..),ReflectEnum(..),GetMessageInfo(..)
+  , makePNF
   ) where
 
 import Text.ProtocolBuffers.Basic
@@ -25,6 +26,14 @@ import Data.Generics(Data)
 import Data.Typeable(Typeable)
 import Data.Map(Map)
 
+-- | 'makePNF' is used by the generated code to create a ProtoName with less newtype noise.
+makePNF :: ByteString -> [String] -> [String] -> String -> ProtoName
+makePNF a bs cs d =
+  ProtoName (FIName (Utf8 a))
+            (map MName bs)
+            (map MName cs)
+            (MName d)
+
 -- | This is fully qualified name data type for code generation.  The
 -- 'haskellPrefix' was possibly specified on the 'hprotoc' command
 -- line.  The 'parentModule' is a combination of the module prefix
@@ -35,8 +44,15 @@ import Data.Map(Map)
 data ProtoName = ProtoName { protobufName :: FIName Utf8     -- ^ fully qualified name using "package" prefix (no mangling)
                            , haskellPrefix :: [MName String] -- ^ Haskell specific prefix to module hierarchy (e.g. Text.Foo)
                            , parentModule :: [MName String]  -- ^ .proto specified namespace (like Com.Google.Bar)
-                           , baseName :: Either (MName a) (FName a) -- ^ unqualfied name of this thing (with no periods)
+                           , baseName :: MName String
                            }
+  deriving (Show,Read,Eq,Ord,Data,Typeable)
+
+data ProtoFName = ProtoFName { protobufName' :: FIName Utf8     -- ^ fully qualified name using "package" prefix (no mangling)
+                             , haskellPrefix' :: [MName String] -- ^ Haskell specific prefix to module hierarchy (e.g. Text.Foo)
+                             , parentModule' :: [MName String]  -- ^ .proto specified namespace (like Com.Google.Bar)
+                             , baseName' :: FName String
+                             }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 data ProtoInfo = ProtoInfo { protoMod :: ProtoName        -- ^ blank protobufName, maybe blank haskellPrefix and/or parentModule
@@ -74,7 +90,7 @@ data GetMessageInfo = GetMessageInfo { requiredTags :: Set WireTag
 
 type KeyInfo = (ProtoName,FieldInfo) -- Extendee and FieldInfo
 
-data FieldInfo = FieldInfo { fieldName     :: ProtoName
+data FieldInfo = FieldInfo { fieldName     :: ProtoFName
                            , fieldNumber   :: FieldId
                            , wireTag       :: WireTag
                            , wireTagLength :: WireSize         -- ^ Bytes required in the Varint formatted wireTag

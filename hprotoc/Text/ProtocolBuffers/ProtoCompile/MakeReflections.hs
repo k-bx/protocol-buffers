@@ -12,9 +12,10 @@
 -- 
 -- In building the reflection info new things are computed. It changes
 -- dotted names to ProtoName with the outer prefix.  It parses the
--- default value from the ByteString to a Haskell type.  The value of
--- the tag on the wire is computed and so is its size on the wire.
-module Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,makeEnumInfo,makeDescriptorInfo,serializeFDP) where
+-- default value from the ByteString to a Haskell type.  For fields,
+-- the value of the tag on the wire is computed and so is its size on
+-- the wire.
+module Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
@@ -34,26 +35,28 @@ import qualified Text.DescriptorProtos.FileDescriptorProto            as D(FileD
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D.FileDescriptorProto(FileDescriptorProto(..)) 
 
 import Text.ProtocolBuffers.Basic
+import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections
 import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag,runPut)
+import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..))
 
 import qualified Data.Foldable as F(foldr,toList)
 import qualified Data.ByteString as S(concat)
 import qualified Data.ByteString.Char8 as SC(spanEnd)
-import qualified Data.ByteString.Lazy.Char8 as LC(toChunks,fromChunks,length,init)
-import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
+import qualified Data.ByteString.Lazy.Char8 as LC(toChunks,fromChunks,length,init,null,last,empty)
+import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString,uncons,take,length)
 import Data.List(partition,unfoldr)
 import qualified Data.Sequence as Seq(fromList,empty,singleton,null)
 import Numeric(readHex,readOct,readDec)
 import Data.Monoid(mconcat,mappend)
-import qualified Data.Map as M(fromListWith,lookup)
+import qualified Data.Map as M(fromListWith,lookup,keys)
 import Data.Maybe(fromMaybe,catMaybes)
 import System.FilePath
 
 --import Debug.Trace (trace)
 
 imp :: String -> a
-imp msg = error $ "Text.ProtocolBuffers.ProtoCompile.MakeReflections: Impossible? "++msg
+imp msg = error $ "Text.ProtocolBuffers.ProtoCompile.MakeReflections: Impossible?\n  "++msg
 
 spanEndL :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
 spanEndL f bs = let (a,b) = SC.spanEnd f (S.concat . LC.toChunks $ bs)
@@ -65,16 +68,7 @@ splitMod (Utf8 bs) = case spanEndL ('.'/=) bs of
                        (pre,post) | LC.length pre <= 1 -> Right (Utf8 bs)
                                   | otherwise -> Left (Utf8 (LC.init pre),Utf8 post)
 
-toString :: Utf8 -> String
-toString = U.toString . utf8
-
 xxx = Utf8 (U.fromString "MakeReflections.xxx")
-
-toProtoName :: String -> Utf8 -> ProtoName
-toProtoName prefix rawName =
-  case splitMod rawName of
-    Left (m,b) -> ProtoName xxx prefix (toString m) (toString b)
-    Right b    -> ProtoName xxx prefix ""           (toString b)
 
 toPath :: String -> Utf8 -> [FilePath]
 toPath prefix name = splitDirectories (combine a b)
@@ -88,23 +82,161 @@ splitDot = unfoldr s where
     s xs = Just (span ('.'/=) xs)
 
 pnPath :: ProtoName -> [FilePath]
-pnPath (ProtoName xxx a b c) = splitDirectories .flip addExtension "hs" . joinPath . splitDot $ dotPre a (dotPre b c)
+pnPath (ProtoName _ a b c) = splitDirectories .flip addExtension "hs" . joinPath . map mName $ a++b++[c]
 
 dotPre :: String -> String -> String
-dotPre "" x = x -- after this the value of s cannot be []
+dotPre s ('.':x) = dotPre s x
+dotPre "" x = x
+dotPre s x | '.' == last s = dotPre (init s) x
 dotPre s "" = s
-dotPre s x@('.':xs)  | '.' == last s = s ++ xs -- s cannnot be [], so last is safe
-                     | otherwise = s ++ x
-dotPre s x | '.' == last s = s++x -- s cannnot be [], so last is safe
-           | otherwise = s++('.':x)
+dotPre s x = s ++ ( '.' : x )
+
+preDot :: String -> String
+preDot [] = []
+preDot xs@('.':_) = xs
+preDot xs = '.':xs
+
+dotUtf8 :: Utf8 -> Utf8 -> Utf8
+dotUtf8 s x = Utf8 (U.fromString . preDot $ toString s `dotPre` toString x)
 
 serializeFDP :: D.FileDescriptorProto -> ByteString
 serializeFDP fdp = runPut (wirePut 11 fdp)
 
+toHaskell :: ReMap -> FIName Utf8 -> ProtoName
+toHaskell reMap k = case M.lookup k reMap of
+                      Nothing -> imp $ "toHaskell failed to find "++show k++" among "++show (M.keys reMap)
+                      Just pn -> pn
+
+makeProtoInfo :: Bool -> NameMap -> D.FileDescriptorProto -> ProtoInfo
+makeProtoInfo unknownField (NameMap (packageName,hPrefix,hParent) reMap)
+              fdp@(D.FileDescriptorProto
+                    { D.FileDescriptorProto.name = Just rawName
+                    , D.FileDescriptorProto.package = Just rawPackage })
+     = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allKeys where
+  protoName = case hParent of
+                [] -> case hPrefix of
+                        [] -> imp $ "makeProtoInfo: no hPrefix or hParent in NameMap for: "++show fdp
+                        _ -> ProtoName packageName (init hPrefix) [] (last hPrefix)
+                _ -> ProtoName packageName hPrefix (init hParent) (last hParent)
+  keyInfos = Seq.fromList . map (\f -> (keyExtendee' reMap f,toFieldInfo' reMap packageName f))
+             . F.toList . D.FileDescriptorProto.extension $ fdp
+  allMessages = concatMap (processMSG False) (F.toList $ D.FileDescriptorProto.message_type fdp)
+  allEnums = map (makeEnumInfo' reMap packageName) (F.toList $ D.FileDescriptorProto.enum_type fdp) 
+             ++ concatMap processENM (F.toList $ D.FileDescriptorProto.message_type fdp)
+  allKeys = M.fromListWith mappend . map (\(k,a) -> (k,Seq.singleton a))
+            . F.toList . mconcat $ keyInfos : map keys allMessages
+  processMSG msgIsGroup msg = 
+    let getKnownKeys protoName' = fromMaybe Seq.empty (M.lookup protoName' allKeys)
+        groups = collectedGroups msg
+        checkGroup x = elem (fromMaybe (imp $ "no message name in makeProtoInfo.processMSG.checkGroup:\n"++show msg)
+                                       (D.DescriptorProto.name x))
+                            groups
+    in makeDescriptorInfo' reMap packageName getKnownKeys msgIsGroup unknownField msg
+       : concatMap (\x -> processMSG (checkGroup x) x)
+                   (F.toList (D.DescriptorProto.nested_type msg))
+  processENM msg = foldr ((:) . makeEnumInfo' reMap packageName) nested
+                         (F.toList (D.DescriptorProto.enum_type msg))
+    where nested = concatMap processENM (F.toList (D.DescriptorProto.nested_type msg))
+makeProtoInfo _ _ _ = imp $ "makeProtoInfo: missing name or package"
+
+makeEnumInfo' :: ReMap -> FIName Utf8 -> D.EnumDescriptorProto -> EnumInfo
+makeEnumInfo' reMap parent
+              e@(D.EnumDescriptorProto.EnumDescriptorProto
+                  { D.EnumDescriptorProto.name = Just rawName
+                  , D.EnumDescriptorProto.value = value })
+    = if Seq.null value then imp $ "enum has no values: "++show e
+        else EnumInfo protoName (pnPath protoName) enumVals
+  where protoName = toHaskell reMap $ fqAppend parent [IName rawName]
+        enumVals ::[(EnumCode,String)]
+        enumVals = F.foldr ((:) . oneValue) [] value
+          where oneValue :: D.EnumValueDescriptorProto -> (EnumCode,String)
+                oneValue (D.EnumValueDescriptorProto.EnumValueDescriptorProto
+                          { D.EnumValueDescriptorProto.name = Just name
+                          , D.EnumValueDescriptorProto.number = Just number })
+                    = (EnumCode number,mName . baseName . toHaskell reMap $ fqAppend (protobufName protoName) [IName name])
+                oneValue evdp = imp $ "no name or number for evdp passed to makeEnumInfo.oneValue: "++show evdp
+makeEnumInfo' _ _ _ = imp "makeEnumInfo: missing name"
+
+keyExtendee' :: ReMap -> D.FieldDescriptorProto.FieldDescriptorProto -> ProtoName
+keyExtendee' reMap f = case D.FieldDescriptorProto.extendee f of
+                         Nothing -> imp $ "keyExtendee expected Just but found Nothing: "++show f
+                         Just extName -> toHaskell reMap (FIName extName)
+
+makeDescriptorInfo' :: ReMap -> FIName Utf8
+                    -> (ProtoName -> Seq FieldInfo)
+                    -> Bool -> Bool
+                    -> D.DescriptorProto -> DescriptorInfo
+makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup unknownField
+                    (D.DescriptorProto.DescriptorProto
+                      { D.DescriptorProto.name = Just rawName
+                      , D.DescriptorProto.field = rawFields
+                      , D.DescriptorProto.extension = rawKeys
+                      , D.DescriptorProto.extension_range = extension_range })
+    = let di = DescriptorInfo protoName (pnPath protoName) msgIsGroup
+                              fieldInfos keyInfos extRangeList (getKnownKeys protoName)
+                              unknownField
+      in di -- trace (toString rawName ++ "\n" ++ show di ++ "\n\n") $ di
+  where protoName = toHaskell reMap $ fqAppend parent [IName rawName]
+        fieldInfos = fmap (toFieldInfo' reMap (protobufName protoName)) rawFields
+        keyInfos = fmap (\f -> (keyExtendee' reMap f,toFieldInfo' reMap (protobufName protoName) f)) rawKeys
+        extRangeList = concatMap check unchecked
+          where check x@(lo,hi) | hi < lo = []
+                                | hi<19000 || 19999<lo  = [x]
+                                | otherwise = concatMap check [(lo,18999),(20000,hi)]
+                unchecked = F.foldr ((:) . extToPair) [] extension_range
+                extToPair (D.DescriptorProto.ExtensionRange
+                            { D.DescriptorProto.ExtensionRange.start = mStart
+                            , D.DescriptorProto.ExtensionRange.end = mEnd }) =
+                  (maybe minBound FieldId mStart, maybe maxBound (FieldId . pred) mEnd)
+makeDescriptorInfo' _ _ _ _ _ _ = imp $ "makeDescriptorInfo: missing name"
+
+toFieldInfo' :: ReMap -> FIName Utf8 -> D.FieldDescriptorProto -> FieldInfo
+toFieldInfo' reMap parent
+             f@(D.FieldDescriptorProto.FieldDescriptorProto
+                 { D.FieldDescriptorProto.name = Just name
+                 , D.FieldDescriptorProto.number = Just number
+                 , D.FieldDescriptorProto.label = Just label
+                 , D.FieldDescriptorProto.type' = Just type'
+                 , D.FieldDescriptorProto.type_name = mayTypeName
+                 , D.FieldDescriptorProto.default_value = mayRawDef })
+    = fieldInfo
+  where mayDef = parseDefaultValue f
+        fieldInfo = let (ProtoName x a b c) = toHaskell reMap $ fqAppend parent [IName name]
+                        protoFName = ProtoFName x a b (mangle c)
+                        fieldId = (FieldId (fromIntegral number))
+                        fieldType = (FieldType (fromEnum type'))
+                        wt = toWireTag fieldId fieldType
+                        wtLength = size'Varint (getWireTag wt)
+                    in FieldInfo protoFName
+                                 fieldId
+                                 wt
+                                 wtLength
+                                 (label == LABEL_REQUIRED)
+                                 (label == LABEL_REPEATED)
+                                 fieldType
+                                 (fmap (toHaskell reMap . FIName) mayTypeName)
+                                 (fmap utf8 mayRawDef)
+                                 mayDef
+toFieldInfo' _ _ f = imp $ "toFieldInfo: missing info in "++show f
+
+collectedGroups :: D.DescriptorProto -> [Utf8] 
+collectedGroups = catMaybes
+                . map D.FieldDescriptorProto.type_name
+                . filter (\f -> D.FieldDescriptorProto.type' f == Just TYPE_GROUP) 
+                . F.toList
+                . D.DescriptorProto.field
+
+{-
+toProtoName :: String -> Utf8 -> ProtoName
+toProtoName prefix rawName =
+  case splitMod rawName of
+    Left (m,b) -> ProtoName xxx prefix (toString m) (toString b)
+    Right b    -> ProtoName xxx prefix ""           (toString b)
+
+
 makeProtoInfo :: Bool -> String -> [String] -> D.FileDescriptorProto -> ProtoInfo
 makeProtoInfo unknownField prefix names
-              fdp@(D.FileDescriptorProto
-                    { D.FileDescriptorProto.name = Just rawName })
+              fdp@(D.FileDescriptorProto { D.FileDescriptorProto.name = Just rawName })
      = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allKeys where
   protoName = case names of
                 [] -> ProtoName xxx prefix "" "" -- after this the value of names cannot be []
@@ -131,13 +263,6 @@ makeProtoInfo unknownField prefix names
                          (F.toList (D.DescriptorProto.enum_type msg))
     where nested = concatMap processENM (F.toList (D.DescriptorProto.nested_type msg))
 makeProtoInfo unknownField prefix names fdp = imp $ "no name in fdp passed to makeProtoInfo: " ++ show (unknownField,prefix,names,fdp)
-
-collectedGroups :: D.DescriptorProto -> [Utf8] 
-collectedGroups = catMaybes
-                . map D.FieldDescriptorProto.type_name
-                . filter (\f -> D.FieldDescriptorProto.type' f == Just TYPE_GROUP) 
-                . F.toList
-                . D.DescriptorProto.field
 
 makeEnumInfo :: String -> D.EnumDescriptorProto -> EnumInfo
 makeEnumInfo prefix e@(D.EnumDescriptorProto.EnumDescriptorProto
@@ -180,7 +305,7 @@ makeDescriptorInfo getKnownKeys prefix msgIsGroup unknownField
                 extToPair (D.DescriptorProto.ExtensionRange
                             { D.DescriptorProto.ExtensionRange.start = start
                             , D.DescriptorProto.ExtensionRange.end = end }) =
-                  (maybe minBound FieldId start, maybe maxBound FieldId end)
+                  (maybe minBound FieldId start, maybe maxBound (FieldId . pred) end)
 makeDescriptorInfo _ prefix msgIsGroup unknownField d =
   imp $ "No name passed in dp passed to makeDescriptorInfo: "++show (prefix,msgIsGroup,unknownField,d)
 
@@ -218,7 +343,7 @@ toFieldInfo (ProtoName xxx prefix modName parent)
                                  (fmap utf8 mayRawDef)
                                  mayDef
 toFieldInfo pn f = imp $ "Not enough information defined in field passed to toFieldInfo: "++show(pn,f)
-
+-}
 -- "Nothing" means no value specified
 -- A failure to parse a provided value will result in an error at the moment
 parseDefaultValue :: D.FieldDescriptorProto -> Maybe HsDefault

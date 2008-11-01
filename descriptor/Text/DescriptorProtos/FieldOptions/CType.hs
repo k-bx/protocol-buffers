@@ -38,6 +38,6 @@ instance P'.MessageAPI msg' (msg' -> CType) CType where
 instance P'.ReflectEnum CType where
   reflectEnum = [(1, "CORD", CORD), (2, "STRING_PIECE", STRING_PIECE)]
   reflectEnumInfo _
-    = P'.EnumInfo (P'.ProtoName (P'.Utf8 (P'.pack "MakeReflections.xxx")) "Text" "DescriptorProtos.FieldOptions" "CType")
+    = P'.EnumInfo (P'.makePNF (P'.pack "MakeReflections.xxx") ["Text"] ["DescriptorProtos","FieldOptions"] "CType")
         ["Text", "DescriptorProtos", "FieldOptions", "CType.hs"]
         [(1, "CORD"), (2, "STRING_PIECE")]

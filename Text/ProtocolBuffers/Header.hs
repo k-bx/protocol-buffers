@@ -11,6 +11,7 @@ module Text.ProtocolBuffers.Header
     , module Data.Typeable
     , module Text.ProtocolBuffers.Basic
     , module Text.ProtocolBuffers.Extensions
+    , module Text.ProtocolBuffers.Identifiers
     , module Text.ProtocolBuffers.Reflections
     , module Text.ProtocolBuffers.Unknown
     , module Text.ProtocolBuffers.WireMessage
@@ -28,9 +29,10 @@ import Text.ProtocolBuffers.Default()
 import Text.ProtocolBuffers.Extensions
   ( wireSizeExtField,wirePutExtField,loadExtension,getMessageExt,getBareMessageExt
   , GPB,Key(..),ExtField,ExtendMessage(..),MessageAPI(..),ExtKey(wireGetKey) )
+import Text.ProtocolBuffers.Identifiers(FIName(..),MName(..),FName(..))
 import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections
-  ( ReflectDescriptor(..),ReflectEnum(..),EnumInfo(..),ProtoName(..),DescriptorInfo(extRanges) )
+  ( ReflectDescriptor(..),ReflectEnum(..),EnumInfo(..),ProtoName(..),DescriptorInfo(extRanges),makePNF )
 import Text.ProtocolBuffers.Unknown
   ( UnknownField,UnknownMessage(..),wireSizeUnknownField,wirePutUnknownField,loadUnknown )
 import Text.ProtocolBuffers.WireMessage
