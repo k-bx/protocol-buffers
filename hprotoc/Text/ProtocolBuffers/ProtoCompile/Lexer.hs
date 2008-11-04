@@ -150,7 +150,7 @@ alex_check = listArray (0,1938) [-1,9,10,11,12,13,9,10,11,12,13,9,10,11,12,13,42
 alex_deflt :: Array Int Int
 alex_deflt = listArray (0,74) [74,-1,-1,-1,-1,13,7,7,9,9,13,14,13,13,13,-1,-1,-1,-1,-1,21,-1,-1,-1,-1,26,-1,-1,-1,30,-1,-1,-1,-1,-1,-1,-1,38,-1,-1,43,55,43,43,43,43,43,43,43,43,43,43,43,43,55,55,55,55,55,55,55,55,55,55,55,55,-1,-1,-1,-1,-1,-1,-1,-1,-1]
 
-alex_accept = listArray (0::Int,74) [[],[],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[],[],[],[],[],[(AlexAcc (alex_action_13))],[(AlexAccPred  (alex_action_2) (alexRightContext 20)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_6))],[(AlexAccPred  (alex_action_2) (alexRightContext 20)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_6))],[(AlexAccPred  (alex_action_2) (alexRightContext 20)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_6))],[(AlexAcc (alex_action_13))],[],[(AlexAccSkip)],[(AlexAccPred  (alex_action_3) (alexRightContext 25)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_7))],[(AlexAccPred  (alex_action_3) (alexRightContext 25)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_7))],[(AlexAccPred  (alex_action_3) (alexRightContext 25)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_7))],[],[(AlexAccSkip)],[(AlexAccPred  (alex_action_4) (alexRightContext 29)),(AlexAcc (alex_action_8))],[],[],[(AlexAccSkip)],[(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_9))],[(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_9))],[(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_9))],[],[],[],[],[(AlexAccSkip)],[(AlexAcc (alex_action_10))],[(AlexAcc (alex_action_10))],[(AlexAcc (alex_action_10))],[(AlexAcc (alex_action_13))],[],[],[],[],[],[],[],[],[],[],[],[(AlexAcc (alex_action_13))],[],[],[],[],[],[],[],[],[],[],[],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_13))],[],[(AlexAcc (alex_action_12))],[(AlexAcc (alex_action_13))]]
+alex_accept = listArray (0::Int,74) [[],[],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[(AlexAccSkip)],[],[],[],[],[],[(AlexAcc (alex_action_13))],[(AlexAccPred  (alex_action_2) (alexRightContext 20)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_6))],[(AlexAccPred  (alex_action_2) (alexRightContext 20)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_6))],[(AlexAccPred  (alex_action_2) (alexRightContext 20)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_6))],[(AlexAcc (alex_action_13))],[],[(AlexAccSkip)],[(AlexAccPred  (alex_action_3) (alexRightContext 25)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_7))],[(AlexAccPred  (alex_action_3) (alexRightContext 25)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_7))],[(AlexAccPred  (alex_action_3) (alexRightContext 25)),(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_7))],[],[(AlexAccSkip)],[(AlexAccPred  (alex_action_4) (alexRightContext 29)),(AlexAcc (alex_action_8))],[],[],[(AlexAccSkip)],[(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_9))],[(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_9))],[(AlexAccPred  (alex_action_5) (alexRightContext 37)),(AlexAcc (alex_action_9))],[],[],[],[],[(AlexAccSkip)],[(AlexAcc (alex_action_10))],[(AlexAcc (alex_action_10))],[(AlexAcc (alex_action_10))],[(AlexAcc (alex_action_13))],[],[],[],[],[],[],[],[],[],[],[],[(AlexAcc (alex_action_13))],[],[],[],[],[],[],[],[],[],[],[],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_11))],[(AlexAcc (alex_action_12))],[],[(AlexAcc (alex_action_12))],[(AlexAcc (alex_action_13))]]
 {-# LINE 54 "Text/ProtocolBuffers/ProtoCompile/Lexer.x" #-}
 
 line :: AlexPosn -> Int
@@ -160,7 +160,7 @@ line (AlexPn _byte lineNum _col) = lineNum
 data Lexed = L_Integer !Int !Integer
            | L_Double !Int !Double
            | L_Name !Int !L.ByteString
-           | L_String !Int !L.ByteString
+           | L_String !Int !L.ByteString !L.ByteString
            | L !Int !Char
            | L_Error !Int !String
   deriving (Show,Eq)
@@ -170,7 +170,7 @@ getLinePos x = case x of
                  L_Integer i _ -> i
                  L_Double  i _ -> i
                  L_Name    i _ -> i
-                 L_String  i _ -> i
+                 L_String  i _ _ -> i
                  L         i _ -> i
                  L_Error   i _ -> i
 
@@ -195,10 +195,10 @@ parseHex pos s = maybe (errAt pos "Impossible? parseHex failed")
 parseDouble pos s = maybe (errAt pos "Impossible? parseDouble failed")
                           (L_Double (line pos)) $ mayRead (readSigned readFloat) (ByteString.unpack s)
 -- The sDecode of the string contents may fail
-parseStr pos s = either (errAt pos) (L_String (line pos) . L.pack) 
-               . sDecode . ByteString.unpack
-               . ByteString.init . ByteString.tail
-               $ s
+parseStr pos s = let middle = ByteString.init . ByteString.tail $ s
+                 in either (errAt pos) (L_String (line pos) middle . L.pack)
+                    . sDecode . ByteString.unpack $ middle
+
 parseName pos s = L_Name (line pos) s
 parseChar pos s = L (line pos) (ByteString.head s)
 

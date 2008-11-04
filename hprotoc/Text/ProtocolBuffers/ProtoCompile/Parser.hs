@@ -66,6 +66,8 @@ import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName,a
 import Text.ParserCombinators.Parsec.Pos(newPos)
 import Data.Word(Word8)
 
+import Debug.Trace(trace)
+
 default ()
 
 type P = GenParser Lexed
@@ -84,7 +86,7 @@ utf8ToString :: Utf8 -> String
 utf8ToString = U.toString . utf8
 
 initState :: String -> D.FileDescriptorProto
-initState filename = defaultValue {D.FileDescriptorProto.name=utf8FromString (takeFileName filename)}
+initState filename = defaultValue {D.FileDescriptorProto.name=utf8FromString filename}
 
 {-# INLINE mayRead #-}
 mayRead :: ReadS a -> String -> Maybe a
@@ -110,14 +112,15 @@ pName :: ByteString -> P s Utf8
 pName name = tok (\l-> case l of L_Name _ x -> if (x==name) then return (Utf8 x) else Nothing
                                  _ -> Nothing) <?> ("name "++show (U.toString name))
 
-bsLit :: P s ByteString
-bsLit = tok (\l-> case l of L_String _ x -> return x
+
+bsLit :: P s (ByteString,ByteString)
+bsLit = tok (\l-> case l of L_String _ raw x -> trace (show (raw,x)) $ return (raw,x)
                             _ -> Nothing) <?> "quoted bytes literal"
 
 strLit :: P s Utf8
-strLit = tok (\l-> case l of L_String _ x -> case isValidUTF8 x of
-                                               Nothing -> return (Utf8 x)
-                                               Just n -> fail $ "bad utf-8 byte in string literal position # "++show n
+strLit = tok (\l-> case l of L_String _ _ x -> case isValidUTF8 x of
+                                                 Nothing -> return (Utf8 x)
+                                                 Just n -> fail $ "bad utf-8 byte in string literal position # "++show n
                              _ -> fail "quoted string literal (UTF-8)")
 
 intLit,fieldInt,enumInt :: (Num a) => P s a
@@ -247,7 +250,7 @@ pUnValue uno = tok storeLexed where
                              | otherwise =
     return $ uno { D.UninterpretedOption.negative_int_value = Just (fromInteger i) }
   storeLexed (L_Double _ d) = return $ uno {D.UninterpretedOption.double_value = Just d }
-  storeLexed (L_String _ bs) = return $ uno {D.UninterpretedOption.string_value = Just bs }
+  storeLexed (L_String _ bs _) = return $ uno {D.UninterpretedOption.string_value = Just bs }
   storeLexed _ = Nothing
 
 makeUninterpetedOption :: [(Utf8,Bool)] -> D.UninterpretedOption
@@ -364,9 +367,10 @@ constant (Just t) =
                             (fail $ "default floating point literal "++show d++" is out of range for type "++show t)
                        return' (U.fromString . show $ d)
     TYPE_BOOL    -> boolLit >>= \b -> return' $ if b then true else false
-    TYPE_STRING  -> bsLit >>= \s -> case isValidUTF8 s of Nothing -> (return s) 
-                                                          Just errPos -> fail $ "default string literal is invalid UTF-8 at byte # "++show errPos
-    TYPE_BYTES   -> bsLit
+    TYPE_STRING  -> bsLit >>= \(_raw,s) -> case isValidUTF8 s of
+                                             Nothing -> (return s)
+                                             Just errPos -> fail $ "default string literal is invalid UTF-8 at byte # "++show errPos
+    TYPE_BYTES   -> bsLit >>= \(raw,_s) -> return raw
     TYPE_GROUP   -> unexpected $ "cannot have a default for field of "++show t
     TYPE_MESSAGE -> unexpected $ "cannot have a default for field of "++show t
     TYPE_ENUM    -> fmap utf8 ident1 -- IMPOSSIBLE : SHOULD HAVE HAD Maybe Type PARAMETER match Nothing

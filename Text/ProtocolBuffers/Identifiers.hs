@@ -40,6 +40,7 @@ import Data.Set(Set)
 import qualified Data.Set as S
 import Text.ProtocolBuffers.Basic
 
+import Text.ParserCombinators.ReadP as R
 -- basic utilities to export
 
 unull :: Utf8 -> Bool
@@ -52,24 +53,41 @@ fromString :: String -> Utf8
 fromString = Utf8 . U.fromString
 
 -- | Contains one identifier name
-newtype IName a = IName {iName::a} deriving (Data,Typeable,Show,Read,Eq,Ord)
+newtype IName a = IName {iName::a} deriving (Data,Typeable,Eq,Ord)
 -- | Contains one module name, non-empty
-newtype MName a = MName {mName::a} deriving (Data,Typeable,Show,Read,Eq,Ord)
+newtype MName a = MName {mName::a} deriving (Data,Typeable,Eq,Ord)
 -- | Contains one field name, non-empty
-newtype FName a = FName {fName::a} deriving (Data,Typeable,Show,Read,Eq,Ord)
+newtype FName a = FName {fName::a} deriving (Data,Typeable,Eq,Ord)
 -- | '.' separated identifier which may or may start with a dot.  There
 -- are never two or more '.'s in a row.  There is always at least one identifier.
-newtype DIName a = DIName {diName :: a} deriving (Data,Typeable,Show,Read,Eq,Ord)
+newtype DIName a = DIName {diName :: a} deriving (Data,Typeable,Eq,Ord)
 -- | Fully qualified identifier: repeated ('.' then identifier)
-newtype FIName a = FIName {fiName::a} deriving (Data,Typeable,Show,Read,Eq,Ord)
+newtype FIName a = FIName {fiName::a} deriving (Data,Typeable,Eq,Ord)
 -- | Full Haskell module name: MNames separated by '.', ending with a module
-newtype FMName a = FMName {fmName::a} deriving (Data,Typeable,Show,Read,Eq,Ord)
+newtype FMName a = FMName {fmName::a} deriving (Data,Typeable,Eq,Ord)
 -- | Full Haskell field name: MNames separated by '.', ending with a field
-newtype FFName a = FFName {ffName::a} deriving (Data,Typeable,Show,Read,Eq,Ord)
+newtype FFName a = FFName {ffName::a} deriving (Data,Typeable,Eq,Ord)
 -- | Parsed Haskell name ending with MName.  Good contructor to use.
-data PMName a = PMName [MName a] (MName a) deriving (Data,Typeable,Show,Read,Eq,Ord)
+data PMName a = PMName [MName a] (MName a) deriving (Show,Data,Typeable,Read,Eq,Ord)
 -- | Parsed Haskell name ending with FName.  Good constructor to use.
-data PFName a = PFName [MName a] (FName a) deriving (Data,Typeable,Show,Read,Eq,Ord)
+data PFName a = PFName [MName a] (FName a) deriving (Show,Data,Typeable,Read,Eq,Ord)
+
+instance Read a => Read (IName a) where readsPrec d xs = readP_to_S (fmap IName (between (string "(IName ") (char ')') (readS_to_P (readsPrec d)))) xs
+instance Read a => Read (MName a) where readsPrec d xs = readP_to_S (fmap MName (between (string "(MName ") (char ')') (readS_to_P (readsPrec d)))) xs
+instance Read a => Read (FName a) where readsPrec d xs = readP_to_S (fmap FName (between (string "(FName ") (char ')') (readS_to_P (readsPrec d)))) xs
+instance Read a => Read (DIName a) where readsPrec d xs = readP_to_S (fmap DIName (between (string "(DIName ") (char ')') (readS_to_P (readsPrec d)))) xs
+instance Read a => Read (FIName a) where readsPrec d xs = readP_to_S (fmap FIName (between (string "(FIName ") (char ')') (readS_to_P (readsPrec d)))) xs
+instance Read a => Read (FFName a) where readsPrec d xs = readP_to_S (fmap FFName (between (string "(FMName ") (char ')') (readS_to_P (readsPrec d)))) xs
+instance Read a => Read (FMName a) where readsPrec d xs = readP_to_S (fmap FMName (between (string "(FMName ") (char ')') (readS_to_P (readsPrec d)))) xs
+
+instance Show a => Show (IName a) where showsPrec d (IName a) = ("(IName "++) . showsPrec d a . (')':)
+instance Show a => Show (MName a) where showsPrec d (MName a) = ("(MName "++) . showsPrec d a . (')':)
+instance Show a => Show (FName a) where showsPrec d (FName a) = ("(FName "++) . showsPrec d a . (')':)
+instance Show a => Show (DIName a) where showsPrec d (DIName a) = ("(DIName "++) . showsPrec d a . (')':)
+instance Show a => Show (FIName a) where showsPrec d (FIName a) = ("(FIName "++) . showsPrec d a . (')':)
+instance Show a => Show (FMName a) where showsPrec d (FMName a) = ("(FMName "++) . showsPrec d a . (')':)
+instance Show a => Show (FFName a) where showsPrec d (FFName a) = ("(FFName "++) . showsPrec d a . (')':)
+
 
 -- | This is used to abstract over Utf8 and String.  The important
 -- entry point is 'validDI'.
@@ -141,7 +159,7 @@ checkDIString xs | ('.':ys) <- xs = fmap ((,) True) $ parts id (span ('.'/=) ys)
                  | otherwise = fmap ((,) False) $ parts id (span ('.'/=) xs)
  where parts _f ("","") = Left $ "Invalid identifier because it ends with a period: "++show xs
        parts _f ("",_)  = Left $ "Invalid identifier because is contains two periods in a row: "++show xs
-       parts f  (_,"")  = Right (f [])
+       parts f  (a,"")  = Right (f [IName a])
        parts f  (a,b)   = parts (f . (IName a:)) (span ('.'/=) (tail b))
 
 -- | Right (True,_) means the input is a FIName.
@@ -158,9 +176,9 @@ checkDIUtf8 s@(Utf8 xs) =
  where parts f (a,b) = case (LC.null a,LC.null b) of
                          (True,True) -> Left $ "Invalid identifier because it ends with a period: "++show (toString s)
                          (True,_)    -> Left $ "Invalid identifier because is contains two periods in a row: "++show (toString s)
-                         (_,True)    -> Right (f [])
+                         (_,True)    -> Right (f [IName (Utf8 a)])
                          _           -> parts (f . (IName (Utf8 a):)) (U.span ('.'/=) (U.drop 1 b))
-
+ 
 -- | The 'mangle' transformation has instances for several combiantions
 -- of input and output.  These allow one to construct the Haskell types
 -- of MName/FMName/PMName and FName/FFName/PFName out of the protobuf
@@ -250,10 +268,10 @@ validDIString xs =
     else Nothing
 
 validISet :: Set Char
-validISet = S.fromDistinctAscList "ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+validISet = S.fromDistinctAscList "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 
 validDISet :: Set Char
-validDISet = S.fromDistinctAscList ".ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+validDISet = S.fromDistinctAscList ".0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 
 instance Dotted Utf8 where
   uncons x = case U.uncons (utf8 x) of
@@ -298,10 +316,18 @@ fixLow i@(x:xs) | i `S.member` reserved = i ++ "'"
                                         in if i' `S.member` reserved then i' ++ "'" else i'
                 | otherwise = i
 
+-- | 'reserved' is a set of strings which are Haskell keywords and
+-- should not be valid field names.
+--
+-- I do not protect these values:
+-- "mdo","foreign","rec","proc" ( GHC manual section 8.3.16 )
+-- because I do not anticipate using these extensions in the generated
+-- Haskell code.
 reserved :: Set String
 reserved = S.fromDistinctAscList
   ["_"
-  ,"case","class","data","default","deriving","do","else","foreign"
+  ,"case","class","data","default","deriving","do","else"
+  ,"forall" {- extension keyword -}
   ,"if","import","in","infix","infixl","infixr","instance"
-  ,"let","mdo","module","newtype","of","then","type","where"
+  ,"let","module","newtype","of","then","type","where"
   ]

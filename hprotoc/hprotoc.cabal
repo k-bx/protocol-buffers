@@ -47,15 +47,16 @@ Executable hprotoc
                    Text.ProtocolBuffers.ProtoCompile.Resolve
   extensions:      DeriveDataTypeable,
                    EmptyDataDecls,
+                   FlexibleContexts 
                    FlexibleInstances,
+                   FunctionalDependencies,
                    GADTs,
                    GeneralizedNewtypeDeriving,
                    MagicHash,
+                   MultiParamTypeClasses,
                    PatternGuards,
                    RankNTypes,
+                   RecursiveDo,
                    ScopedTypeVariables,
-                   TypeSynonymInstances,
-                   MultiParamTypeClasses,
-                   FunctionalDependencies,
-                   RecursiveDo
+                   TypeSynonymInstances
 --                   PatternSignatures

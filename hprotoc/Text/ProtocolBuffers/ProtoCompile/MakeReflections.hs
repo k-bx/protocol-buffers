@@ -50,7 +50,7 @@ import qualified Data.Sequence as Seq(fromList,empty,singleton,null)
 import Numeric(readHex,readOct,readDec)
 import Data.Monoid(mconcat,mappend)
 import qualified Data.Map as M(fromListWith,lookup,keys)
-import Data.Maybe(fromMaybe,catMaybes)
+import Data.Maybe(fromMaybe,catMaybes,fromJust)
 import System.FilePath
 
 --import Debug.Trace (trace)
@@ -120,23 +120,25 @@ makeProtoInfo unknownField (NameMap (packageName,hPrefix,hParent) reMap)
                 _ -> ProtoName packageName hPrefix (init hParent) (last hParent)
   keyInfos = Seq.fromList . map (\f -> (keyExtendee' reMap f,toFieldInfo' reMap packageName f))
              . F.toList . D.FileDescriptorProto.extension $ fdp
-  allMessages = concatMap (processMSG False) (F.toList $ D.FileDescriptorProto.message_type fdp)
+  allMessages = concatMap (processMSG packageName False) (F.toList $ D.FileDescriptorProto.message_type fdp)
   allEnums = map (makeEnumInfo' reMap packageName) (F.toList $ D.FileDescriptorProto.enum_type fdp) 
-             ++ concatMap processENM (F.toList $ D.FileDescriptorProto.message_type fdp)
+             ++ concatMap (processENM packageName) (F.toList $ D.FileDescriptorProto.message_type fdp)
   allKeys = M.fromListWith mappend . map (\(k,a) -> (k,Seq.singleton a))
             . F.toList . mconcat $ keyInfos : map keys allMessages
-  processMSG msgIsGroup msg = 
+  processMSG parent msgIsGroup msg = 
     let getKnownKeys protoName' = fromMaybe Seq.empty (M.lookup protoName' allKeys)
         groups = collectedGroups msg
         checkGroup x = elem (fromMaybe (imp $ "no message name in makeProtoInfo.processMSG.checkGroup:\n"++show msg)
                                        (D.DescriptorProto.name x))
                             groups
-    in makeDescriptorInfo' reMap packageName getKnownKeys msgIsGroup unknownField msg
-       : concatMap (\x -> processMSG (checkGroup x) x)
+        parent' = fqAppend parent [IName (fromJust (D.DescriptorProto.name msg))]
+    in makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup unknownField msg
+       : concatMap (\x -> processMSG parent' (checkGroup x) x)
                    (F.toList (D.DescriptorProto.nested_type msg))
-  processENM msg = foldr ((:) . makeEnumInfo' reMap packageName) nested
-                         (F.toList (D.DescriptorProto.enum_type msg))
-    where nested = concatMap processENM (F.toList (D.DescriptorProto.nested_type msg))
+  processENM parent msg = foldr ((:) . makeEnumInfo' reMap parent') nested
+                          (F.toList (D.DescriptorProto.enum_type msg))
+    where parent' = fqAppend parent [IName (fromJust (D.DescriptorProto.name msg))]
+          nested = concatMap (processENM parent') (F.toList (D.DescriptorProto.nested_type msg))
 makeProtoInfo _ _ _ = imp $ "makeProtoInfo: missing name or package"
 
 makeEnumInfo' :: ReMap -> FIName Utf8 -> D.EnumDescriptorProto -> EnumInfo

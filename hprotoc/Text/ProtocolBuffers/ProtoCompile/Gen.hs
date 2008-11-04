@@ -220,7 +220,7 @@ instanceReflectEnum ei
         [ inst "reflectEnum" [] ascList
         , inst "reflectEnumInfo" [ HsPWildCard ] ei' ]
   where (ProtoName xxx a b c) = enumName ei
-        xxx'Exp = HsParen (pvar "Utf8" $$ (HsParen $ pvar "pack" $$ HsLit (HsString (LC.unpack (utf8 (fiName xxx))))))
+        xxx'Exp = HsParen (HsParen $ pvar "pack" $$ HsLit (HsString (LC.unpack (utf8 (fiName xxx)))))
         values = enumValues ei
         ascList,ei',protoNameExp :: HsExp
         ascList = HsList (map one values)
@@ -229,7 +229,8 @@ instanceReflectEnum ei
                                                         ,HsList $ map (HsLit . HsString) (enumFilePath ei)
                                                         ,HsList (map two values)]
           where two (v,ns) = HsTuple [litInt (getEnumCode v),HsLit (HsString ns)]
-        protoNameExp = HsParen $ foldl' HsApp (HsCon (private "ProtoName")) . (xxx'Exp :) . map (HsLit . HsString . mName) $ a++b++[c]
+        protoNameExp = HsParen $ foldl' HsApp (HsVar (private "makePNF")) [ xxx'Exp, mList a, mList b, HsLit (HsString (mName c)) ]
+          where mList = HsList . map (HsLit . HsString . mName)
 
 hasExt :: DescriptorInfo -> Bool
 hasExt di = not (null (extRanges di))

@@ -24,13 +24,28 @@ import Data.Typeable(Typeable(..))
 import Data.Word(Word32,Word64)
 import Text.ProtocolBuffers.Get(Get)
 
+import Data.ByteString.Lazy.UTF8 as U (toString,fromString)
+
 -- Num instances are derived below for the purpose of getting fromInteger for case matching
 
 -- | 'Utf8' is used to mark 'ByteString' values that (should) contain
 -- valud utf8 encoded strings.  This type is used to represent
 -- 'TYPE_STRING' values.
 newtype Utf8 = Utf8 {utf8 :: ByteString}
-  deriving (Read,Show,Data,Typeable,Eq,Ord)
+  deriving (Data,Typeable,Eq,Ord)
+
+instance Read Utf8 where
+  readsPrec d xs =
+    let r :: Int -> ReadS String
+        r = readsPrec
+        f :: (String,String) -> (Utf8,String)
+        f (a,b) = (Utf8 (U.fromString a),b)
+    in map f . r d $ xs
+
+instance Show Utf8 where
+  showsPrec d (Utf8 bs) = let s :: Int -> String -> ShowS
+                              s = showsPrec
+                          in s d (U.toString bs)
 
 instance Monoid Utf8 where
   mempty = Utf8 mempty

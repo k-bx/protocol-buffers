@@ -79,7 +79,7 @@ ishow :: Show a => a -> String
 ishow = indent . show
 
 errMsg :: String -> String
-errMsg s = "Text.ProtocolBuffers.ResolveM fatal error encountered, message:\n"++indent s
+errMsg s = "Text.ProtocolBuffers.Resolve fatal error encountered, message:\n"++indent s
 
 err :: forall b. String -> b
 err = error . errMsg 
@@ -88,12 +88,15 @@ throw :: (Error e, MonadError e m) =>  String -> m a
 throw s = throwError (strMsg (errMsg s))
 
 -- | 'annErr' allows 
-annErr :: (Show e, Error e,MonadError e m) => String -> m a -> m a
-annErr s act = catchError act (\e -> throwError (strMsg ("annErr: "++s++'\n':ishow e)))
+-- annErr :: (Show e, Error e,MonadError e m) => String -> m a -> m a
+-- annErr s act = catchError act (\e -> throwError (strMsg ("annErr: "++s++'\n':ishow e)))
+
+annErr :: (MonadError String m) => String -> m a -> m a
+annErr s act = catchError act (\e -> throwError ("annErr: "++s++'\n':indent e))
 
 getJust :: (Error e,MonadError e m, Typeable a) => String -> Maybe a -> m a
 {-#  INLINE getJust #-}
-getJust s ma@Nothing = throw $ "Impossible? Expected Just of type "++show (typeOf ma)++"but got nothing:\n"++indent s
+getJust s ma@Nothing = throw $ "Impossible? Expected Just of type "++show (typeOf ma)++" but got nothing:\n"++indent s
 getJust _s (Just a) = return a
 
 -- insert '.' between each item and convert to utf8 bytes
@@ -187,7 +190,7 @@ data Entity = E'Message { eName :: [IName String], validExtensions :: [(FieldId,
                                                  , mVal :: Maybe (Either ErrStr Entity) {- E'Message,Group,Enum -} }
             | E'Enum    { eName :: [IName String], eVals :: Map (IName Utf8) Int32 }
             | E'Service { eName :: [IName String], mVals :: EMap {- E'Method -} }
-            | E'Method  { eName :: [IName String], eMsgIn,_eMsgOut :: Maybe (Either ErrStr Entity) {- E'Message -} }
+            | E'Method  { eName :: [IName String], eMsgIn,eMsgOut :: Maybe (Either ErrStr Entity) {- E'Message -} }
             | E'Error String [Entity]
   deriving (Show)
 
@@ -269,11 +272,12 @@ resolveEnv nameU envIn = do
   let mResult = if isGlobal then lookupEnv (map iToString xs) (toGlobal envIn)
                             else lookupEnv (map iToString xs) envIn
   case mResult of
-    Nothing -> throw . unlines $ [ "Could not lookup "++show (nameU,(isGlobal,xs))
+    Nothing -> throw . unlines $ [ "resolveEnv: Could not lookup "++show nameU
+                                 , "which parses as "++show (isGlobal,xs)
                                  , "in environment: "++(whereEnv envIn)
                                  , "allowed: "++show (allowed envIn)]
     Just e@(E'Error {}) -> throw (show e)
-    Just e -> return e
+    Just e -> trace ("resolveEnv: "++show (nameU,fqName e)) (return e)
 
 resolveRE :: Utf8 -> RE Entity
 resolveRE nameU = lift . (resolveEnv nameU) =<< ask
@@ -421,7 +425,8 @@ mrmName s f a = do
       template' = template { protobufName = fqSelf
                            , parentModule = parentModule template ++ [mSelf] }
   tell [(fqSelf,self)]
-  return template'
+  let toshow = (fqSelf,self)
+  trace ("mrmName: "++show toshow) (return template')
 
 -- XXX really need to clean this up once this module compiles!
 getNames :: String -> (a -> Maybe Utf8) -> a -> SE (IName String,[IName String])
@@ -429,8 +434,9 @@ getNames errorMessage accessor record = do
   parent <- asks my'Parent
   iSelf <- getJust errorMessage (validI =<< accessor record)
   let names@(n:ns) = parent ++ [ iToString iSelf ]
-      key = fiFromString . joinDot $ names -- use (protobufName template?) XXX or loop?
-  return (iToString iSelf,names)
+  let ans = (iToString iSelf,names)
+      toshow = (iSelf,names,parent)
+  trace ("getNames: " ++ show toshow) (return ans)
 {-
 descend :: [IName String] -> Entity -> SE a -> SE a
 descend names entity act = local mutate act
@@ -472,12 +478,16 @@ makeTopLevel :: D.FileDescriptorProto -> [IName String] -> [TopLevel] -> Either 
 makeTopLevel fdp packageName imports = mdo
   filePath <- getJust "makeTopLevel.filePath" (D.FileDescriptorProto.name fdp)
   let sEnv = SEnv packageName global
+      groupNames = mapMaybe validI . map toString . mapMaybe D.FieldDescriptorProto.type_name
+                 . filter (maybe False (TYPE_GROUP ==) . D.FieldDescriptorProto.type') 
+                 $ (F.toList . D.FileDescriptorProto.extension $ fdp)
+      isGroup = (`elem` groupNames)
   global <- runSE sEnv (do
     (bads,children) <- fmap unzip . sequence $
-      [ kids (entityMsg (const False)) (D.FileDescriptorProto.message_type fdp)
-      , kids (entityField True)        (D.FileDescriptorProto.extension    fdp)
-      , kids entityEnum                (D.FileDescriptorProto.enum_type    fdp)
-      , kids entityService             (D.FileDescriptorProto.service      fdp) ]
+      [ kids (entityMsg isGroup) (D.FileDescriptorProto.message_type fdp)
+      , kids (entityField True)  (D.FileDescriptorProto.extension    fdp)
+      , kids entityEnum          (D.FileDescriptorProto.enum_type    fdp)
+      , kids entityService       (D.FileDescriptorProto.service      fdp) ]
     let global' = Global (TopLevel (toString filePath)
                                    packageName
                                    (resolveFDP fdp global')
@@ -507,13 +517,14 @@ entityMsg isGroup dp = annErr ("entityMsg "++show (D.DescriptorProto.name dp)) $
     throwError $ "entityMsg.field.number: There must be duplicate field numbers for "++show names++"\n "++show numbers
   let groupNames = mapMaybe validI . map toString . mapMaybe D.FieldDescriptorProto.type_name
                  . filter (maybe False (TYPE_GROUP ==) . D.FieldDescriptorProto.type') 
-                 . F.toList . D.DescriptorProto.field $ dp
+                 $ (F.toList . D.DescriptorProto.field $ dp) ++ (F.toList . D.DescriptorProto.extension $ dp)
+      isGroup' = (`elem` groupNames)
   entity <- descend names entity $ do
     (bads,children) <- fmap unzip . sequence $
-      [ kids entityEnum                      (D.DescriptorProto.enum_type   dp)
-      , kids (entityField True)              (D.DescriptorProto.extension   dp)
-      , kids (entityField False)             (D.DescriptorProto.field       dp)
-      , kids (entityMsg (`elem` groupNames)) (D.DescriptorProto.nested_type dp) ]
+      [ kids entityEnum           (D.DescriptorProto.enum_type   dp)
+      , kids (entityField True)   (D.DescriptorProto.extension   dp)
+      , kids (entityField False)  (D.DescriptorProto.field       dp)
+      , kids (entityMsg isGroup') (D.DescriptorProto.nested_type dp) ]
     let entity' | isGroup self = E'Group names (M.fromListWithKey unique (concat children))
                 | otherwise = E'Message names (getExtRanges dp) (M.fromListWithKey unique (concat children))
         bad = unlines (concat bads)
@@ -539,9 +550,13 @@ entityEnum :: D.EnumDescriptorProto -> SE (IName String,Entity)
 entityEnum edp@(D.EnumDescriptorProto {D.EnumDescriptorProto.value=vs}) = do
   (self,names) <- getNames "entityEnum.name" D.EnumDescriptorProto.name edp
   values <- mapM (getJust "entityEnum.value.number" . D.EnumValueDescriptorProto.number) . F.toList $ vs
+{- Cannot match protoc if I enable this as a fatal check here
   when (Set.size (Set.fromList values) /= Seq.length vs) $
     throwError $ "entityEnum.value.number: There must be duplicate enum values for "++show names++"\n "++show values
-  valNames <- mapM (getJust "entityEnum.value.name" . (validI =<<) . D.EnumValueDescriptorProto.name) . F.toList $ vs
+-}
+  justNames <- mapM (\v -> getJust ("entityEnum.value.name failed for "++show v) (D.EnumValueDescriptorProto.name v))
+               . F.toList $ vs
+  valNames <- mapM (\n -> getJust ("validI of entityEnum.value.name failed for "++show n) (validI n)) justNames
   let mapping = M.fromList (zip valNames values)
   when (M.size mapping /= Seq.length vs) $
     throwError $ "entityEnum.value.name: There must be duplicate enum names for "++show names++"\n "++show valNames
@@ -639,10 +654,10 @@ fqMethod mdp = do
                                 Nothing -> return mdp
                                 Just resolveIn -> do new <- fmap fqName (lift resolveIn)
                                                      return (mdp {D.MethodDescriptorProto.input_type = Just (fiName new)})
-                      mdp2 <- case eMsgIn entity of
+                      mdp2 <- case eMsgOut entity of
                                 Nothing -> return mdp1
                                 Just resolveIn -> do new <- fmap fqName (lift resolveIn)
-                                                     return (mdp1 {D.MethodDescriptorProto.input_type = Just (fiName new)})
+                                                     return (mdp1 {D.MethodDescriptorProto.output_type = Just (fiName new)})
                       consumeUNO mdp2
     _ -> fqFail "fqMethod.entity: did not resolve to a Method:" mdp entity
 

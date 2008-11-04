@@ -64,12 +64,4 @@ Library
   extensions:      DeriveDataTypeable,
                    EmptyDataDecls,
                    FlexibleInstances,
-                   GADTs,
-                   GeneralizedNewtypeDeriving,
-                   MagicHash,
-                   PatternGuards,
-                   RankNTypes,
-                   ScopedTypeVariables,
-                   TypeSynonymInstances,
-                   MultiParamTypeClasses,
-                   FunctionalDependencies
+                   MultiParamTypeClasses

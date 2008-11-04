@@ -59,7 +59,7 @@ line (AlexPn _byte lineNum _col) = lineNum
 data Lexed = L_Integer !Int !Integer
            | L_Double !Int !Double
            | L_Name !Int !L.ByteString
-           | L_String !Int !L.ByteString
+           | L_String !Int !L.ByteString !L.ByteString
            | L !Int !Char
            | L_Error !Int !String
   deriving (Show,Eq)
@@ -69,7 +69,7 @@ getLinePos x = case x of
                  L_Integer i _ -> i
                  L_Double  i _ -> i
                  L_Name    i _ -> i
-                 L_String  i _ -> i
+                 L_String  i _ _ -> i
                  L         i _ -> i
                  L_Error   i _ -> i
 
@@ -94,10 +94,10 @@ parseHex pos s = maybe (errAt pos "Impossible? parseHex failed")
 parseDouble pos s = maybe (errAt pos "Impossible? parseDouble failed")
                           (L_Double (line pos)) $ mayRead (readSigned readFloat) (ByteString.unpack s)
 -- The sDecode of the string contents may fail
-parseStr pos s = either (errAt pos) (L_String (line pos) . L.pack) 
-               . sDecode . ByteString.unpack
-               . ByteString.init . ByteString.tail
-               $ s
+parseStr pos s = let middle = ByteString.init . ByteString.tail $ s
+                 in either (errAt pos) (L_String (line pos) middle . L.pack)
+                    . sDecode . ByteString.unpack $ middle
+
 parseName pos s = L_Name (line pos) s
 parseChar pos s = L (line pos) (ByteString.head s)
 
