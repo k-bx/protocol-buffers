@@ -45,6 +45,7 @@ import qualified Text.DescriptorProtos.UninterpretedOption.NamePart   as D(NameP
 import qualified Text.DescriptorProtos.UninterpretedOption.NamePart   as D.NamePart(NamePart(..))
 
 import Text.ProtocolBuffers.Basic
+import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Header(ByteString,Int32,Int64,Word32,Word64
                                   ,ReflectEnum(reflectEnumInfo),enumName)
 import Text.ProtocolBuffers.ProtoCompile.Lexer(Lexed(..),alexScanTokens,getLinePos)
@@ -60,7 +61,7 @@ import Data.Maybe(fromMaybe)
 import Data.Sequence((|>))
 import qualified Data.Sequence as Seq(fromList)
 import System.FilePath(takeFileName)
-import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName,anyToken
+import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName,anyToken,lookAhead
                                     ,getInput,setInput,getPosition,setPosition,getState,setState
                                     ,(<?>),(<|>),token,choice,between,eof,unexpected,skipMany)
 import Text.ParserCombinators.Parsec.Pos(newPos)
@@ -114,7 +115,7 @@ pName name = tok (\l-> case l of L_Name _ x -> if (x==name) then return (Utf8 x)
 
 
 bsLit :: P s (ByteString,ByteString)
-bsLit = tok (\l-> case l of L_String _ raw x -> trace (show (raw,x)) $ return (raw,x)
+bsLit = tok (\l-> case l of L_String _ raw x -> return (raw,x)
                             _ -> Nothing) <?> "quoted bytes literal"
 
 strLit :: P s Utf8
@@ -178,9 +179,9 @@ subParser doSub inSub = do
   let out = runParser (setPosition pos1 >> doSub >> getStatus) inSub (sourceName pos1) in1
   case out of
     Left pe -> do
-      context <- replicateM 5 anyToken
+      context <- replicateM 10 anyToken
       fail ( unlines [ "The error message from the nested subParser was:\n"++indent (show pe) 
-                     , "  The next 5 tokens were "++show context ] )
+                     , "  The next 10 tokens were "++show context ] )
     Right (outSub,in2,pos2) -> setInput in2 >> setPosition pos2 >> return outSub
  where getStatus = liftM3 (,,) getState getInput getPosition
        indent = unlines . map (\s -> ' ':' ':s) . lines
@@ -223,16 +224,19 @@ package = pName (U.fromString "package") >> do
 -- "foo.(bar.baz).qux" goes to Left [("foo",False),("bar.baz",True),("qux",False)]
 pOptionE :: P s (Either D.UninterpretedOption String)
 pOptionE = do
-  let pieces = withParens <|> withoutParens False
+-- XXX  peek <- lookAhead (replicateM 5 anyToken)
+--  trace (show "pOptionE lookAhead 5: "++show peek) $ do
+  let pieces = withParens <|> withoutParens
       withParens = do
         part <- between (pChar '(') (pChar ')') ident
         fmap ((part,True) :) ( choice [ pChar '=' >> return []
                                       , pChar '.' >> withParens
-                                      , withoutParens True] )
-      withoutParens stripLeadingDot = do
-        part <- if stripLeadingDot then ident_strip else ident
-        fmap ((part,False):) ( choice [ pChar '=' >> return []
-                                      , pChar '.' >> withParens ] )
+                                      , withoutParens ] )
+      withoutParens = do
+        parts <- fmap split ident
+        let prepend rest = foldr (\part xs -> (part,False):xs) rest parts
+        fmap prepend ( choice [ pChar '=' >> return []
+                              , pChar '.' >> withParens ] )
   nameParts <- pieces
   case nameParts of
     [(optName,False)] -> return (Right (utf8ToString optName))

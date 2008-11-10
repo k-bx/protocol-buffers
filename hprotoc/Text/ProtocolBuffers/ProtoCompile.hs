@@ -13,7 +13,7 @@ import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections(ProtoInfo(..),DescriptorInfo(..),EnumInfo(..))
 
 import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModule,enumModule)
-import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,makeNameMap)
+import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,makeNameMaps)
 import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 
 -- | Version of protocol-buffers.
@@ -122,7 +122,8 @@ run :: Options -> IO ()
 run options = do
   print options
   (env,fdp) <- loadProto (optInclude options) (optProto options)
-  nameMap <- either error return $ makeNameMap (optPrefix options) fdp
+  nameMap <- either error return $ makeNameMaps (optPrefix options) env
+  print "nameMap computed"
   let protoInfo = makeProtoInfo (optUnknownFields options) nameMap fdp
   let produceMSG di = do
         let file = combine (optTarget options) . joinPath . descFilePath $ di

@@ -478,7 +478,7 @@ instance Wire ByteString where
 instance Wire Int where
   wireSize {- TYPE_ENUM    -} 14      x = size'Varint x
   wireSize ft x = wireSizeErr ft x
-  wirePut  {- TYPE_ENUM    -} 14      x = putVarUInt x
+  wirePut  {- TYPE_ENUM    -} 14      x = putVarSInt x
   wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_ENUM    -} 14        = getVarInt
   wireGet ft = wireGetErr ft

@@ -1,4 +1,4 @@
-module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,makeNameMap,Env(..),TopLevel(..),ReMap,NameMap(..)) where
+module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,makeNameMap,makeNameMaps,Env(..),TopLevel(..),ReMap,NameMap(..)) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
@@ -69,7 +69,7 @@ import qualified Data.Map as M
 import qualified Data.Set as Set
 import qualified Data.Traversable as T
 
-import Debug.Trace(trace)
+--import Debug.Trace(trace)
 
 -- Used by err and throw
 indent :: String -> String
@@ -251,6 +251,10 @@ getTL :: Env -> TopLevel
 getTL (Local _entity env) = getTL env
 getTL (Global tl _tls) = tl
 
+getTLS :: Env -> (TopLevel,[TopLevel])
+getTLS (Local _entity env) = getTLS env
+getTLS (Global tl tls) = (tl, tls)
+
 -- | This is used for resolving some UninterpretedOption names
 resolveHere :: Entity -> Utf8 -> RE Entity
 resolveHere parent nameU = do
@@ -277,7 +281,7 @@ resolveEnv nameU envIn = do
                                  , "in environment: "++(whereEnv envIn)
                                  , "allowed: "++show (allowed envIn)]
     Just e@(E'Error {}) -> throw (show e)
-    Just e -> trace ("resolveEnv: "++show (nameU,fqName e)) (return e)
+    Just e -> return e
 
 resolveRE :: Utf8 -> RE Entity
 resolveRE nameU = lift . (resolveEnv nameU) =<< ask
@@ -308,9 +312,16 @@ expectMGE ee@(Right e) = if isMGE e then ee
 expectM :: Either ErrStr Entity -> Either ErrStr Entity
 expectM ee@(Left {}) = ee
 expectM ee@(Right e) = if isMGE e then ee
-                         else Left $ "expectMGE: Name resolution failed to find a Message, Group, or Enum:\n"++ishow e
+                         else Left $ "expectMGE: Name resolution failed to find a Message, Group, or Enum:\n"++ishow (eName e)
   where isMGE e' = case e' of E'Message {} -> True
                               _ -> False
+
+expectFK :: Entity -> RE Entity
+expectFK e = if isFK e then return e
+               else throwError $ "expectF: Name resolution failed to find a Field or Key:\n"++ishow (eName e)
+  where isFK e' = case e' of E'Field {} -> True
+                             E'Key {} -> True
+                             _ -> False
 
 -- | This is a helper for resolveEnv for error messages
 whereEnv :: Env -> String
@@ -361,9 +372,18 @@ maybeM f mx = maybe (return Nothing) (liftM Just . f) mx
 runSE :: SEnv -> SE a -> Either ErrStr a
 runSE sEnv m = runReaderT m sEnv
 
+makeNameMaps :: [MName String] -> Env -> Either ErrStr NameMap
+makeNameMaps hPrefix env = do
+  let (tl,tls) = getTLS env
+  (fdp:fdps) <- mapM top'FDP (tl:tls)
+  (NameMap tuple m) <- makeNameMap hPrefix fdp
+  let f (NameMap _ x) = x
+  ms <- fmap (map f) . mapM (makeNameMap hPrefix) $ fdps
+  return (NameMap tuple (M.unions (m:ms)))
+
 -- | 'makeNameMap' conservatively checks its input.
 makeNameMap :: [MName String] -> D.FileDescriptorProto -> Either ErrStr NameMap
-makeNameMap hPrefix fdp = go (makeOne fdp) where
+makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
   go = fmap ((\(a,w) -> NameMap a (M.fromList w))) . runWriterT
 --  makeOne :: D.FileDescriptorProto -> WriterT [(FIName Utf8,ProtoName)] (Either ErrStr) ()
   makeOne fdp = do
@@ -372,11 +392,6 @@ makeNameMap hPrefix fdp = go (makeOne fdp) where
                   (D.FileDescriptorProto.package fdp)
     lift (checkDIUtf8 rawPackage) -- guard-like effect
     let packageName = difi (DIName rawPackage)
-{- XXX
-    diPrefix <- getJust ("makeNameMap.makeOne: Invalid parent prefix: "++show rawPrefix)
-                  (validDI rawPrefix)
-    let hPrefix = map (mangle :: IName String -> MName String) . splitDI $ diPrefix
--}
     rawParent <- getJust "makeNameMap.makeOne: " . msum $
         [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options fdp)
         , D.FileOptions.java_package =<< (D.FileDescriptorProto.options fdp)
@@ -408,9 +423,9 @@ makeNameMap hPrefix fdp = go (makeOne fdp) where
     local (const template) $ F.mapM_ mrmEnumValue (D.EnumDescriptorProto.value edp)
   mrmEnumValue evdp = mrmName "mrmEnumValue.name" D.EnumValueDescriptorProto.name evdp
   mrmService sdp = do
-    template <- mrmName "entityService.name" D.ServiceDescriptorProto.name sdp
+    template <- mrmName "mrmService.name" D.ServiceDescriptorProto.name sdp
     local (const template) $ F.mapM_ mrmMethod (D.ServiceDescriptorProto.method sdp)
-  mrmMethod mdp = mrmName "entityMethod.name" D.MethodDescriptorProto.name mdp
+  mrmMethod mdp = mrmName "mrmMethod.name" D.MethodDescriptorProto.name mdp
 
 type MRM a = ReaderT ProtoName (WriterT [(FIName Utf8,ProtoName)] (Either ErrStr)) a
 
@@ -425,8 +440,7 @@ mrmName s f a = do
       template' = template { protobufName = fqSelf
                            , parentModule = parentModule template ++ [mSelf] }
   tell [(fqSelf,self)]
-  let toshow = (fqSelf,self)
-  trace ("mrmName: "++show toshow) (return template')
+  return template'
 
 -- XXX really need to clean this up once this module compiles!
 getNames :: String -> (a -> Maybe Utf8) -> a -> SE (IName String,[IName String])
@@ -436,15 +450,8 @@ getNames errorMessage accessor record = do
   let names@(n:ns) = parent ++ [ iToString iSelf ]
   let ans = (iToString iSelf,names)
       toshow = (iSelf,names,parent)
-  trace ("getNames: " ++ show toshow) (return ans)
-{-
-descend :: [IName String] -> Entity -> SE a -> SE a
-descend names entity act = local mutate act
-  where mutate (SEnv _parent env template) = SEnv parent' env' template'
-          where parent' = names -- cannot call eName ename, will cause <<loop>> with "getNames" -- XXX revisit
-                env' = Local entity env
-                template' = template { parentModule = (parentModule template) ++ [mangle (last parent')] }
--}
+  return ans
+
 descend :: [IName String] -> Entity -> SE a -> SE a
 descend names entity act = local mutate act
   where mutate (SEnv _parent env) = SEnv parent' env'
@@ -671,7 +678,7 @@ fqField isKey fdp = annErr ("fqField "++show fdp) $ do
   let isKey' = maybe False (const True) (D.FieldDescriptorProto.extendee fdp)
   when (isKey/=isKey') $
     ask >>= \env -> throwError $ "fqField.isKey: Expected key and got field or vice-versa:\n"++ishow ((isKey,isKey'),whereEnv env,fdp)
-  entity <- resolveRE =<< getJust "fqField.name" (D.FieldDescriptorProto.name fdp)
+  entity <- expectFK =<< resolveRE =<< getJust "fqField.name" (D.FieldDescriptorProto.name fdp)
   newExtendee <- case (isKey,entity) of
                    (True,E'Key {}) -> do
                       ext <- lift (eMsg entity)
@@ -800,16 +807,26 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
   go mParent names (D.NamePart { D.NamePart.name_part = name
                                , D.NamePart.is_extension = isKey }) (next:rest) = do
     -- get entity (Field or Key) and the TYPE_*
-    entity <- if not isKey
-                then case mParent of
-                       Just parent -> resolveHere parent name
-                       Nothing -> iFail $ "Cannot resolve local (is_extension False) name, no parent; expected (key)."
-                else do entity' <- resolveRE name
-                        case entity' of
-                          E'Key {} -> do ext <- lift (eMsg entity')
-                                         when (eName ext /= names) $ iFail $ "Intermediate entry E'Key extends wrong type: "++show (names,eName ext)
-                                         return entity'
-                          _ -> iFail $ "Name "++show (toString name)++" was resolved by was not an E'Key: "++show entity'
+    (fk,entity) <-
+      if not isKey
+        then case mParent of
+               Nothing -> iFail $ "Cannot resolve local (is_extension False) name, no parent; expected (key)."
+               Just parent -> do
+                 entity'field <- resolveHere parent name
+                 case entity'field of
+                   E'Field {} -> case mVal entity'field of
+                                   Nothing -> iFail $ "Intermediate entry E'Field is of basic type, not E'Message or E'Group: "++show (names,eName entity'field)
+                                   Just val -> lift val >>= \e -> return (entity'field,e)
+                   _ -> iFail $ "Name "++show (toString name)++" was resolved but was not an E'Field: "++show (eName entity'field)
+        else do entity'key <- resolveRE name
+                case entity'key of
+                  E'Key {} -> do extendee <- lift (eMsg entity'key)
+                                 when (eName extendee /= names) $
+                                   iFail $ "Intermediate entry E'Key extends wrong type: "++show (names,eName extendee)
+                                 case mVal entity'key of
+                                   Nothing-> iFail $ "Intermediate entry E'Key is of basic type, not E'Message or E'Group: "++show (names,eName entity'key)
+                                   Just val -> lift val >>= \e -> return (entity'key,e)
+                  _ -> iFail $ "Name "++show (toString name)++" was resolved but was not an E'Key: "++show (eName entity'key)
     t <- case entity of
       E'Message {} -> return TYPE_MESSAGE
       E'Group {} -> return TYPE_GROUP
@@ -819,7 +836,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
     -- wrap old tag + inner result with outer info
     let tag' = getWireTag (mkWireTag fid' wt')
         bs' = Seq.index raw' 0
-    let fid = fNumber entity
+    let fid = fNumber fk
         wt = toWireType (FieldType (fromEnum t))
         raw = Seq.singleton . runPut $
           case t of TYPE_MESSAGE -> do putSize (size'Varint tag' + LC.length bs')
@@ -827,7 +844,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
                                        putLazyByteString bs'
                     TYPE_GROUP -> do putVarUInt tag'
                                      putLazyByteString bs'
-                                     putVarUInt (succ tag')
+                                     putVarUInt (succ (getWireTag (mkWireTag fid wt)))
                     _ -> fail $ "bug! raw with type "++show t++" should be impossible"
     return (fid,ExtFromWire wt raw)
 
@@ -835,17 +852,17 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
   go mParent names (D.NamePart { D.NamePart.name_part = name
                                 , D.NamePart.is_extension = isKey }) [] = do
     -- get entity (Field or Key) and the TYPE_*
-    entity <- if isKey then resolveRE name
+    fk <- if isKey then resolveRE name
                 else case mParent of
                        Just parent -> resolveHere parent name
                        Nothing -> iFail $ "Cannot resolve local (is_extension False) name, no parent; expected (key)."
-    case entity of
+    case fk of
       E'Field {} | not isKey -> return ()
       E'Key {} | isKey -> do
-        ext <- lift (eMsg entity)
+        ext <- lift (eMsg fk)
         when (eName ext /= names) $ iFail $ "Last entry E'Key extends wrong type: "++show (names,eName ext)
-      _ -> iFail $ "Last entity was resolved but was not an E'Field or E'Key: "++show entity
-    t <- case (fType entity) of
+      _ -> iFail $ "Last entity was resolved but was not an E'Field or E'Key: "++show fk
+    t <- case (fType fk) of
            Nothing -> return TYPE_ENUM
            Just TYPE_GROUP -> iFail $ "Last entry was a TYPE_GROUP instead of concrete value type"
            Just TYPE_MESSAGE -> {- impossible -} iFail $ "Last entry was a TYPE_MESSAGE instead of concrete value type"
@@ -854,12 +871,12 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
     let done :: Wire v => v -> RE (FieldId,ExtFieldValue)
         done v = let ft = FieldType (fromEnum t)
                      wt = toWireType ft
-                     fid = fNumber entity
+                     fid = fNumber fk
                  in return (fid,ExtFromWire wt (Seq.singleton (runPut (wirePut ft v))))
     -- The actual type and value fed to 'done' depends on the values 't' and 'uno':
     case t of
       TYPE_ENUM ->
-        case (mVal entity,D.UninterpretedOption.identifier_value uno) of
+        case (mVal fk,D.UninterpretedOption.identifier_value uno) of
           (Just (Right (E'Enum {eVals=enumVals})),Just enumVal) ->
             case validI enumVal of
               Nothing -> iFail $ "invalid D.UninterpretedOption.identifier_value: "++show enumVal
@@ -975,6 +992,7 @@ loadProto protoDirs protoFile = goState (load Set.empty protoFile) where
 
 dump :: D.FileDescriptorProto -> IO ()
 dump fdp = do
+  putStrLn $ "dumping: "++show (D.FileDescriptorProto.name fdp)
   let f = "/tmp/dumpfdp"
   LC.writeFile f (messagePut $ defaultValue { D.FileDescriptorSet.file = Seq.singleton fdp })
   print (show f++" has been dumped")
@@ -1256,5 +1274,213 @@ resolveWithContext protoContext protoIn =
                           , D.MethodDescriptorProto.input_type  = resolve cx (D.MethodDescriptorProto.input_type m)
                           , D.MethodDescriptorProto.output_type = resolve cx (D.MethodDescriptorProto.output_type m) }
   in processFDP protoIn
+
+-}
+
+{-
+
+  Service {
+    name: "TestServiceWithCustomOptions"
+    method {
+      name: "Foo"
+      input_type: ".protobuf_unittest.CustomOptionFooRequest"
+      output_type: ".protobuf_unittest.CustomOptionFooResponse"
+      options {
+        7890860: 2
+      }
+    }
+    options {
+      7887650: 19753086419
+    }
+  }
+
+7887650 sint64 for service_opt1 is not decoded by decode_raw
+extend google.protobuf.ServiceOptions { optional sint64 service_opt1 = 7887650; }
+service TestServiceWithCustomOptions { option (service_opt1) = -9876543210; ... }
+-    3 {
+-      7887650: 19753086419
+-    }
++    3: "\221\262\213\036\323\333\200\313I"
+
+-9876543210 <=> (2*9876543210)-1 <=> 19753086419
+
+\221\262\213\036\323\333\200\313I is octal escaped, 128 bit encoded in two pieces
+\221\262\213\036 => 788650*8 + 1
+\323\333\200\313I where 'I' is decimal 73 => 19753086419
+expected a ServiceOptions message (field 3 of a ServiceDescriptorProto)
+  which should be prefix-length encoded with a single (field*8+wiretype) tag and the sint64 data
+  All three should be 128 bit encoded on the wire.
+
+7739036 differ on int32 with decode raw, message_opt1 :
+extend google.protobuf.MessageOptions { optional int32 message_opt1 = 7739036; }
+message TestMessageWithCustomOptions { option (message_opt1) = -56; ... }
+-      7739036: 18446744073709551560
++      7739036: 4294967240
+
+Those are Int64 <=> Word64 and Int32 <=> Word32 for (-56)
+
+message CustomOptionOtherValues { optional (enum_opt) = TEST_OPTION_ENUM_TYPE2 }
+ is decoding wrong, where
+      optional DummyMessageContainingEnum.TestEnumType enum_opt = 7673233;
+         where TEST_OPTION_ENUM_TYPE2 = -23
+-        2: 18446744073709551593
++        2: 4294967273
+
+Those are Int64 <=> Word64 and Int32 <=> Word32 for (-23)
+
+
+-}
+
+{-
+message CustomOptionOtherValues {
+  option  (int32_opt) = -100;  // To test sign-extension.
+  option  (float_opt) = 12.3456789;
+  option (double_opt) = 1.234567890123456789;
+  option (string_opt) = "Hello, \"World\"";
+  option  (bytes_opt) = "Hello\0World";
+  option   (enum_opt) = TEST_OPTION_ENUM_TYPE2;
+}
+
+   4 {
+     1: "CustomOptionOtherValues"
+-    7 {
+-      7705709: 18446744073709551516
+-      7675390: 0x414587e7
+-      7675390: 0x414587e7
+-      7673293: 0x3ff3c0ca428c59fb
+-      7673293: 0x3ff3c0ca428c59fb
+-      7673285: "Hello, \"World\""
+-      7673238: "Hello\000World"
+-      7673233: 18446744073709551593
+-    }
++    7: "\210\331\242\035\351\262\331\242\035\014Hello\\0World\252\334\242\035\020Hello, \\\"World\\\"\351\334\242\035\373Y\214B\312\300\363?\365\337\243\035\347\207EA\350\306\262\035\234\377\377\377\017"
+   }
+
+\210\331\242\035 is 7673233*8 + 0 (varint)
+\351 is decimal 233 is (-23 :: Int8)
+\262\331\242\035 is 7673238*8 + 2 (varint lengthencoded)
+\014 is the length decimal 12 of the next string
+Hello\\0World
+\252\334\242\035 is 7673285*8 + 2 (varint lengthencoded)
+\020 is the length decimal 16 of the next string
+Hello, \\\"World\\\"
+\351\334\242\035 is 7673293*8 + 1 (64 bits)
+\373Y\214B\312\300\363? where Y is decimal 89, B is decimal 66, ? is decimal 63
+\365\337\243\035 is 7675390*8 + 5 (32 bits)
+\347\207EA where E is decimal 69, A is decimal 65
+\350\306\262\035 is 7705709*8 + 0 (varint)
+\234\377\377\377\017"
+
+The first one looks like a failure of encoding 
+extend google.protobuf.MessageOptions {
+  ...
+  optional DummyMessageContainingEnum.TestEnumType enum_opt = 7673233;
+  ...
+}
+
+message DummyMessageContainingEnum {
+  enum TestEnumType {
+    TEST_OPTION_ENUM_TYPE1 = 22;
+    TEST_OPTION_ENUM_TYPE2 = -23;
+  }
+}
+
+The negative enum value should have been 
+
+
+-}
+
+{-
+
+   4 {
+     1: "VariousComplexOptions"
+-    7 {
+-      7646756 {
+-        1: 42
+-      }
+-      7646756 {
+-        7663707: 324
+-      }
+-      7646756 {          -- check optional protobuf_unittest.ComplexOptionType1 complex_opt1 = 7646756;
+-        7663442 {        -- check optional ComplexOptionType3 corge = 7663442;
+-          1: 876         -- check optional int32 qux = 1;
+-        }
+-      }
+-      7636949 {
+-        2: 987
+-      }
+-      7636949 {
+-        7650927: 654
+-      }
+-      7636949 {
+-        1 {
+-          1: 743
+-        }
+-      }
+-      7636949 {
+-        1 {
+-          7663707: 1999
+-        }
+-      }
+-      7636949 {
+-        1 {
+-          7663442 {
+-            1: 2008
+-          }
+-        }
+-      }
+-      7636949 {
+-        7649992 {
+-          1: 741
+-        }
+-      }
+-      7636949 {
+-        7649992 {
+-          7663707: 1998
+-        }
+-      }
+-      7636949 {
+-        7649992 {
+-          7663442 {
+-            1: 2121
+-          }
+-        }
+-      }
+-      7636949 {
+-        3 {
+-          1: 321
+-        }
+-      }
+-      7633546 {
+-        1: 1971
+-      }
+-      7636463 {
+-        1: 9
+-      }
+-      7636463 {
+-        2 {
+-          3: 22
+-        }
+-      }
+-      7595468 {      -- check optional group ComplexOpt6 = 7595468 {optional int32 xyzzy = 7593951; }
+-        7593951: 24  
+-      }
+-    }
++    7: "\343\334\374\034\370\375\373\034\030\371\375\373\034\322\250\217\035\003\010\263\017\372\336\220\035\004\023\030\026\031\252\375\220\035\005\032\003\010\301\002\242\342\225\035\010\222\365\235\035\003\010\354\006"
+   }
+
+\343\334\374\034 is 7595468*8 + 3 Group start
+\370\375\373\034 is 7593951*8 + 0 varint (int32)
+\030 is decimal 24
+\371\375\373\034 is 7593951*8 + 1 wrong wiretag, should be 7595468*8 + 4 group stop
+\322\250\217\035\003\010\263\017\372\336\220\035\004\023\030\026\031\252\375\220\035\005\032\003\010\301\002
+\242\342\225\035 is 7646756*8 + 2
+\010 is decimal length 8
+  message content is:
+    \222\365\235\035 is 7663442*8 + 2
+    \003 is decimal length 3
+      message content is:
+        \010 is 1*8+0
+        \354\006 is 876
 
 -}
