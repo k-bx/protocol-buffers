@@ -98,6 +98,7 @@ class (Monoid a) => Dotted a where
   validI :: a -> Maybe (IName a)
   -- | 'validDI' ensures the DIName is 
   validDI :: a -> Maybe (DIName a)
+  -- | 'split' returns a list of non-empty 'a' with all '.' characters removed
   split :: a -> [a]
 
 -- These are also part of the external API, they are abstracted over
@@ -116,12 +117,15 @@ difi (DIName a) = case uncons a of
                     Just ('.',_) -> FIName a
                     _ -> FIName (cons '.' a)
 
+-- | Typed 'split'
 splitDI :: Dotted a => DIName a -> [IName a]
 splitDI = map IName . split . diName
 
+-- | Typed 'split'
 splitFI :: Dotted a => FIName a -> [IName a]
 splitFI = map IName . split . fiName
 
+-- | Typed 'split'
 splitFM :: Dotted a => FMName a -> [MName a]
 splitFM = map MName . split . fmName
 
@@ -225,19 +229,21 @@ dotUtf8 (Utf8 a) (Utf8 b) = Utf8 (LC.append a (LC.cons '.' b))
 dotString :: String -> String -> String
 dotString a b = a ++ ('.':b)
 
+-- | Return list of nonempty Utf8, with all '.' removed
 splitUtf8 :: Utf8 -> [Utf8]
 splitUtf8 = unfoldr s . utf8 where
   s :: ByteString -> Maybe (Utf8,ByteString)
-  s y | LC.null y = Nothing
-      | otherwise = case U.span ('.'/=) y of
-                      (a,b) | LC.null a -> s b
-                            | otherwise -> Just (Utf8 a,b)
+  s y = case LC.uncons y of
+          Nothing -> Nothing
+          Just ('.',xs) -> s xs -- delete all '.' in the input
+          _ -> Just (let (a,b) = U.span ('.'/=) y in (Utf8 a,b))
 
+-- | Return list of nonempty String, with all '.' removed
 splitString :: String -> [String]
 splitString = unfoldr s where
   s [] = Nothing
   s ('.':xs) = s xs -- delete all '.' in the input
-  s xs = Just (let (a,b) = span ('.'/=) xs in (a,b))
+  s xs = Just (span ('.'/=) xs)
 
 validIUtf8 :: Utf8 -> Maybe (IName Utf8)
 validIUtf8 xs | unull xs = Nothing
@@ -309,6 +315,7 @@ fixUp xs = xs
 -- make leading '_' or lower case letter, may end with added single quote.
 fixLow :: String -> String
 fixLow [] = []
+fixLow ('U':'\'':xs@('_':_))= fixLow xs
 fixLow i@(x:xs) | i `S.member` reserved = i ++ "'"
                 | isUpper x = let x' = toLower x
                               in if isUpper x' then err ("fixLow: stubborn upper case: "++show i)
