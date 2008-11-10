@@ -8,13 +8,13 @@ import qualified Text.DescriptorProtos.EnumDescriptorProto            as D(EnumD
 import qualified Text.DescriptorProtos.EnumDescriptorProto            as D.EnumDescriptorProto(EnumDescriptorProto(..))
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D(EnumValueDescriptorProto)
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D.EnumValueDescriptorProto(EnumValueDescriptorProto(..))
-import qualified Text.DescriptorProtos.FieldDescriptorProto           as D(FieldDescriptorProto(FieldDescriptorProto))
+import qualified Text.DescriptorProtos.FieldDescriptorProto           as D(FieldDescriptorProto)
 import qualified Text.DescriptorProtos.FieldDescriptorProto           as D.FieldDescriptorProto(FieldDescriptorProto(..))
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type      as D(Type)
 import           Text.DescriptorProtos.FieldDescriptorProto.Type      as D.Type(Type(..))
-import qualified Text.DescriptorProtos.FileDescriptorProto            as D(FileDescriptorProto(FileDescriptorProto))
+import qualified Text.DescriptorProtos.FileDescriptorProto            as D(FileDescriptorProto)
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D.FileDescriptorProto(FileDescriptorProto(..))
-import qualified Text.DescriptorProtos.FileDescriptorSet              as D(FileDescriptorSet(FileDescriptorSet))
+import qualified Text.DescriptorProtos.FileDescriptorSet              as D(FileDescriptorSet)
 import qualified Text.DescriptorProtos.FileDescriptorSet              as D.FileDescriptorSet(FileDescriptorSet(..))
 import qualified Text.DescriptorProtos.MethodDescriptorProto          as D(MethodDescriptorProto)
 import qualified Text.DescriptorProtos.MethodDescriptorProto          as D.MethodDescriptorProto(MethodDescriptorProto(..))
@@ -54,9 +54,9 @@ import Control.Monad.Writer
 import Data.Char
 import Data.Ratio
 import Data.Ix(inRange)
-import Data.List(unfoldr,span,inits,foldl',stripPrefix)
+import Data.List(foldl',stripPrefix)
 import Data.Map(Map)
-import Data.Maybe(fromMaybe,catMaybes,mapMaybe)
+import Data.Maybe(mapMaybe)
 import Data.Monoid(Monoid(..))
 import Data.Set(Set)
 import System.Directory
@@ -87,10 +87,6 @@ err = error . errMsg
 throw :: (Error e, MonadError e m) =>  String -> m a
 throw s = throwError (strMsg (errMsg s))
 
--- | 'annErr' allows 
--- annErr :: (Show e, Error e,MonadError e m) => String -> m a -> m a
--- annErr s act = catchError act (\e -> throwError (strMsg ("annErr: "++s++'\n':ishow e)))
-
 annErr :: (MonadError String m) => String -> m a -> m a
 annErr s act = catchError act (\e -> throwError ("annErr: "++s++'\n':indent e))
 
@@ -99,57 +95,13 @@ getJust :: (Error e,MonadError e m, Typeable a) => String -> Maybe a -> m a
 getJust s ma@Nothing = throw $ "Impossible? Expected Just of type "++show (typeOf ma)++" but got nothing:\n"++indent s
 getJust _s (Just a) = return a
 
--- insert '.' between each item and convert to utf8 bytes
-encodeModuleNames :: [String] -> Utf8
-encodeModuleNames [] = Utf8 mempty
-encodeModuleNames xs = Utf8 . U.fromString . foldr1 (\a b -> a ++ '.':b) $ xs
-
-splitDot :: Utf8 -> [String]
-splitDot = splitDot' . toString
-
-splitDot' :: String -> [String]
-splitDot' = unfoldr s where
-  s ('.':xs) = s xs
-  s [] = Nothing
-  s xs = Just (span ('.'/=) xs)
-{-
--- By construction in the Lexer.x file, the use of parseIdent here cannot go wrong.
--- But I will be paranoid and write a total function anyway.
--- Call to 'parts' are with a non-empty string that should not start with a '.'
-parseIdent :: (Error e,MonadError e m) => Utf8 -> m (Bool,[String])
-{-#  INLINE parseIdent #-}
-parseIdent bs = case LC.uncons (utf8 bs) of
-                  Nothing -> throw "parseIdent: Invalid empty Utf8"
-                  Just ('.',bs') | LC.null bs' -> throw "parseIdent: Invalid Utf8 of a single '.'"
-                                 | otherwise -> liftM ((,) True) (parts (toString bs))
-                  _ -> liftM ((,) False) (parts (toString bs))
-  where parts s = case span ('.'/=) s of
-                    ("", "") -> throw $ "parseIdent: Invalid Utf8 because it ends in a '.': "++show (toString bs)
-                    ("",  _) -> throw $ "parseIdent: Invalid Utf8 because it contains two '.' in a row: "++show (toString bs)
-                    ( x, "") -> return (x : [])
-                    ( x,_:y) -> liftM (x :) (parts y)
--}
 -- This adds a leading dot if the input is non-empty
 joinDot :: [IName String] -> FIName String
 joinDot [] = err $ "joinDot on an empty list of IName!"
 joinDot (x:xs) = fqAppend (promoteFI x) xs
 
-checkER :: [(Int32,Int32)] -> Int32 -> Bool
-checkER ers fid = any (`inRange` fid) ers
-
 checkFI :: [(FieldId,FieldId)] -> FieldId -> Bool
 checkFI ers fid = any (`inRange` fid) ers
-
-extRangeList :: D.DescriptorProto -> [(Int32,Int32)]
-extRangeList d = concatMap check unchecked
-  where check x@(lo,hi) | hi < lo = []
-                        | hi<19000 || 19999<lo  = [x]
-                        | otherwise = concatMap check [(lo,18999),(20000,hi)]
-        unchecked = F.foldr ((:) . extToPair) [] (D.DescriptorProto.extension_range d)
-        extToPair (D.ExtensionRange
-                    { D.ExtensionRange.start = start
-                    , D.ExtensionRange.end = end }) =
-          (getFieldId $ maybe minBound FieldId start, getFieldId $ maybe maxBound (FieldId . pred) end)
 
 getExtRanges :: D.DescriptorProto -> [(FieldId,FieldId)]
 getExtRanges d = concatMap check unchecked
@@ -228,9 +180,6 @@ fqName = fiFromString . joinDot . eName
 
 fiFromString :: FIName String -> FIName Utf8
 fiFromString = FIName . fromString . fiName
-
-diToString :: DIName Utf8 -> DIName String
-diToString = DIName . toString . diName
 
 iToString :: IName Utf8 -> IName String
 iToString = IName . toString . iName
@@ -401,7 +350,7 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
     let hParent = map (mangle :: IName Utf8 -> MName String) . splitDI $ diParent
         template = ProtoName packageName hPrefix hParent
                      (error "makeNameMap.makeOne.template.baseName undefined")
-    list <- runReaderT (mrmFile fdp) template
+    runReaderT (mrmFile fdp) template
     return (packageName,hPrefix,hParent)
   -- Traversal of the named DescriptorProto types
   mrmFile :: D.FileDescriptorProto -> MRM ()
@@ -442,15 +391,12 @@ mrmName s f a = do
   tell [(fqSelf,self)]
   return template'
 
--- XXX really need to clean this up once this module compiles!
 getNames :: String -> (a -> Maybe Utf8) -> a -> SE (IName String,[IName String])
 getNames errorMessage accessor record = do
   parent <- asks my'Parent
   iSelf <- getJust errorMessage (validI =<< accessor record)
-  let names@(n:ns) = parent ++ [ iToString iSelf ]
-  let ans = (iToString iSelf,names)
-      toshow = (iSelf,names,parent)
-  return ans
+  let names = parent ++ [ iToString iSelf ]
+  return (iToString iSelf,names)
 
 descend :: [IName String] -> Entity -> SE a -> SE a
 descend names entity act = local mutate act
@@ -780,7 +726,12 @@ interpretOptions name msg unos = do
   name' <- getJust ("interpretOptions: invalid name "++show name) (validI name)
   ios <- mapM (interpretOption [IName "google",IName "protobuf",name']) . F.toList $ unos
   let (ExtField ef) = getExtField msg
-      ef' = foldl' (\m (k,v) -> seq v $ M.insert k v m) ef ios
+      ef' = foldl' (\m (k,v) -> seq v $ M.insertWithKey mergeWires k v m) ef ios
+
+      mergeWires k (ExtFromWire wt1 newData) (ExtFromWire wt2 oldData) =
+        if wt1 /= wt2 then err $ "interpretOptions.mergeWires : ExtFromWire WireType mismatch while storing new options in extension fields: " ++ show (name,k,(wt1,wt2))
+          else ExtFromWire wt2 (mappend oldData newData)
+      mergeWires k a b = err $ "interpretOptions.mergeWires : impossible case\n"++show (k,a,b)
       msg' = seq ef' (putExtField (ExtField ef') msg)
   return msg'
 
@@ -880,9 +831,9 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
           (Just (Right (E'Enum {eVals=enumVals})),Just enumVal) ->
             case validI enumVal of
               Nothing -> iFail $ "invalid D.UninterpretedOption.identifier_value: "++show enumVal
-              Just iVal -> case M.lookup iVal enumVals of
-                             Nothing -> iFail $ "enumVal lookup failed: "++show (iVal,M.keys enumVals)
-                             Just val -> done (fromEnum val) -- fromEnum :: Int32 -> Int
+              Just enumIVal -> case M.lookup enumIVal enumVals of
+                                 Nothing -> iFail $ "enumVal lookup failed: "++show (enumIVal,M.keys enumVals)
+                                 Just val -> done (fromEnum val) -- fromEnum :: Int32 -> Int
           (Just (Right (E'Enum {})),Nothing) -> iFail $ "No identifer_value value to lookup in E'Enum"
           (me,_) -> iFail $ "Expected Just E'Enum, got: "++show me
       TYPE_STRING   -> do
@@ -976,7 +927,7 @@ loadProto protoDirs protoFile = goState (load Set.empty protoFile) where
             proto <- liftIO $ do print ("Loading filepath: "++toRead)
                                  LC.readFile toRead
             parsed'fdp <- either (loadFailed toRead . show) return $
-                          (parseProto toRead proto)
+                          (parseProto file proto)
             packageName <- either (loadFailed toRead . show) (return . map iToString . snd) $
                            (checkDIUtf8 =<< getJust "makeTopLevel.packageName" (D.FileDescriptorProto.package parsed'fdp))
             let parents = Set.insert file parentsIn
@@ -998,6 +949,52 @@ dump fdp = do
   print (show f++" has been dumped")
 
 {-
+-- insert '.' between each item and convert to utf8 bytes
+encodeModuleNames :: [String] -> Utf8
+encodeModuleNames [] = Utf8 mempty
+encodeModuleNames xs = Utf8 . U.fromString . foldr1 (\a b -> a ++ '.':b) $ xs
+
+splitDot :: Utf8 -> [String]
+splitDot = splitDot' . toString
+
+splitDot' :: String -> [String]
+splitDot' = unfoldr s where
+  s ('.':xs) = s xs
+  s [] = Nothing
+  s xs = Just (span ('.'/=) xs)
+
+-- By construction in the Lexer.x file, the use of parseIdent here cannot go wrong.
+-- But I will be paranoid and write a total function anyway.
+-- Call to 'parts' are with a non-empty string that should not start with a '.'
+parseIdent :: (Error e,MonadError e m) => Utf8 -> m (Bool,[String])
+{-#  INLINE parseIdent #-}
+parseIdent bs = case LC.uncons (utf8 bs) of
+                  Nothing -> throw "parseIdent: Invalid empty Utf8"
+                  Just ('.',bs') | LC.null bs' -> throw "parseIdent: Invalid Utf8 of a single '.'"
+                                 | otherwise -> liftM ((,) True) (parts (toString bs))
+                  _ -> liftM ((,) False) (parts (toString bs))
+  where parts s = case span ('.'/=) s of
+                    ("", "") -> throw $ "parseIdent: Invalid Utf8 because it ends in a '.': "++show (toString bs)
+                    ("",  _) -> throw $ "parseIdent: Invalid Utf8 because it contains two '.' in a row: "++show (toString bs)
+                    ( x, "") -> return (x : [])
+                    ( x,_:y) -> liftM (x :) (parts y)
+-}
+{-
+checkER :: [(Int32,Int32)] -> Int32 -> Bool
+checkER ers fid = any (`inRange` fid) ers
+
+extRangeList :: D.DescriptorProto -> [(Int32,Int32)]
+extRangeList d = concatMap check unchecked
+  where check x@(lo,hi) | hi < lo = []
+                        | hi<19000 || 19999<lo  = [x]
+                        | otherwise = concatMap check [(lo,18999),(20000,hi)]
+        unchecked = F.foldr ((:) . extToPair) [] (D.DescriptorProto.extension_range d)
+        extToPair (D.ExtensionRange
+                    { D.ExtensionRange.start = start
+                    , D.ExtensionRange.end = end }) =
+          (getFieldId $ maybe minBound FieldId start, getFieldId $ maybe maxBound (FieldId . pred) end)
+
+
 -- up-case the first letter after each '.', Nothing -> Nothing
 -- mangleCaps :: Maybe Utf8 -> String
 -- mangleCaps Nothing = ""
@@ -1274,213 +1271,5 @@ resolveWithContext protoContext protoIn =
                           , D.MethodDescriptorProto.input_type  = resolve cx (D.MethodDescriptorProto.input_type m)
                           , D.MethodDescriptorProto.output_type = resolve cx (D.MethodDescriptorProto.output_type m) }
   in processFDP protoIn
-
--}
-
-{-
-
-  Service {
-    name: "TestServiceWithCustomOptions"
-    method {
-      name: "Foo"
-      input_type: ".protobuf_unittest.CustomOptionFooRequest"
-      output_type: ".protobuf_unittest.CustomOptionFooResponse"
-      options {
-        7890860: 2
-      }
-    }
-    options {
-      7887650: 19753086419
-    }
-  }
-
-7887650 sint64 for service_opt1 is not decoded by decode_raw
-extend google.protobuf.ServiceOptions { optional sint64 service_opt1 = 7887650; }
-service TestServiceWithCustomOptions { option (service_opt1) = -9876543210; ... }
--    3 {
--      7887650: 19753086419
--    }
-+    3: "\221\262\213\036\323\333\200\313I"
-
--9876543210 <=> (2*9876543210)-1 <=> 19753086419
-
-\221\262\213\036\323\333\200\313I is octal escaped, 128 bit encoded in two pieces
-\221\262\213\036 => 788650*8 + 1
-\323\333\200\313I where 'I' is decimal 73 => 19753086419
-expected a ServiceOptions message (field 3 of a ServiceDescriptorProto)
-  which should be prefix-length encoded with a single (field*8+wiretype) tag and the sint64 data
-  All three should be 128 bit encoded on the wire.
-
-7739036 differ on int32 with decode raw, message_opt1 :
-extend google.protobuf.MessageOptions { optional int32 message_opt1 = 7739036; }
-message TestMessageWithCustomOptions { option (message_opt1) = -56; ... }
--      7739036: 18446744073709551560
-+      7739036: 4294967240
-
-Those are Int64 <=> Word64 and Int32 <=> Word32 for (-56)
-
-message CustomOptionOtherValues { optional (enum_opt) = TEST_OPTION_ENUM_TYPE2 }
- is decoding wrong, where
-      optional DummyMessageContainingEnum.TestEnumType enum_opt = 7673233;
-         where TEST_OPTION_ENUM_TYPE2 = -23
--        2: 18446744073709551593
-+        2: 4294967273
-
-Those are Int64 <=> Word64 and Int32 <=> Word32 for (-23)
-
-
--}
-
-{-
-message CustomOptionOtherValues {
-  option  (int32_opt) = -100;  // To test sign-extension.
-  option  (float_opt) = 12.3456789;
-  option (double_opt) = 1.234567890123456789;
-  option (string_opt) = "Hello, \"World\"";
-  option  (bytes_opt) = "Hello\0World";
-  option   (enum_opt) = TEST_OPTION_ENUM_TYPE2;
-}
-
-   4 {
-     1: "CustomOptionOtherValues"
--    7 {
--      7705709: 18446744073709551516
--      7675390: 0x414587e7
--      7675390: 0x414587e7
--      7673293: 0x3ff3c0ca428c59fb
--      7673293: 0x3ff3c0ca428c59fb
--      7673285: "Hello, \"World\""
--      7673238: "Hello\000World"
--      7673233: 18446744073709551593
--    }
-+    7: "\210\331\242\035\351\262\331\242\035\014Hello\\0World\252\334\242\035\020Hello, \\\"World\\\"\351\334\242\035\373Y\214B\312\300\363?\365\337\243\035\347\207EA\350\306\262\035\234\377\377\377\017"
-   }
-
-\210\331\242\035 is 7673233*8 + 0 (varint)
-\351 is decimal 233 is (-23 :: Int8)
-\262\331\242\035 is 7673238*8 + 2 (varint lengthencoded)
-\014 is the length decimal 12 of the next string
-Hello\\0World
-\252\334\242\035 is 7673285*8 + 2 (varint lengthencoded)
-\020 is the length decimal 16 of the next string
-Hello, \\\"World\\\"
-\351\334\242\035 is 7673293*8 + 1 (64 bits)
-\373Y\214B\312\300\363? where Y is decimal 89, B is decimal 66, ? is decimal 63
-\365\337\243\035 is 7675390*8 + 5 (32 bits)
-\347\207EA where E is decimal 69, A is decimal 65
-\350\306\262\035 is 7705709*8 + 0 (varint)
-\234\377\377\377\017"
-
-The first one looks like a failure of encoding 
-extend google.protobuf.MessageOptions {
-  ...
-  optional DummyMessageContainingEnum.TestEnumType enum_opt = 7673233;
-  ...
-}
-
-message DummyMessageContainingEnum {
-  enum TestEnumType {
-    TEST_OPTION_ENUM_TYPE1 = 22;
-    TEST_OPTION_ENUM_TYPE2 = -23;
-  }
-}
-
-The negative enum value should have been 
-
-
--}
-
-{-
-
-   4 {
-     1: "VariousComplexOptions"
--    7 {
--      7646756 {
--        1: 42
--      }
--      7646756 {
--        7663707: 324
--      }
--      7646756 {          -- check optional protobuf_unittest.ComplexOptionType1 complex_opt1 = 7646756;
--        7663442 {        -- check optional ComplexOptionType3 corge = 7663442;
--          1: 876         -- check optional int32 qux = 1;
--        }
--      }
--      7636949 {
--        2: 987
--      }
--      7636949 {
--        7650927: 654
--      }
--      7636949 {
--        1 {
--          1: 743
--        }
--      }
--      7636949 {
--        1 {
--          7663707: 1999
--        }
--      }
--      7636949 {
--        1 {
--          7663442 {
--            1: 2008
--          }
--        }
--      }
--      7636949 {
--        7649992 {
--          1: 741
--        }
--      }
--      7636949 {
--        7649992 {
--          7663707: 1998
--        }
--      }
--      7636949 {
--        7649992 {
--          7663442 {
--            1: 2121
--          }
--        }
--      }
--      7636949 {
--        3 {
--          1: 321
--        }
--      }
--      7633546 {
--        1: 1971
--      }
--      7636463 {
--        1: 9
--      }
--      7636463 {
--        2 {
--          3: 22
--        }
--      }
--      7595468 {      -- check optional group ComplexOpt6 = 7595468 {optional int32 xyzzy = 7593951; }
--        7593951: 24  
--      }
--    }
-+    7: "\343\334\374\034\370\375\373\034\030\371\375\373\034\322\250\217\035\003\010\263\017\372\336\220\035\004\023\030\026\031\252\375\220\035\005\032\003\010\301\002\242\342\225\035\010\222\365\235\035\003\010\354\006"
-   }
-
-\343\334\374\034 is 7595468*8 + 3 Group start
-\370\375\373\034 is 7593951*8 + 0 varint (int32)
-\030 is decimal 24
-\371\375\373\034 is 7593951*8 + 1 wrong wiretag, should be 7595468*8 + 4 group stop
-\322\250\217\035\003\010\263\017\372\336\220\035\004\023\030\026\031\252\375\220\035\005\032\003\010\301\002
-\242\342\225\035 is 7646756*8 + 2
-\010 is decimal length 8
-  message content is:
-    \222\365\235\035 is 7663442*8 + 2
-    \003 is decimal length 3
-      message content is:
-        \010 is 1*8+0
-        \354\006 is 876
 
 -}

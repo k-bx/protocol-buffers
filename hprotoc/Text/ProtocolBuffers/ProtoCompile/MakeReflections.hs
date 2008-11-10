@@ -41,11 +41,7 @@ import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag,runPut)
 import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..))
 
 import qualified Data.Foldable as F(foldr,toList)
-import qualified Data.ByteString as S(concat)
-import qualified Data.ByteString.Char8 as SC(spanEnd)
-import qualified Data.ByteString.Lazy.Char8 as LC(toChunks,fromChunks,length,init,null,last,empty)
-import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString,uncons,take,length)
-import Data.List(partition,unfoldr)
+import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import qualified Data.Sequence as Seq(fromList,empty,singleton,null)
 import Numeric(readHex,readOct,readDec)
 import Data.Monoid(mconcat,mappend)
@@ -58,46 +54,8 @@ import System.FilePath
 imp :: String -> a
 imp msg = error $ "Text.ProtocolBuffers.ProtoCompile.MakeReflections: Impossible?\n  "++msg
 
-spanEndL :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
-spanEndL f bs = let (a,b) = SC.spanEnd f (S.concat . LC.toChunks $ bs)
-                in (LC.fromChunks [a],LC.fromChunks [b])
-
--- Take a bytestring of "A" into "Right A" and "A.B.C" into "Left (A.B,C)"
-splitMod :: Utf8 -> Either (Utf8,Utf8) Utf8
-splitMod (Utf8 bs) = case spanEndL ('.'/=) bs of
-                       (pre,post) | LC.length pre <= 1 -> Right (Utf8 bs)
-                                  | otherwise -> Left (Utf8 (LC.init pre),Utf8 post)
-
-xxx = Utf8 (U.fromString "MakeReflections.xxx")
-
-toPath :: String -> Utf8 -> [FilePath]
-toPath prefix name = splitDirectories (combine a b)
-  where a = joinPath . splitDot $ prefix
-        b = flip addExtension "hs" . joinPath . splitDot . U.toString . utf8 $ name
-
-splitDot :: String -> [FilePath]
-splitDot = unfoldr s where
-    s ('.':xs) = s xs
-    s [] = Nothing
-    s xs = Just (span ('.'/=) xs)
-
 pnPath :: ProtoName -> [FilePath]
 pnPath (ProtoName _ a b c) = splitDirectories .flip addExtension "hs" . joinPath . map mName $ a++b++[c]
-
-dotPre :: String -> String -> String
-dotPre s ('.':x) = dotPre s x
-dotPre "" x = x
-dotPre s x | '.' == last s = dotPre (init s) x
-dotPre s "" = s
-dotPre s x = s ++ ( '.' : x )
-
-preDot :: String -> String
-preDot [] = []
-preDot xs@('.':_) = xs
-preDot xs = '.':xs
-
-dotUtf8 :: Utf8 -> Utf8 -> Utf8
-dotUtf8 s x = Utf8 (U.fromString . preDot $ toString s `dotPre` toString x)
 
 serializeFDP :: D.FileDescriptorProto -> ByteString
 serializeFDP fdp = runPut (wirePut 11 fdp)
@@ -109,9 +67,7 @@ toHaskell reMap k = case M.lookup k reMap of
 
 makeProtoInfo :: Bool -> NameMap -> D.FileDescriptorProto -> ProtoInfo
 makeProtoInfo unknownField (NameMap (packageName,hPrefix,hParent) reMap)
-              fdp@(D.FileDescriptorProto
-                    { D.FileDescriptorProto.name = Just rawName
-                    , D.FileDescriptorProto.package = Just rawPackage })
+              fdp@(D.FileDescriptorProto { D.FileDescriptorProto.name = Just rawName })
      = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allKeys where
   protoName = case hParent of
                 [] -> case hPrefix of
@@ -229,6 +185,40 @@ collectedGroups = catMaybes
                 . D.DescriptorProto.field
 
 {-
+spanEndL :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
+spanEndL f bs = let (a,b) = SC.spanEnd f (S.concat . LC.toChunks $ bs)
+                in (LC.fromChunks [a],LC.fromChunks [b])
+
+-- Take a bytestring of "A" into "Right A" and "A.B.C" into "Left (A.B,C)"
+splitMod :: Utf8 -> Either (Utf8,Utf8) Utf8
+splitMod (Utf8 bs) = case spanEndL ('.'/=) bs of
+                       (pre,post) | LC.length pre <= 1 -> Right (Utf8 bs)
+                                  | otherwise -> Left (Utf8 (LC.init pre),Utf8 post)
+
+toPath :: String -> Utf8 -> [FilePath]
+toPath prefix name = splitDirectories (combine a b)
+  where a = joinPath . splitDot $ prefix
+        b = flip addExtension "hs" . joinPath . splitDot . U.toString . utf8 $ name
+
+splitDot :: String -> [FilePath]
+splitDot = unfoldr s where
+    s ('.':xs) = s xs
+    s [] = Nothing
+    s xs = Just (span ('.'/=) xs)
+
+dotPre :: String -> String -> String
+dotPre s ('.':x) = dotPre s x
+dotPre "" x = x
+dotPre s x | '.' == last s = dotPre (init s) x
+dotPre s "" = s
+dotPre s x = s ++ ( '.' : x )
+
+preDot :: String -> String
+preDot [] = []
+preDot xs@('.':_) = xs
+preDot xs = '.':xs
+
+
 toProtoName :: String -> Utf8 -> ProtoName
 toProtoName prefix rawName =
   case splitMod rawName of

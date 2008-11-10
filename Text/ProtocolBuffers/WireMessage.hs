@@ -56,6 +56,8 @@ import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
                                        ,DescriptorInfo(..),GetMessageInfo(..))
 
+--import Debug.Trace(trace)
+
 -- External user API for writing and reading messages
 
 -- | This computes the size of the message's fields with tags on the
@@ -487,14 +489,16 @@ instance Wire Int where
 {-# INLINE size'Varint #-}
 size'Varint :: (Bits a,Integral a) => a -> Int64
 size'Varint b = case compare b 0 of
-                  LT -> fromIntegral (divBy (bitSize b) 7)
+                  LT -> 10 -- fromIntegral (divBy (bitSize b) 7)
                   EQ -> 1
                   GT -> genericLength . takeWhile (0<) . iterate (`shiftR` 7) $ b
 
+{- unused since I started casting all negative values to Int64
 {-# INLINE divBy #-}
 divBy :: (Ord a, Integral a) => a -> a -> a
 divBy a b = let (q,r) = quotRem (abs a) b
             in if r==0 then q else succ q
+-}
 
 -- Taken from google's code, but I had to explcitly add fromIntegral in the right places:
 zzEncode32 :: Int32 -> Word32
@@ -539,18 +543,25 @@ getVarInt = do -- optimize first read instead of calling (go 0 0)
       else return (val .|. ((fromIntegral b) `shiftL` n))
 
 -- This can be used on any Integral type and is needed for signed types; unsigned can use putVarUInt below.
+-- This has been changed to handle only up to 64 bit integral values (to match documentation).
 {-# INLINE putVarSInt #-}
-putVarSInt :: (Integral a, Bits a) => a -> Put
-putVarSInt b =
-  case compare b 0 of
-    LT -> let len = divBy (bitSize b) 7               -- (pred len)*7 < bitSize b <= len*7
-              last'Size = (bitSize b)-((pred len)*7)  -- at least 1 and at most 7
-              last'Mask = pred (1 `shiftL` last'Size) -- at least 1 and at most 255
-              go i 1 = putWord8 (fromIntegral i .&. last'Mask)
+putVarSInt :: (Typeable a, Integral a, Bits a) => a -> Put
+putVarSInt bIn =
+  case compare bIn 0 of
+    LT -> let b :: Int64 -- upcast to 64 bit to match documentation of 10 bytes for all negative values
+              b = fromIntegral bIn
+--               len = divBy (bitSize b) 7               -- (pred len)*7 < bitSize b <= len*7
+--               last'Size = (bitSize b)-((pred len)*7)  -- at least 1 and at most 7
+--               last'Mask = pred (1 `shiftL` last'Size) -- at least 1 and at most 255
+              len,last'Mask :: Int
+              len = 10                                -- (pred 10)*7 < 64 <= 10*7
+--            last'Size = 1                           -- 64 - (pred 10)*7
+              last'Mask = 1                           -- pred (1 `shiftL` 1)
+              go i 1 = putWord8 (fromIntegral (i .&. last'Mask))
               go i n = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7) (pred n)
           in go b len
     EQ -> putWord8 0
-    GT -> putVarUInt b
+    GT -> putVarUInt bIn
 
 -- This should be used on unsigned Integral types only (not checked)
 {-# INLINE putVarUInt #-}

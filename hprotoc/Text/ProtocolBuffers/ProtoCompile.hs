@@ -1,7 +1,6 @@
 -- | This is the Main module for the command line program
 module Main where
 
-import qualified Data.Map as M
 import Data.Version
 import Language.Haskell.Pretty(prettyPrintStyleMode,Style(..),Mode(..),PPHsMode(..),PPLayout(..))
 import System.Console.GetOpt

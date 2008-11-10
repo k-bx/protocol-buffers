@@ -53,21 +53,21 @@ import Text.ProtocolBuffers.ProtoCompile.Instances(parseLabel,parseType)
 
 import Control.Monad(when,liftM2,liftM3,replicateM)
 import qualified Data.ByteString.Lazy as L(unpack)
-import qualified Data.ByteString.Lazy.Char8 as LC(notElem,head,uncons)
+import qualified Data.ByteString.Lazy.Char8 as LC(notElem,head)
 import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.Char(isUpper,toLower)
 import Data.Ix(inRange)
 import Data.Maybe(fromMaybe)
 import Data.Sequence((|>))
 import qualified Data.Sequence as Seq(fromList)
-import System.FilePath(takeFileName)
-import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName,anyToken,lookAhead
+--import System.FilePath(takeFileName)
+import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName,anyToken
                                     ,getInput,setInput,getPosition,setPosition,getState,setState
                                     ,(<?>),(<|>),token,choice,between,eof,unexpected,skipMany)
 import Text.ParserCombinators.Parsec.Pos(newPos)
 import Data.Word(Word8)
 
-import Debug.Trace(trace)
+-- import Debug.Trace(trace)
 
 default ()
 
@@ -142,7 +142,7 @@ doubleLit = tok (\l-> case l of L_Double _ x -> return x
                                 L_Integer _ x -> return (fromInteger x)
                                 _ -> Nothing) <?> "double (or integer) literal"
 
-ident,ident1,ident_package,ident_strip :: P s Utf8
+ident,ident1,ident_package :: P s Utf8
 ident = tok (\l-> case l of L_Name _ x -> return (Utf8 x)
                             _ -> Nothing) <?> "identifier (perhaps dotted)"
 
@@ -151,11 +151,6 @@ ident1 = tok (\l-> case l of L_Name _ x | LC.notElem '.' x -> return (Utf8 x)
 
 ident_package = tok (\l-> case l of L_Name _ x | LC.head x /= '.' -> return (Utf8 x)
                                     _ -> Nothing) <?> "package name (no leading dot)"
-
-ident_strip = tok (\l-> case l of L_Name _ x -> case LC.uncons x of
-                                                 (Just ('.',y)) -> return (Utf8 y)
-                                                 _ -> Nothing
-                                  _ -> Nothing) <?> "part of option name (with leading dot)"
 
 boolLit :: P s Bool
 boolLit = tok (\l-> case l of L_Name _ x | x == true -> return True
@@ -224,8 +219,6 @@ package = pName (U.fromString "package") >> do
 -- "foo.(bar.baz).qux" goes to Left [("foo",False),("bar.baz",True),("qux",False)]
 pOptionE :: P s (Either D.UninterpretedOption String)
 pOptionE = do
--- XXX  peek <- lookAhead (replicateM 5 anyToken)
---  trace (show "pOptionE lookAhead 5: "++show peek) $ do
   let pieces = withParens <|> withoutParens
       withParens = do
         part <- between (pChar '(') (pChar ')') ident
@@ -254,7 +247,7 @@ pUnValue uno = tok storeLexed where
                              | otherwise =
     return $ uno { D.UninterpretedOption.negative_int_value = Just (fromInteger i) }
   storeLexed (L_Double _ d) = return $ uno {D.UninterpretedOption.double_value = Just d }
-  storeLexed (L_String _ bs _) = return $ uno {D.UninterpretedOption.string_value = Just bs }
+  storeLexed (L_String _ _raw bs) = return $ uno {D.UninterpretedOption.string_value = Just bs }
   storeLexed _ = Nothing
 
 makeUninterpetedOption :: [(Utf8,Bool)] -> D.UninterpretedOption
