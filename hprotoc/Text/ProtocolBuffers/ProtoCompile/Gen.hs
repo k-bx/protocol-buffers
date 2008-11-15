@@ -31,9 +31,8 @@ import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),DescriptorInfo(..),ProtoInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..))
 
 import qualified Data.ByteString.Lazy.Char8 as LC(unpack)
-import Data.Char(isUpper)
 import qualified Data.Foldable as F(foldr,toList)
-import Data.List(sort,sortBy,group,foldl',foldl1')
+import Data.List(sortBy,foldl',foldl1')
 import Data.Function(on)
 import Language.Haskell.Pretty(prettyPrint)
 import Language.Haskell.Syntax
@@ -47,8 +46,6 @@ default (Int)
 
 -- -- -- -- Helper functions
 
-imp s = error $ "Text.ProtocolBuffers.ProtoCompile.Gen: Impossible! "++s
-
 noWhere :: [HsDecl]
 noWhere = [] -- YYY noWhere = (HsBDecls [])
 
@@ -56,14 +53,6 @@ noWhere = [] -- YYY noWhere = (HsBDecls [])
 ($$) = HsApp
 
 infixl 1 $$
-
-dotPre :: String -> String -> String
-dotPre "" x = x -- after this the value of s cannot be []
-dotPre s "" = s
-dotPre s x@('.':xs)  | '.' == last s = s ++ xs -- s cannnot be [], so last is safe
-                     | otherwise = s ++ x
-dotPre s x | '.' == last s = s++x -- s cannnot be [], so last is safe
-           | otherwise = s++('.':x)
 
 src :: SrcLoc
 src = SrcLoc "No SrcLoc" 0 0
@@ -94,29 +83,28 @@ inst s p r  = HsFunBind [HsMatch src (HsIdent s) p (HsUnGuardedRhs r) noWhere]
 fqMod :: ProtoName -> String
 fqMod (ProtoName _ a b c) = fmName $ foldr dotFM (promoteFM c) . map promoteFM $ a++b
 
-fqField :: ProtoName -> String
-fqField (ProtoName _ a b c) = ffName $ foldr dotFF (promoteFF (mangle c)) . map promoteFM $ a++b
-
 joinMod :: [MName String] -> String
 joinMod [] = ""
 joinMod ms = fmName $ foldr1 dotFM . map promoteFM $ ms
 
+baseIdent :: ProtoName -> HsName
 baseIdent = HsIdent . mName . baseName
+baseIdent' :: ProtoFName -> HsName
 baseIdent' = HsIdent . fName . baseName'
 
 qualName :: ProtoName -> HsQName
-qualName p@(ProtoName _ _prefix [] base) = UnQual (baseIdent p)
-qualName p@(ProtoName _ _prefix (parents) base) = Qual (Module (joinMod parents)) (baseIdent p)
+qualName p@(ProtoName _ _prefix [] _base) = UnQual (baseIdent p)
+qualName p@(ProtoName _ _prefix (parents) _base) = Qual (Module (joinMod parents)) (baseIdent p)
 
 qualFName :: ProtoFName -> HsQName
-qualFName p@(ProtoFName _ _prefix [] base) = UnQual (baseIdent' p)
-qualFName p@(ProtoFName _ _prefix parents base) = Qual (Module (joinMod parents)) (baseIdent' p)
+qualFName p@(ProtoFName _ _prefix [] _base) = UnQual (baseIdent' p)
+qualFName p@(ProtoFName _ _prefix parents _base) = Qual (Module (joinMod parents)) (baseIdent' p)
 
 unqualName :: ProtoName -> HsQName
-unqualName p@(ProtoName _ _prefix _parent base) = UnQual (baseIdent p)
+unqualName p@(ProtoName _ _prefix _parent _base) = UnQual (baseIdent p)
 
 mayQualName :: ProtoName -> ProtoFName -> HsQName
-mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix parents base) =
+mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix parents _base) =
   if joinMod (c'prefix++c'parents++[c'base]) == joinMod (prefix++parents)
     then UnQual (baseIdent' name) -- name is local, make UnQual
     else qualFName name           -- name is imported, make Qual
@@ -220,7 +208,7 @@ instanceReflectEnum ei
         [ inst "reflectEnum" [] ascList
         , inst "reflectEnumInfo" [ HsPWildCard ] ei' ]
   where (ProtoName xxx a b c) = enumName ei
-        xxx'Exp = HsParen (HsParen $ pvar "pack" $$ HsLit (HsString (LC.unpack (utf8 (fiName xxx)))))
+        xxx'Exp = HsParen $ pvar "pack" $$ HsLit (HsString (LC.unpack (utf8 (fiName xxx))))
         values = enumValues ei
         ascList,ei',protoNameExp :: HsExp
         ascList = HsList (map one values)
@@ -249,20 +237,19 @@ protoModule pri@(ProtoInfo protoName _ _ keyInfos _ _ _) fdpBS
                        , HsImportDecl src (Module "Text.ProtocolBuffers.WireMessage") True (Just (Module "P'"))
                            (Just (False,[HsIVar (HsIdent "wireGet,getFromBS")]))
                        ]
-        formatImport (PMName ms t) = HsImportDecl src (Module (fmName . joinPM  $ PMName (haskellPrefix protoName ++ ms) t)) True
-                                      (Just (Module (joinMod ms))) (Just (False,[HsIAbs . HsIdent . mName $ t]))
+        formatImport ((a,b),s) = HsImportDecl src (Module a) True asM (Just (False,map (HsIAbs . HsIdent) (S.toList s)))
+          where asM | a==b = Nothing
+                    | otherwise = Just (Module b)
 
-protoImport :: ProtoInfo -> [PMName String]
-protoImport (ProtoInfo protoName _ _ keyInfos _ _ _)
-    = map head . group . sort 
-      . filter (selfName /=)
-      . concatMap withMod
-      $ allNames
-  where selfName = PMName (parentModule protoName) (baseName protoName)
-        withMod (ProtoName _ _prefix [] _base) = []
-        withMod (ProtoName _ _prefix modname base) = [PMName modname base]
-        allNames = F.foldr (\(e,fi) rest -> e : addName fi rest) [] keyInfos
-          where addName fi rest = maybe rest (:rest) (typeName fi)
+protoImport :: ProtoInfo -> [((String,String),S.Set String)]
+protoImport protoInfo
+    = M.assocs . M.fromListWith S.union . filter isForeign . map withMod $ keyNames
+  where isForeign = let here = fqMod protoName
+                    in (\((a,_),_) -> a/=here)
+        protoName = protoMod protoInfo
+        withMod p@(ProtoName _ _prefix modname base) = ((fqMod p,joinMod modname),S.singleton (mName base))
+        keyNames = F.foldr (\(e,fi) rest -> e : addName fi rest) [] (extensionKeys protoInfo)
+        addName fi rest = maybe rest (:rest) (typeName fi)
 
 embed'ProtoInfo :: ProtoInfo -> [HsDecl]
 embed'ProtoInfo pri = [ myType, myValue ]
@@ -284,8 +271,9 @@ descriptorModule di
           un = UnQual . baseIdent $ protoName
           imports = standardImports (hasExt di) ++ map formatImport (toImport di)
           exportKeys = map (HsEVar . UnQual . baseIdent' . fieldName . snd) (F.toList (keys di))
-          formatImport ((a,b),s) = HsImportDecl src (Module a) True (Just (Module b)) (Just (False,
-                                      map (HsIAbs . HsIdent) (S.toList s)))
+          formatImport ((a,b),s) = HsImportDecl src (Module a) True asM (Just (False, map (HsIAbs . HsIdent) (S.toList s)))
+            where asM | a==b = Nothing
+                      | otherwise = Just (Module b)
       in HsModule src (Module (fqMod protoName))
            (Just (HsEThingAll un : exportKeys))
            imports (descriptorX di : (keysX protoName (keys di) ++ instancesDescriptor di))
@@ -298,20 +286,18 @@ standardImports ext =
  where ops | ext = map (HsIVar . HsSymbol) ["+","<=","&&"," || "]
            | otherwise = map (HsIVar . HsSymbol) ["+"]
 
--- XXX XXX Need to rework this to handle FName and PName data!
 toImport :: DescriptorInfo -> [((String,String),S.Set String)]
 toImport di
     = M.assocs . M.fromListWith S.union . filter isForeign . map withMod $ allNames
   where isForeign = let here = fqMod protoName
                     in (\((a,_),_) -> a/=here)
         protoName = descName di
-        withMod (Left p@(ProtoName _ prefix modname base)) = ((fqMod p,joinMod modname),S.singleton (mName base))
+        withMod (Left p@(ProtoName _ _prefix modname base)) = ((fqMod p,joinMod modname),S.singleton (mName base))
         withMod (Right (ProtoFName _ prefix modname base)) = ((joinMod (prefix++modname),joinMod modname),S.singleton (fName base))
         allNames = F.foldr addName keyNames (fields di)
         keyNames = F.foldr (\(e,fi) rest -> Left e : addName fi rest) keysKnown (keys di)
         addName fi rest = maybe rest (:rest) (fmap Left (typeName fi))
         keysKnown = F.foldr (\fi rest -> Right (fieldName fi) : rest) [] (knownKeys di)
---      keysKnown = F.foldr (\fi rest -> addName fi (fieldName fi : rest)) [] (knownKeys di)
 
 keysX :: ProtoName -> Seq KeyInfo -> [HsDecl]
 keysX self i = concatMap (makeKey self) . F.toList $ i
@@ -610,128 +596,3 @@ useType 16 = Just "Int64"
 useType 17 = Just "Int32"
 useType 18 = Just "Int64"
 useType  x = error $ "Text.ProtocolBuffers.Gen: Impossible? useType Unknown type code "++show x
-
------------------------
-{-
-test = putStrLn . prettyPrint . descriptorModule False "Text" $ d'
-
-testDesc =  putStrLn . prettyPrint . descriptorModule False "Text" $ genFieldOptions
-
-testLabel = putStrLn . prettyPrint $ enumModule "Text" labelTest
-testType = putStrLn . prettyPrint $ enumModule "Text" t
-
--- testing
-utf8FromString = Utf8 . U.fromString
-
--- try and generate a small replacement for my manual file
-genFieldOptions :: D.DescriptorProto.DescriptorProto
-genFieldOptions =
-  defaultValue
-  { D.DescriptorProto.name = Just (utf8FromString "DescriptorProtos.FieldOptions") 
-  , D.DescriptorProto.field = Seq.fromList
-    [ defaultValue
-      { D.FieldDescriptorProto.name = Just (utf8FromString "ctype")
-      , D.FieldDescriptorProto.number = Just 1
-      , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
-      , D.FieldDescriptorProto.type' = Just TYPE_ENUM
-      , D.FieldDescriptorProto.type_name = Just (utf8FromString "DescriptorProtos.FieldOptions.CType")
-      , D.FieldDescriptorProto.default_value = Nothing
-      }
-    , defaultValue
-      { D.FieldDescriptorProto.name = Just (utf8FromString "experimental_map_key")
-      , D.FieldDescriptorProto.number = Just 9
-      , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
-      , D.FieldDescriptorProto.type' = Just TYPE_STRING
-      , D.FieldDescriptorProto.default_value = Nothing
-      }
-    ]
-  }
-
--- test several features
-d' :: D.DescriptorProto.DescriptorProto
-d' = defaultValue
-    { D.DescriptorProto.name = Just (utf8FromString "SomeMod.ServiceOptions") 
-    , D.DescriptorProto.field = Seq.fromList
-       [ defaultValue
-         { D.FieldDescriptorProto.name = Just (utf8FromString "fieldString")
-         , D.FieldDescriptorProto.number = Just 1
-         , D.FieldDescriptorProto.label = Just LABEL_REQUIRED
-         , D.FieldDescriptorProto.type' = Just TYPE_STRING
-         , D.FieldDescriptorProto.default_value = Just (utf8FromString "Hello World")
-         }
-       , defaultValue
-         { D.FieldDescriptorProto.name = Just (utf8FromString "fieldDouble")
-         , D.FieldDescriptorProto.number = Just 4
-         , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
-         , D.FieldDescriptorProto.type' = Just TYPE_DOUBLE
-         , D.FieldDescriptorProto.default_value = Just (utf8FromString "+5.5e-10")
-        }
-       , defaultValue
-         { D.FieldDescriptorProto.name = Just (utf8FromString "fieldBytes")
-         , D.FieldDescriptorProto.number = Just 2
-         , D.FieldDescriptorProto.label = Just LABEL_REQUIRED
-         , D.FieldDescriptorProto.type' = Just TYPE_STRING
-         , D.FieldDescriptorProto.default_value = Just (utf8FromString . map toEnum $ [0,5..255])
-        }
-       , defaultValue
-         { D.FieldDescriptorProto.name = Just (utf8FromString "fieldInt64")
-         , D.FieldDescriptorProto.number = Just 3
-         , D.FieldDescriptorProto.label = Just LABEL_REQUIRED
-         , D.FieldDescriptorProto.type' = Just TYPE_INT64
-         , D.FieldDescriptorProto.default_value = Just (utf8FromString "-0x40")
-        }
-       , defaultValue
-         { D.FieldDescriptorProto.name = Just (utf8FromString "fieldBool")
-         , D.FieldDescriptorProto.number = Just 5
-         , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
-         , D.FieldDescriptorProto.type' = Just TYPE_STRING
-         , D.FieldDescriptorProto.default_value = Just (utf8FromString "False")
-        }
-       , defaultValue
-         { D.FieldDescriptorProto.name = Just (utf8FromString "field2TestSelf")
-         , D.FieldDescriptorProto.number = Just 6
-         , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
-         , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
-         , D.FieldDescriptorProto.type_name = Just (utf8FromString "ServiceOptions")
-         }
-       , defaultValue
-         { D.FieldDescriptorProto.name = Just (utf8FromString "field3TestQualified")
-         , D.FieldDescriptorProto.number = Just 7
-         , D.FieldDescriptorProto.label = Just LABEL_REPEATED
-         , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
-         , D.FieldDescriptorProto.type_name = Just (utf8FromString "A.B.C.Label")
-         }
-       , defaultValue
-         { D.FieldDescriptorProto.name = Just (utf8FromString "field4TestUnqualified")
-         , D.FieldDescriptorProto.number = Just 8
-         , D.FieldDescriptorProto.label = Just LABEL_REPEATED
-         , D.FieldDescriptorProto.type' = Just TYPE_MESSAGE
-         , D.FieldDescriptorProto.type_name = Just (utf8FromString "Maybe")
-         }
-       ]
-    }
-
-labelTest :: D.EnumDescriptorProto.EnumDescriptorProto
-labelTest = defaultValue
-    { D.EnumDescriptorProto.name = Just (utf8FromString "DescriptorProtos.FieldDescriptorProto.Label")
-    , D.EnumDescriptorProto.value = Seq.fromList
-      [ defaultValue { D.EnumValueDescriptorProto.name = Just (utf8FromString "LABEL_OPTIONAL")
-                     , D.EnumValueDescriptorProto.number = Just 1 }
-      , defaultValue { D.EnumValueDescriptorProto.name = Just (utf8FromString "LABEL_REQUIRED")
-                     , D.EnumValueDescriptorProto.number = Just 2 }
-      , defaultValue { D.EnumValueDescriptorProto.name = Just (utf8FromString "LABEL_REPEATED")
-                     , D.EnumValueDescriptorProto.number = Just 3 }
-      ]
-    }
-
-t :: D.EnumDescriptorProto.EnumDescriptorProto
-t = defaultValue { D.EnumDescriptorProto.name = Just (utf8FromString "DescriptorProtos.FieldDescriptorProto.Type")
-                 , D.EnumDescriptorProto.value = Seq.fromList . zipWith make [1..] $ names }
-  where make :: Int32 -> String -> D.EnumValueDescriptorProto
-        make i s = defaultValue { D.EnumValueDescriptorProto.name = Just (utf8FromString s)
-                                , D.EnumValueDescriptorProto.number = Just i }
-        names = ["TYPE_DOUBLE","TYPE_FLOAT","TYPE_INT64","TYPE_UINT64","TYPE_INT32"
-                ,"TYPE_FIXED64","TYPE_FIXED32","TYPE_BOOL","TYPE_STRING","TYPE_GROUP"
-                ,"TYPE_MESSAGE","TYPE_BYTES","TYPE_UINT32","TYPE_ENUM","TYPE_SFIXED32"
-                ,"TYPE_SFIXED64","TYPE_SINT32","TYPE_SINT64"]
--}

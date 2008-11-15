@@ -38,6 +38,7 @@ instance P'.MessageAPI msg' (msg' -> OptimizeMode) OptimizeMode where
 instance P'.ReflectEnum OptimizeMode where
   reflectEnum = [(1, "SPEED", SPEED), (2, "CODE_SIZE", CODE_SIZE)]
   reflectEnumInfo _
-    = P'.EnumInfo (P'.makePNF (P'.pack "MakeReflections.xxx") ["Text"] ["DescriptorProtos","FileOptions"] "OptimizeMode")
-        ["Text", "DescriptorProtos", "FileOptions", "OptimizeMode.hs"]
-        [(1, "SPEED"), (2, "CODE_SIZE")]
+   = P'.EnumInfo
+      (P'.makePNF (P'.pack ".google.protobuf.FileOptions.OptimizeMode") ["Text"] ["DescriptorProtos", "FileOptions"] "OptimizeMode")
+      ["Text", "DescriptorProtos", "FileOptions", "OptimizeMode.hs"]
+      [(1, "SPEED"), (2, "CODE_SIZE")]

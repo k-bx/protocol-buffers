@@ -18,47 +18,46 @@ instance P'.UnknownMessage ServiceDescriptorProto where
 instance P'.Mergeable ServiceDescriptorProto where
   mergeEmpty = ServiceDescriptorProto P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty P'.mergeEmpty
   mergeAppend (ServiceDescriptorProto x'1 x'2 x'3 x'4) (ServiceDescriptorProto y'1 y'2 y'3 y'4)
-    = ServiceDescriptorProto (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
+   = ServiceDescriptorProto (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
  
 instance P'.Default ServiceDescriptorProto where
   defaultValue = ServiceDescriptorProto P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue
  
 instance P'.Wire ServiceDescriptorProto where
   wireSize ft' self'@(ServiceDescriptorProto x'1 x'2 x'3 x'4)
-    = case ft' of
-        10 -> calc'Size
-        11 -> P'.prependMessageSize calc'Size
-        _ -> P'.wireSizeErr ft' self'
+   = case ft' of
+       10 -> calc'Size
+       11 -> P'.prependMessageSize calc'Size
+       _ -> P'.wireSizeErr ft' self'
     where
         calc'Size = (P'.wireSizeOpt 1 9 x'1 + P'.wireSizeRep 1 11 x'2 + P'.wireSizeOpt 1 11 x'3 + P'.wireSizeUnknownField x'4)
   wirePut ft' self'@(ServiceDescriptorProto x'1 x'2 x'3 x'4)
-    = case ft' of
-        10 -> put'Fields
-        11
-          -> do
-               P'.putSize (P'.wireSize 10 self')
-               put'Fields
-        _ -> P'.wirePutErr ft' self'
+   = case ft' of
+       10 -> put'Fields
+       11
+        -> do
+             P'.putSize (P'.wireSize 10 self')
+             put'Fields
+       _ -> P'.wirePutErr ft' self'
     where
         put'Fields
-          = do
-              P'.wirePutOpt 10 9 x'1
-              P'.wirePutRep 18 11 x'2
-              P'.wirePutOpt 26 11 x'3
-              P'.wirePutUnknownField x'4
+         = do
+             P'.wirePutOpt 10 9 x'1
+             P'.wirePutRep 18 11 x'2
+             P'.wirePutOpt 26 11 x'3
+             P'.wirePutUnknownField x'4
   wireGet ft'
-    = case ft' of
-        10 -> P'.getBareMessageWith P'.loadUnknown update'Self
-        11 -> P'.getMessageWith P'.loadUnknown update'Self
-        _ -> P'.wireGetErr ft'
+   = case ft' of
+       10 -> P'.getBareMessageWith P'.loadUnknown update'Self
+       11 -> P'.getMessageWith P'.loadUnknown update'Self
+       _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
-          = case field'Number of
-              1 -> P'.fmap (\ new'Field -> old'Self{name = P'.Just new'Field}) (P'.wireGet 9)
-              2 -> P'.fmap (\ new'Field -> old'Self{method = P'.append (method old'Self) new'Field}) (P'.wireGet 11)
-              3 -> P'.fmap (\ new'Field -> old'Self{options = P'.mergeAppend (options old'Self) (P'.Just new'Field)})
-                     (P'.wireGet 11)
-              _ -> P'.unknownField field'Number
+         = case field'Number of
+             1 -> P'.fmap (\ new'Field -> old'Self{name = P'.Just new'Field}) (P'.wireGet 9)
+             2 -> P'.fmap (\ new'Field -> old'Self{method = P'.append (method old'Self) new'Field}) (P'.wireGet 11)
+             3 -> P'.fmap (\ new'Field -> old'Self{options = P'.mergeAppend (options old'Self) (P'.Just new'Field)}) (P'.wireGet 11)
+             _ -> P'.unknownField field'Number
  
 instance P'.MessageAPI msg' (msg' -> ServiceDescriptorProto) ServiceDescriptorProto where
   getVal m' f' = f' m'
@@ -67,5 +66,5 @@ instance P'.GPB ServiceDescriptorProto
  
 instance P'.ReflectDescriptor ServiceDescriptorProto where
   reflectDescriptorInfo _
-    = P'.read
-        "DescriptorInfo {descName = ProtoName {protobufName = Utf8 {utf8 = Chunk \"MakeReflections.xxx\" Empty}, haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"ServiceDescriptorProto\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"ServiceDescriptorProto.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoName {protobufName = Utf8 {utf8 = Chunk \"MakeReflections.xxx\" Empty}, haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.ServiceDescriptorProto\", baseName = \"name\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {protobufName = Utf8 {utf8 = Chunk \"MakeReflections.xxx\" Empty}, haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.ServiceDescriptorProto\", baseName = \"method\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 18}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = Utf8 {utf8 = Chunk \"MakeReflections.xxx\" Empty}, haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"MethodDescriptorProto\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoName {protobufName = Utf8 {utf8 = Chunk \"MakeReflections.xxx\" Empty}, haskellPrefix = \"Text\", parentModule = \"DescriptorProtos.ServiceDescriptorProto\", baseName = \"options\"}, fieldNumber = FieldId {getFieldId = 3}, wireTag = WireTag {getWireTag = 26}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = Utf8 {utf8 = Chunk \"MakeReflections.xxx\" Empty}, haskellPrefix = \"Text\", parentModule = \"DescriptorProtos\", baseName = \"ServiceOptions\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"
+   = P'.read
+      "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.ServiceDescriptorProto\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"ServiceDescriptorProto\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"ServiceDescriptorProto.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.ServiceDescriptorProto.name\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"ServiceDescriptorProto\"], baseName' = FName \"name\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.ServiceDescriptorProto.method\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"ServiceDescriptorProto\"], baseName' = FName \"method\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 18}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.MethodDescriptorProto\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"MethodDescriptorProto\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.ServiceDescriptorProto.options\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"ServiceDescriptorProto\"], baseName' = FName \"options\"}, fieldNumber = FieldId {getFieldId = 3}, wireTag = WireTag {getWireTag = 26}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.ServiceOptions\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"ServiceOptions\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"

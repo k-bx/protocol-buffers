@@ -8,16 +8,13 @@
 --
 -- A 'field' is a mangled identifer that is a valid Haskell name that
 -- begins with lower case, and which may have a single quote at the
--- end if needed to avoid a reserved word.
+-- end if needed to avoid a reserved word.  These may also start with
+-- '_', though just a "_" is mangled to "_'".
 --
 -- A 'module' is a mangled identifier that is a valid Haskell name
 -- that begins with upper case.  These never have a single quote.  A
 -- leading _ is replaced with a leading U'_ to make a valid
 -- identifier.
---
--- The flow starts with a Utf8 ByteString from parsing the .proto file,
--- or perhaps from an external source.  These are checked by validDI
--- and promoted to a DIName.
 module Text.ProtocolBuffers.Identifiers
   ( unull,toString,fromString
   , IName(..),DIName(..),FIName(..)
@@ -40,7 +37,6 @@ import Data.Set(Set)
 import qualified Data.Set as S
 import Text.ProtocolBuffers.Basic
 
-import Text.ParserCombinators.ReadP as R
 -- basic utilities to export
 
 unull :: Utf8 -> Bool
@@ -72,22 +68,33 @@ data PMName a = PMName [MName a] (MName a) deriving (Show,Data,Typeable,Read,Eq,
 -- | Parsed Haskell name ending with FName.  Good constructor to use.
 data PFName a = PFName [MName a] (FName a) deriving (Show,Data,Typeable,Read,Eq,Ord)
 
-instance Read a => Read (IName a) where readsPrec d xs = readP_to_S (fmap IName (between (string "(IName ") (char ')') (readS_to_P (readsPrec d)))) xs
-instance Read a => Read (MName a) where readsPrec d xs = readP_to_S (fmap MName (between (string "(MName ") (char ')') (readS_to_P (readsPrec d)))) xs
-instance Read a => Read (FName a) where readsPrec d xs = readP_to_S (fmap FName (between (string "(FName ") (char ')') (readS_to_P (readsPrec d)))) xs
-instance Read a => Read (DIName a) where readsPrec d xs = readP_to_S (fmap DIName (between (string "(DIName ") (char ')') (readS_to_P (readsPrec d)))) xs
-instance Read a => Read (FIName a) where readsPrec d xs = readP_to_S (fmap FIName (between (string "(FIName ") (char ')') (readS_to_P (readsPrec d)))) xs
-instance Read a => Read (FFName a) where readsPrec d xs = readP_to_S (fmap FFName (between (string "(FMName ") (char ')') (readS_to_P (readsPrec d)))) xs
-instance Read a => Read (FMName a) where readsPrec d xs = readP_to_S (fmap FMName (between (string "(FMName ") (char ')') (readS_to_P (readsPrec d)))) xs
+app_prec,max_prec :: Int
+app_prec = 10
+max_prec = 11
 
-instance Show a => Show (IName a) where showsPrec d (IName a) = ("(IName "++) . showsPrec d a . (')':)
-instance Show a => Show (MName a) where showsPrec d (MName a) = ("(MName "++) . showsPrec d a . (')':)
-instance Show a => Show (FName a) where showsPrec d (FName a) = ("(FName "++) . showsPrec d a . (')':)
-instance Show a => Show (DIName a) where showsPrec d (DIName a) = ("(DIName "++) . showsPrec d a . (')':)
-instance Show a => Show (FIName a) where showsPrec d (FIName a) = ("(FIName "++) . showsPrec d a . (')':)
-instance Show a => Show (FMName a) where showsPrec d (FMName a) = ("(FMName "++) . showsPrec d a . (')':)
-instance Show a => Show (FFName a) where showsPrec d (FFName a) = ("(FFName "++) . showsPrec d a . (')':)
+{-# INLINE readIt #-}
+readIt :: (Read a) => (a -> a1) -> String -> Int -> String -> [(a1, String)]
+readIt con name d  = readParen (d > app_prec) (\r -> [(con m,t) | (name',s) <- lex r, name==name', (m,t) <- readsPrec (max_prec) s])
 
+{-# INLINE showIt #-}
+showIt :: (Show a) => Int -> [Char] -> a -> String -> String
+showIt d name a = showParen (d > app_prec) $ (name++) . (' ':) . showsPrec max_prec a
+
+instance Read a => Read (IName a) where readsPrec = readIt IName "IName"
+instance Read a => Read (MName a) where readsPrec = readIt MName "MName"
+instance Read a => Read (FName a) where readsPrec = readIt FName "FName"
+instance Read a => Read (DIName a) where readsPrec = readIt DIName "DIName"
+instance Read a => Read (FIName a) where readsPrec = readIt FIName "FIName"
+instance Read a => Read (FFName a) where readsPrec = readIt FFName "FFName"
+instance Read a => Read (FMName a) where readsPrec = readIt FMName "FMName"
+
+instance Show a => Show (IName a) where showsPrec d (IName a) = showIt d "IName" a
+instance Show a => Show (MName a) where showsPrec d (MName a) = showIt d "MName" a
+instance Show a => Show (FName a) where showsPrec d (FName a) = showIt d "FName" a
+instance Show a => Show (DIName a) where showsPrec d (DIName a) = showIt d "DIName" a
+instance Show a => Show (FIName a) where showsPrec d (FIName a) = showIt d "FIName" a
+instance Show a => Show (FMName a) where showsPrec d (FMName a) = showIt d "FMName" a
+instance Show a => Show (FFName a) where showsPrec d (FFName a) = showIt d "FFName" a
 
 -- | This is used to abstract over Utf8 and String.  The important
 -- entry point is 'validDI'.

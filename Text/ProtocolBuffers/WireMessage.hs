@@ -6,8 +6,11 @@ instances.  The encoding is mostly documented at
 <http://code.google.com/apis/protocolbuffers/docs/encoding.html>.
 
 The user API functions are grouped into sections and documented.  The
-rest are for internal use.
- -}
+rest are for internal use.  The main functions are 'messageGet' and
+'messagePut' (and 'messageSize').  There are then several 'message*'
+variants which allow for finer control and for making delimited
+messages.
+-}
 module Text.ProtocolBuffers.WireMessage
     ( -- * User API functions
       -- ** Main encoding and decoding operations (non-delimited message encoding)
@@ -553,7 +556,7 @@ putVarSInt bIn =
 --               len = divBy (bitSize b) 7               -- (pred len)*7 < bitSize b <= len*7
 --               last'Size = (bitSize b)-((pred len)*7)  -- at least 1 and at most 7
 --               last'Mask = pred (1 `shiftL` last'Size) -- at least 1 and at most 255
-              len,last'Mask :: Int
+              len :: Int
               len = 10                                -- (pred 10)*7 < 64 <= 10*7
 --            last'Size = 1                           -- 64 - (pred 10)*7
               last'Mask = 1                           -- pred (1 `shiftL` 1)

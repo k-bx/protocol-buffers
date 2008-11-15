@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        0.4.3
+version:        1.0.0
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -10,7 +10,7 @@ maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
 stability:      Experimental
 homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
 package-url:    http://darcs.haskell.org/packages/protocol-buffers2/
-synopsis:       Self-description of Google Protocol Buffer specifications
+synopsis:       Text.DescriptorProto.Options and Google Protocol Buffer specifications
 description:    Uses protocol-buffers package
 category:       Text
 Tested-With:    GHC ==6.8.3
@@ -23,7 +23,8 @@ flag small_base
 
 Library
   ghc-options:  -O2
-  exposed-modules: Text.DescriptorProtos
+  exposed-modules: Text.DescriptorProtos.Options
+                   Text.DescriptorProtos
                    Text.DescriptorProtos.DescriptorProto
                    Text.DescriptorProtos.DescriptorProto.ExtensionRange
                    Text.DescriptorProtos.EnumDescriptorProto
@@ -51,17 +52,15 @@ Library
   if flag(small_base)
         build-depends: base >= 3,
                        containers,
-                       bytestring,
-                       array,
-                       filepath,
-                       directory,
-                       mtl,
-                       QuickCheck
+                       bytestring
   else
         build-depends: base < 3
 
-  build-depends:   protocol-buffers == 0.4.3
+  build-depends:   protocol-buffers == 1.0.0
   extensions:      DeriveDataTypeable,
                    EmptyDataDecls,
                    FlexibleInstances,
-                   MultiParamTypeClasses
+                   MultiParamTypeClasses,
+                   FunctionalDependencies,
+                   FlexibleContexts
+

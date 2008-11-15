@@ -4,7 +4,8 @@
 -- Since the Lexer should also avoid such errors this should be a
 -- reliably total function of the input.
 --
--- The inernals have been updated to handle Google's protobuf-
+-- The inernals have been updated to handle Google's protobuf version
+-- 2.0.2 formats.
 module Text.ProtocolBuffers.ProtoCompile.Parser(parseProto,isValidUTF8) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)

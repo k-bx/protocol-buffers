@@ -5,23 +5,34 @@ other modules in protocol-buffers.  The exposed parts are:
 
 @
 import Text.ProtocolBuffers.Basic
-  ( Seq,Utf8(..),ByteString,Int32,Int64,Word32,Word64
+  ( Seq,Utf8(utf8),Int32,Int64,Word32,Word64
   , WireTag,FieldId,WireType,FieldType,EnumCode,WireSize
-  , Mergeable(..),Default(..),Wire)
+  , Mergeable(mergeEmpty,mergeAppend,mergeConcat),Default(defaultValue),Wire)
 import Text.ProtocolBuffers.Default()
 import Text.ProtocolBuffers.Extensions
-  ( Key,ExtKey(getExt,putExt,clearExt),MessageAPI(..)
+  ( Key,ExtKey(getExt,putExt,clearExt),MessageAPI(getVal,isSet)
   , getKeyFieldId,getKeyFieldType,getKeyDefaultValue)
+import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections
   ( ReflectDescriptor(..),ReflectEnum(..),ProtoName(..),HsDefault(..),EnumInfoApp
-  , KeyInfo,FieldInfo(..),DescriptorInfo(..),EnumInfo(..),ProtoInfo(..))
+  , KeyInfo,FieldInfo(..),DescriptorInfo(..),EnumInfo(..),ProtoInfo(..),makePNF )
 import Text.ProtocolBuffers.WireMessage
   ( Put,Get,runPut,runGet,runGetOnLazy
   , messageSize,messagePut,messageGet,messagePutM,messageGetM
   , messageWithLengthSize,messageWithLengthPut,messageWithLengthGet,messageWithLengthPutM,messageWithLengthGetM
   , messageAsFieldSize,messageAsFieldPutM,messageAsFieldGetM)
 @
+
+The message serialization is taken care of by "WireMessage"
+operations, especially 'messagePut' and 'messageGet'.  The
+'MessageAPI' provides the useful polymorphic 'getVal' and 'isSet'
+where 'getVal' looks up default values and also works with extension
+keys.  The 'Utf8' newtype is used to indicate the format in the
+underlying lazy 'ByteString'.  Messages and values can be combined
+with the right-biased 'Mergeable' operations.  The 'mergeEmpty' should
+not be used as required values are filled in with undefined errors,
+please use 'defaultValue' instead.
 
 -}
 module Text.ProtocolBuffers(
@@ -33,12 +44,12 @@ module Text.ProtocolBuffers(
   ) where
 
 import Text.ProtocolBuffers.Basic
-  ( Seq,Utf8(..),ByteString,Int32,Int64,Word32,Word64
+  ( Seq,Utf8(utf8),Int32,Int64,Word32,Word64
   , WireTag,FieldId,WireType,FieldType,EnumCode,WireSize
-  , Mergeable(..),Default(..),Wire)
+  , Mergeable(mergeEmpty,mergeAppend,mergeConcat),Default(defaultValue),Wire)
 import Text.ProtocolBuffers.Default()
 import Text.ProtocolBuffers.Extensions
-  ( Key,ExtKey(getExt,putExt,clearExt),MessageAPI(..)
+  ( Key,ExtKey(getExt,putExt,clearExt),MessageAPI(getVal,isSet)
   , getKeyFieldId,getKeyFieldType,getKeyDefaultValue)
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Mergeable()

@@ -8,6 +8,8 @@
 -- have yet to write much documentation.  Luckily the record field
 -- names are somewhat descriptive.
 --
+-- The other reflection is using the 'fileDescriptorProto' which
+-- is put into the top level module created by hprotoc.
 module Text.ProtocolBuffers.Reflections
   ( ProtoName(..),ProtoFName(..),ProtoInfo(..),DescriptorInfo(..),FieldInfo(..),KeyInfo
   , HsDefault(..),EnumInfo(..),EnumInfoApp

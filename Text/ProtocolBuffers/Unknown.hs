@@ -1,5 +1,6 @@
--- | This module add unknown field supprt to the library
---
+-- | This module add unknown field support to the library.  There are
+-- no user API things here.
+
 -- This should support
 --  1) Storing unknown bytestrings in messages
 --     a) Mergeable
@@ -71,17 +72,6 @@ wirePutUnknownField :: UnknownField -> Put
 wirePutUnknownField (UnknownField m) = mapM_ aPut (M.assocs m) where
   aPut (fi,(UFV wt raw)) = F.mapM_ (\bs -> putVarUInt (getWireTag $ mkWireTag fi wt) >> putLazyByteString bs) raw
 
-{-
-getMessageUnknown :: (Mergeable message, ReflectDescriptor message,Typeable message,ExtendMessage message)
-                  => (FieldId -> message -> Get message)
-                  -> Get message
-getMessageUnknown = getMessageWith loadUnknown
-
-getBareMessageUnknown :: (Mergeable message, ReflectDescriptor message,Typeable message,ExtendMessage message)
-                      => (FieldId -> message -> Get message)
-                      -> Get message
-getBareMessageUnknown = getBareMessageWith loadUnknown
--}
 loadUnknown :: (Typeable a, UnknownMessage a) => FieldId -> WireType -> a -> Get a
 loadUnknown fieldId wireType msg = do
   let (UnknownField uf) = getUnknownField msg
