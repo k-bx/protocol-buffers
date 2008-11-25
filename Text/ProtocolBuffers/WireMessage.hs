@@ -29,7 +29,7 @@ module Text.ProtocolBuffers.WireMessage
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep
     , wireSizeErr,wirePutErr,wireGetErr
-    , getMessage,getBareMessage,getMessageWith,getBareMessageWith
+    , getMessage,getBareMessage,getMessageWith,getBareMessageWith,wireGetEnum
     , unknownField,unknown,wireGetFromWire
     , castWord64ToDouble,castWord32ToFloat,castDoubleToWord64,castFloatToWord32
     , zzEncode64,zzEncode32,zzDecode64,zzDecode32
@@ -37,6 +37,7 @@ module Text.ProtocolBuffers.WireMessage
 
 -- GHC internals for getting at Double and Float representation as Word64 and Word32
 import Control.Monad(when)
+import Control.Monad.Error.Class(throwError,catchError)
 import Control.Monad.ST
 import Data.Array.ST
 import Data.Bits (Bits(..))
@@ -58,8 +59,6 @@ import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,bytesRead,isReally
 import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
                                        ,DescriptorInfo(..),GetMessageInfo(..))
-
---import Debug.Trace(trace)
 
 -- External user API for writing and reading messages
 
@@ -266,7 +265,9 @@ getMessageWith punt updater = do
             if Set.notMember wireTag allowed
               then punt fieldId wireType message >>= go reqs
               else let reqs' = Set.delete wireTag reqs
-                   in updater fieldId message >>= go reqs'
+                   in catchError (updater fieldId message) 
+                                 (\_ -> punt fieldId wireType message)
+                        >>= go reqs'
       go' message = do
         here <- bytesRead
         case compare stop here of
@@ -277,7 +278,9 @@ getMessageWith punt updater = do
             let (fieldId,wireType) = splitWireTag wireTag
             if Set.notMember wireTag allowed
               then punt fieldId wireType message >>= go'
-              else updater fieldId message >>= go'
+              else catchError (updater fieldId message)
+                              (\_ -> punt fieldId wireType message)
+                     >>= go'
   go required initialMessage
  where
   initialMessage = mergeEmpty
@@ -325,7 +328,9 @@ getBareMessageWith punt updater = go required initialMessage
           else if Set.notMember wireTag allowed
                  then punt fieldId wireType message >>= go reqs
                  else let reqs' = Set.delete wireTag reqs
-                      in updater fieldId message >>= go reqs'
+                      in catchError (updater fieldId message)
+                                    (\_ -> punt fieldId wireType message)
+                           >>= go reqs'
   go' message = do
     done <- isReallyEmpty
     if done then return message
@@ -335,7 +340,9 @@ getBareMessageWith punt updater = go required initialMessage
         if wireType == 4 then return message
           else if Set.notMember wireTag allowed
                  then punt fieldId wireType message >>= go'
-                 else updater fieldId message >>= go'
+                 else catchError (updater fieldId message)
+                                 (\_ -> punt fieldId wireType message)
+                        >>= go'
   initialMessage = mergeEmpty
   (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
   notEnoughData = fail ("Text.ProtocolBuffers.WireMessage.getBareMessage: Required fields missing when processing "
@@ -487,6 +494,15 @@ instance Wire Int where
   wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_ENUM    -} 14        = getVarInt
   wireGet ft = wireGetErr ft
+
+{-# INLINE wireGetEnum #-}
+wireGetEnum :: forall e. (Typeable e, Enum e) => (Int -> Maybe e) -> Get e
+wireGetEnum toMaybe'Enum = do
+  int <- wireGet 14
+  case toMaybe'Enum int of
+    Just v -> return v
+    Nothing -> throwError (msg ++ show int)
+ where msg = "Bad wireGet of Enum "++show (typeOf (undefined::e))++", unrecognized Int value is "
 
 -- This will have to examine the value of positive numbers to get the size
 {-# INLINE size'Varint #-}

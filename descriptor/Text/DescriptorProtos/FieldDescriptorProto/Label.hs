@@ -17,13 +17,19 @@ instance P'.Bounded Label where
 instance P'.Default Label where
   defaultValue = LABEL_OPTIONAL
  
+toMaybe'Enum :: P'.Int -> P'.Maybe Label
+toMaybe'Enum 1 = P'.Just LABEL_OPTIONAL
+toMaybe'Enum 2 = P'.Just LABEL_REQUIRED
+toMaybe'Enum 3 = P'.Just LABEL_REPEATED
+toMaybe'Enum _ = P'.Nothing
+ 
 instance P'.Enum Label where
   fromEnum (LABEL_OPTIONAL) = 1
   fromEnum (LABEL_REQUIRED) = 2
   fromEnum (LABEL_REPEATED) = 3
-  toEnum 1 = LABEL_OPTIONAL
-  toEnum 2 = LABEL_REQUIRED
-  toEnum 3 = LABEL_REPEATED
+  toEnum
+   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldDescriptorProto.Label") P'..
+      toMaybe'Enum
   succ (LABEL_OPTIONAL) = LABEL_REQUIRED
   succ (LABEL_REQUIRED) = LABEL_REPEATED
   pred (LABEL_REQUIRED) = LABEL_OPTIONAL

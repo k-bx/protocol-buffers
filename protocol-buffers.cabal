@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        1.0.0
+version:        1.1.0
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -43,19 +43,27 @@ Library
                    Text.ProtocolBuffers.Identifiers
 
   if flag(small_base)
-        build-depends: base >= 3,
-                       containers,
-                       bytestring,
-                       array,
-                       filepath,
-                       directory,
-                       mtl,
-                       QuickCheck,
-                       syb
+    build-depends: base == 4.*,
+                   containers,
+                   bytestring,
+                   array,
+                   filepath,
+                   directory,
+                   mtl,
+                   QuickCheck,
+                   binary, parsec, utf8-string, haskell-src,
+                   syb
   else
-        build-depends: base < 3
+    build-depends: base == 3.*,
+                   containers,
+                   bytestring,
+                   array,
+                   filepath,
+                   directory,
+                   mtl,
+                   binary, parsec, utf8-string, haskell-src,
+                   QuickCheck
 
-  build-depends:   binary, parsec, utf8-string, haskell-src
 -- Most of these are needed for protocol-buffers (Get and WireMessage.hs)
   extensions:      DeriveDataTypeable,
                    EmptyDataDecls,

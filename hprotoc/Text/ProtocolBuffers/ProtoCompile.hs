@@ -32,7 +32,7 @@ import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serialize
 -- | Version of protocol-buffers.
 -- The version tags that I have used are ["unreleased"]
 version :: Version
-version = Version { versionBranch = [1,0,0]
+version = Version { versionBranch = [1,1,0]
                   , versionTags = [] }
 
 data Options = Options { optPrefix :: [MName String]
@@ -178,9 +178,8 @@ dump imports (Just (LocalFP dumpFile)) fdp fdps = do
 
 run :: Options -> IO ()
 run options = do
-  print options
   (env,fdps) <- loadProto (optInclude options) (optProto options)
-  print "Proto files loaded"
+  print "All proto files loaded"
   let fdp = either error id . top'FDP . fst . getTLS $ env
   when (not (optDryRun options)) $ dump (optImports options) (optDesc options) fdp fdps
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env

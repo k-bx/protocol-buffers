@@ -32,6 +32,27 @@ instance P'.Bounded Type where
 instance P'.Default Type where
   defaultValue = TYPE_DOUBLE
  
+toMaybe'Enum :: P'.Int -> P'.Maybe Type
+toMaybe'Enum 1 = P'.Just TYPE_DOUBLE
+toMaybe'Enum 2 = P'.Just TYPE_FLOAT
+toMaybe'Enum 3 = P'.Just TYPE_INT64
+toMaybe'Enum 4 = P'.Just TYPE_UINT64
+toMaybe'Enum 5 = P'.Just TYPE_INT32
+toMaybe'Enum 6 = P'.Just TYPE_FIXED64
+toMaybe'Enum 7 = P'.Just TYPE_FIXED32
+toMaybe'Enum 8 = P'.Just TYPE_BOOL
+toMaybe'Enum 9 = P'.Just TYPE_STRING
+toMaybe'Enum 10 = P'.Just TYPE_GROUP
+toMaybe'Enum 11 = P'.Just TYPE_MESSAGE
+toMaybe'Enum 12 = P'.Just TYPE_BYTES
+toMaybe'Enum 13 = P'.Just TYPE_UINT32
+toMaybe'Enum 14 = P'.Just TYPE_ENUM
+toMaybe'Enum 15 = P'.Just TYPE_SFIXED32
+toMaybe'Enum 16 = P'.Just TYPE_SFIXED64
+toMaybe'Enum 17 = P'.Just TYPE_SINT32
+toMaybe'Enum 18 = P'.Just TYPE_SINT64
+toMaybe'Enum _ = P'.Nothing
+ 
 instance P'.Enum Type where
   fromEnum (TYPE_DOUBLE) = 1
   fromEnum (TYPE_FLOAT) = 2
@@ -51,24 +72,9 @@ instance P'.Enum Type where
   fromEnum (TYPE_SFIXED64) = 16
   fromEnum (TYPE_SINT32) = 17
   fromEnum (TYPE_SINT64) = 18
-  toEnum 1 = TYPE_DOUBLE
-  toEnum 2 = TYPE_FLOAT
-  toEnum 3 = TYPE_INT64
-  toEnum 4 = TYPE_UINT64
-  toEnum 5 = TYPE_INT32
-  toEnum 6 = TYPE_FIXED64
-  toEnum 7 = TYPE_FIXED32
-  toEnum 8 = TYPE_BOOL
-  toEnum 9 = TYPE_STRING
-  toEnum 10 = TYPE_GROUP
-  toEnum 11 = TYPE_MESSAGE
-  toEnum 12 = TYPE_BYTES
-  toEnum 13 = TYPE_UINT32
-  toEnum 14 = TYPE_ENUM
-  toEnum 15 = TYPE_SFIXED32
-  toEnum 16 = TYPE_SFIXED64
-  toEnum 17 = TYPE_SINT32
-  toEnum 18 = TYPE_SINT64
+  toEnum
+   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldDescriptorProto.Type") P'..
+      toMaybe'Enum
   succ (TYPE_DOUBLE) = TYPE_FLOAT
   succ (TYPE_FLOAT) = TYPE_INT64
   succ (TYPE_INT64) = TYPE_UINT64

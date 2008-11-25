@@ -6,7 +6,8 @@ module Text.ProtocolBuffers.Header
       emptyBS
     , pack
     , append
-    , module Control.Monad
+    , fromMaybe
+    , ap
     , module Data.Generics
     , module Data.Typeable
     , module Text.ProtocolBuffers.Basic
@@ -21,6 +22,7 @@ import Control.Monad(ap)
 import Data.ByteString.Lazy(empty)
 import Data.ByteString.Lazy.Char8(pack)
 import Data.Generics(Data(..))
+import Data.Maybe(fromMaybe)
 import Data.Sequence((|>)) -- for append, see below
 import Data.Typeable(Typeable(..))
 
@@ -40,7 +42,7 @@ import Text.ProtocolBuffers.WireMessage
   , wireSizeReq,wireSizeOpt,wireSizeRep
   , wirePutReq,wirePutOpt,wirePutRep
   , getMessage,getBareMessage
-  , getMessageWith,getBareMessageWith
+  , getMessageWith,getBareMessageWith,wireGetEnum
   , wireSizeErr,wirePutErr,wireGetErr
   , unknown,unknownField)
 

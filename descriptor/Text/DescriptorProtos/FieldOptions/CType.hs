@@ -16,11 +16,17 @@ instance P'.Bounded CType where
 instance P'.Default CType where
   defaultValue = CORD
  
+toMaybe'Enum :: P'.Int -> P'.Maybe CType
+toMaybe'Enum 1 = P'.Just CORD
+toMaybe'Enum 2 = P'.Just STRING_PIECE
+toMaybe'Enum _ = P'.Nothing
+ 
 instance P'.Enum CType where
   fromEnum (CORD) = 1
   fromEnum (STRING_PIECE) = 2
-  toEnum 1 = CORD
-  toEnum 2 = STRING_PIECE
+  toEnum
+   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldOptions.CType") P'..
+      toMaybe'Enum
   succ (CORD) = STRING_PIECE
   pred (STRING_PIECE) = CORD
  

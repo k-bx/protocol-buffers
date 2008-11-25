@@ -128,8 +128,9 @@ enumDecls :: EnumInfo -> [HsDecl]
 enumDecls ei =  map ($ ei) [ enumX
                            , instanceMergeableEnum
                            , instanceBounded
-                           , instanceDefaultEnum
-                           , instanceEnum
+                           , instanceDefaultEnum ]
+                ++ declToEnum ei ++
+                map ($ ei) [ instanceEnum
                            , instanceWireEnum
                            , instanceGPB . enumName
                            , instanceMessageAPI . enumName
@@ -168,6 +169,18 @@ instanceDefaultEnum ei
                        (:) (_,n) _ -> HsCon (UnQual (HsIdent n))
                        [] -> error $ "Impossible? EnumDescriptorProto had empty sequence of EnumValueDescriptorProto.\n" ++ show ei
 
+declToEnum :: EnumInfo -> [HsDecl]
+declToEnum ei = [ HsTypeSig src [HsIdent "toMaybe'Enum"]
+                    (HsQualType [] (HsTyFun (HsTyCon (private "Int"))
+                                            (HsTyApp (HsTyCon (private "Maybe"))
+                                                     (HsTyCon (unqualName (enumName ei))))))
+                , HsFunBind (map toEnum'one values ++ [final]) ]
+  where values = enumValues ei
+        toEnum'one (v,n) = HsMatch src (HsIdent "toMaybe'Enum") [litIntP (getEnumCode v)]
+                             (HsUnGuardedRhs (HsCon (private "Just") $$ HsCon (UnQual (HsIdent n)))) noWhere
+        final = HsMatch src (HsIdent "toMaybe'Enum") [HsPWildCard]
+                             (HsUnGuardedRhs (HsCon (private "Nothing"))) noWhere
+
 instanceEnum :: EnumInfo -> HsDecl
 instanceEnum ei
     = HsInstDecl src [] (private "Enum") [HsTyCon (unqualName (enumName ei))]
@@ -176,9 +189,16 @@ instanceEnum ei
         fromEnum' = map fromEnum'one values
         fromEnum'one (v,n) = HsMatch src (HsIdent "fromEnum") [HsPApp (UnQual (HsIdent n)) []]
                                (HsUnGuardedRhs (litInt (getEnumCode v))) noWhere
+        toEnum' = [ HsMatch src (HsIdent "toEnum") [] (HsUnGuardedRhs (compose mayErr (lvar "toMaybe'Enum"))) noWhere ]
+        mayErr = (HsVar (private "fromMaybe")) $$ (HsParen (HsVar (private "error") $$  (HsLit . HsString $ 
+                   "hprotoc generated code: toEnum failure for type "++ fqMod (enumName ei))))
+        compose a b = HsInfixApp a (HsQVarOp (Qual (Module "P'") (HsSymbol "."))) b
+        
+{-
         toEnum' = map toEnum'one values
-        toEnum'one (v,n) = HsMatch src (HsIdent "toEnum") [litIntP (getEnumCode v)] -- enums cannot be negative so no parenthesis are required to protect a negative sign
+        toEnum'one (v,n) = HsMatch src (HsIdent "toEnum") [litIntP (getEnumCode v)]
                              (HsUnGuardedRhs (HsCon (UnQual (HsIdent n)))) noWhere
+-}
         succ' = zipWith (equate "succ") values (tail values)
         pred' = zipWith (equate "pred") (tail values) values
         equate f (_,n1) (_,n2) = HsMatch src (HsIdent f) [HsPApp (UnQual (HsIdent n1)) []]
@@ -192,9 +212,13 @@ instanceWireEnum ei
   where withName foo = inst foo [HsPVar (HsIdent "ft'"),HsPVar (HsIdent "enum")] rhs
           where rhs = pvar foo $$ lvar "ft'" $$
                         (HsParen $ pvar "fromEnum" $$ lvar "enum")
+{-
         withGet = inst "wireGet" [litIntP 14] rhs
           where rhs = pvar "fmap" $$ pvar "toEnum" $$
                         (HsParen $ pvar "wireGet" $$ HsLit (HsInt 14))
+-}
+        withGet = inst "wireGet" [litIntP 14] rhs
+          where rhs = pvar "wireGetEnum" $$ lvar "toMaybe'Enum"
         withGetErr = inst "wireGet" [HsPVar (HsIdent "ft'")] rhs
           where rhs = pvar "wireGetErr" $$ lvar "ft'"
 

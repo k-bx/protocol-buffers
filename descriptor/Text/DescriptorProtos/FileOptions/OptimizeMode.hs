@@ -16,11 +16,17 @@ instance P'.Bounded OptimizeMode where
 instance P'.Default OptimizeMode where
   defaultValue = SPEED
  
+toMaybe'Enum :: P'.Int -> P'.Maybe OptimizeMode
+toMaybe'Enum 1 = P'.Just SPEED
+toMaybe'Enum 2 = P'.Just CODE_SIZE
+toMaybe'Enum _ = P'.Nothing
+ 
 instance P'.Enum OptimizeMode where
   fromEnum (SPEED) = 1
   fromEnum (CODE_SIZE) = 2
-  toEnum 1 = SPEED
-  toEnum 2 = CODE_SIZE
+  toEnum
+   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FileOptions.OptimizeMode") P'..
+      toMaybe'Enum
   succ (SPEED) = CODE_SIZE
   pred (CODE_SIZE) = SPEED
  
