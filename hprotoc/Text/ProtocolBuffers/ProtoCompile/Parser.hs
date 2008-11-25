@@ -6,7 +6,7 @@
 --
 -- The inernals have been updated to handle Google's protobuf version
 -- 2.0.2 formats.
-module Text.ProtocolBuffers.ProtoCompile.Parser(parseProto,isValidUTF8) where
+module Text.ProtocolBuffers.ProtoCompile.Parser(parseProto) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
@@ -53,7 +53,6 @@ import Text.ProtocolBuffers.ProtoCompile.Lexer(Lexed(..),alexScanTokens,getLineP
 import Text.ProtocolBuffers.ProtoCompile.Instances(parseLabel,parseType)
 
 import Control.Monad(when,liftM2,liftM3,replicateM)
-import qualified Data.ByteString.Lazy as L(unpack)
 import qualified Data.ByteString.Lazy.Char8 as LC(notElem,head)
 import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.Char(isUpper,toLower)
@@ -66,7 +65,6 @@ import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName,a
                                     ,getInput,setInput,getPosition,setPosition,getState,setState
                                     ,(<?>),(<|>),token,choice,between,eof,unexpected,skipMany)
 import Text.ParserCombinators.Parsec.Pos(newPos)
-import Data.Word(Word8)
 
 -- import Debug.Trace(trace)
 
@@ -388,25 +386,6 @@ constant (Just t) =
                  when (not (inRange range i))
                       (fail $ "default integer value "++show i++" is out of range for type "++show t)
                  return' (U.fromString . show $ i)
-
--- Returns Nothing if valid, and the position of the error if invalid
-isValidUTF8 :: ByteString -> Maybe Int
-isValidUTF8 ws = go 0 (L.unpack ws) 0 where
-  go :: Int -> [Word8] -> Int -> Maybe Int
-  go 0 [] _ = Nothing
-  go 0 (x:xs) n | x <= 127 = go 0 xs $! succ n -- binary 01111111
-                | x <= 193 = Just n            -- binary 11000001, decodes to <=127, should not be here
-                | x <= 223 = go 1 xs $! succ n -- binary 11011111
-                | x <= 239 = go 2 xs $! succ n -- binary 11101111
-                | x <= 243 = go 3 xs $! succ n -- binary 11110011
-                | x == 244 = high xs $! succ n -- binary 11110100
-                | otherwise = Just n
-  go i (x:xs) n | 128 <= x && x <= 191 = go (pred i) xs $! succ n
-  go _ _ n = Just n
-  -- leading 3 bits are 100, so next 6 are at most 001111, i.e. 10001111
-  high (x:xs) n | 128 <= x && x <= 143 = go 2 xs $! succ n
-                | otherwise = Just n
-  high [] n = Just n
 
 fieldOption :: Maybe Type -> P D.FieldDescriptorProto ()
 fieldOption mt = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where

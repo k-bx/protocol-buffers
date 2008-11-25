@@ -9,6 +9,7 @@ module Text.ProtocolBuffers.Basic
   , WireTag(..),FieldId(..),WireType(..),FieldType(..),EnumCode(..),WireSize
     -- * Some of the type classes implemented messages and fields
   , Mergeable(..),Default(..),Wire(..)
+  , isValidUTF8
   ) where
 
 import Data.Binary.Put(Put)
@@ -21,9 +22,10 @@ import Data.Ix(Ix)
 import Data.Monoid(Monoid(..))
 import Data.Sequence(Seq)
 import Data.Typeable(Typeable(..))
-import Data.Word(Word32,Word64)
+import Data.Word(Word8,Word32,Word64)
 import Text.ProtocolBuffers.Get(Get)
 
+import qualified Data.ByteString.Lazy as L(unpack)
 import Data.ByteString.Lazy.UTF8 as U (toString,fromString)
 
 -- Num instances are derived below for the purpose of getting fromInteger for case matching
@@ -197,3 +199,22 @@ class Wire b where
   wirePut :: FieldType -> b -> Put
   {-# INLINE wireGet #-}
   wireGet :: FieldType -> Get b
+
+-- Returns Nothing if valid, and the position of the error if invalid
+isValidUTF8 :: ByteString -> Maybe Int
+isValidUTF8 ws = go 0 (L.unpack ws) 0 where
+  go :: Int -> [Word8] -> Int -> Maybe Int
+  go 0 [] _ = Nothing
+  go 0 (x:xs) n | x <= 127 = go 0 xs $! succ n -- binary 01111111
+                | x <= 193 = Just n            -- binary 11000001, decodes to <=127, should not be here
+                | x <= 223 = go 1 xs $! succ n -- binary 11011111
+                | x <= 239 = go 2 xs $! succ n -- binary 11101111
+                | x <= 243 = go 3 xs $! succ n -- binary 11110011
+                | x == 244 = high xs $! succ n -- binary 11110100
+                | otherwise = Just n
+  go i (x:xs) n | 128 <= x && x <= 191 = go (pred i) xs $! succ n
+  go _ _ n = Just n
+  -- leading 3 bits are 100, so next 6 are at most 001111, i.e. 10001111
+  high (x:xs) n | 128 <= x && x <= 143 = go 2 xs $! succ n
+                | otherwise = Just n
+  high [] n = Just n

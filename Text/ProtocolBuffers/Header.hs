@@ -1,13 +1,8 @@
--- | This provides much that is needed for the output of 'hprotoc' to
--- compile.  It will be imported qualified as P', the prime ensuring
--- no name conflicts are possible.
+-- | This provides what is needed for the output of 'hprotoc' to
+-- compile.  This and the Prelude will both be imported qualified as
+-- P', the prime ensuring no name conflicts are possible.
 module Text.ProtocolBuffers.Header
-    ( -- needed for Gen.hs output
-      emptyBS
-    , pack
-    , append
-    , fromMaybe
-    , ap
+    ( emptyBS, pack, append, fromMaybe, ap, fromDistinctAscList
     , module Data.Generics
     , module Data.Typeable
     , module Text.ProtocolBuffers.Basic
@@ -24,17 +19,19 @@ import Data.ByteString.Lazy.Char8(pack)
 import Data.Generics(Data(..))
 import Data.Maybe(fromMaybe)
 import Data.Sequence((|>)) -- for append, see below
+import Data.Set(fromDistinctAscList)
 import Data.Typeable(Typeable(..))
 
 import Text.ProtocolBuffers.Basic -- all
 import Text.ProtocolBuffers.Default()
 import Text.ProtocolBuffers.Extensions
-  ( wireSizeExtField,wirePutExtField,loadExtension,getMessageExt,getBareMessageExt
+  ( wireSizeExtField,wirePutExtField,loadExtension,notExtension,getMessageExt,getBareMessageExt
   , GPB,Key(..),ExtField,ExtendMessage(..),MessageAPI(..),ExtKey(wireGetKey) )
 import Text.ProtocolBuffers.Identifiers(FIName(..),MName(..),FName(..))
 import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections
-  ( ReflectDescriptor(..),ReflectEnum(..),EnumInfo(..),ProtoName(..),DescriptorInfo(extRanges),makePNF )
+  ( ReflectDescriptor(..),ReflectEnum(..),EnumInfo(..),ProtoName(..)
+  , GetMessageInfo(GetMessageInfo),DescriptorInfo(extRanges),makePNF )
 import Text.ProtocolBuffers.Unknown
   ( UnknownField,UnknownMessage(..),wireSizeUnknownField,wirePutUnknownField,loadUnknown )
 import Text.ProtocolBuffers.WireMessage

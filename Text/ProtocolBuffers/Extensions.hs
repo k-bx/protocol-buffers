@@ -22,7 +22,7 @@ module Text.ProtocolBuffers.Extensions
   -- * External types and classes
   , Key(..),ExtKey(..),MessageAPI(..)
   -- * Internal types, functions, and classes
-  , wireSizeExtField,wirePutExtField,getMessageExt,getBareMessageExt,loadExtension
+  , wireSizeExtField,wirePutExtField,getMessageExt,getBareMessageExt,loadExtension,notExtension
   , GPB,ExtField(..),ExtendMessage(..),ExtFieldValue(..)
   ) where
 
@@ -556,10 +556,15 @@ getBareMessageExt = getBareMessageWith loadExtension
 isValidExt ::  ExtendMessage a => FieldId -> a -> Bool
 isValidExt fi msg = any (flip inRange fi) (validExtRanges msg)
 
+notExtension :: (ReflectDescriptor a, ExtendMessage a,Typeable a) => FieldId -> WireType -> a -> Get a
+notExtension fieldId wireType msg = throwError ("Field id "++show fieldId++" is not a valid extension field id for "++typeOf (undefined `asTypeOf` msg))
+
 -- | get a value from the wire into the message's ExtField. This is
 -- used by 'getMessageExt' and 'getBareMessageExt' above.
 loadExtension :: (ReflectDescriptor a, ExtendMessage a) => FieldId -> WireType -> a -> Get a
-loadExtension fieldId wireType msg | isValidExt fieldId msg = do
+--loadExtension fieldId wireType msg | isValidExt fieldId msg = do -- XXX
+--loadExtension fieldId wireType msg = unknown fieldId wireType msg -- XXX
+loadExtension fieldId wireType msg = do
   let (ExtField ef) = getExtField msg
       badwt wt = do here <- bytesRead
                     fail $ "Conflicting wire types at byte position "++show here ++ " for extension to message: "++show (typeOf msg,fieldId,wireType,wt)
@@ -587,7 +592,6 @@ loadExtension fieldId wireType msg | isValidExt fieldId msg = do
       let v' = ExtRepeated ft (GPDynSeq x (s |> a))
           ef' = M.insert fieldId v' ef
       seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
-loadExtension fieldId wireType msg = unknown fieldId wireType msg
 
 class MessageAPI msg a b | msg a -> b where
   -- | Access data in a message.  The first argument is always the

@@ -38,7 +38,7 @@ instance P'.Enum Label where
 instance P'.Wire Label where
   wireSize ft' enum = P'.wireSize ft' (P'.fromEnum enum)
   wirePut ft' enum = P'.wirePut ft' (P'.fromEnum enum)
-  wireGet 14 = P'.fmap P'.toEnum (P'.wireGet 14)
+  wireGet 14 = P'.wireGetEnum toMaybe'Enum
   wireGet ft' = P'.wireGetErr ft'
  
 instance P'.GPB Label

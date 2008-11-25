@@ -297,7 +297,8 @@ getMessageWith punt updater = do
 unknown :: (Typeable a,ReflectDescriptor a) => FieldId -> WireType -> a -> Get a
 unknown fieldId wireType initialMessage = do
   here <- bytesRead
-  fail ("Text.ProtocolBuffers.WireMessage.unkown: Unknown wire tag read (type,fieldId,wireType,here) == "
+  fail ("Text.ProtocolBuffers.WireMessage.unknown: Unknown field found or failure parsing field (e.g. unexpected Enum value):"
+        ++ "(message type name,field id number,wire type code,bytes read) == "
         ++ show (typeOf initialMessage,fieldId,wireType,here) ++ " when processing "
         ++ (show . descName . reflectDescriptorInfo $ initialMessage))
 
@@ -474,7 +475,7 @@ instance Wire Utf8 where
   wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_STRING   -} 9      x = putVarUInt (BS.length (utf8 x)) >> putLazyByteString (utf8 x)
   wirePut ft x = wirePutErr ft x
-  wireGet  {- TYPE_STRING   -} 9        = getVarInt >>= getLazyByteString >>= return . Utf8
+  wireGet  {- TYPE_STRING   -} 9        = getVarInt >>= getLazyByteString >>= verifyUtf8
   wireGet ft = wireGetErr ft
 
 instance Wire ByteString where
@@ -483,7 +484,7 @@ instance Wire ByteString where
   wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_BYTES    -} 12     x = putVarUInt (BS.length x) >> putLazyByteString x
   wirePut ft x = wirePutErr ft x
-  wireGet  {- TYPE_BYTES    -} 12       = getVarInt >>= getLazyByteString >>= return
+  wireGet  {- TYPE_BYTES    -} 12       = getVarInt >>= getLazyByteString
   wireGet ft = wireGetErr ft
 
 -- Wrap a protocol-buffer Enum in fromEnum or toEnum and serialize the Int:
@@ -495,14 +496,22 @@ instance Wire Int where
   wireGet  {- TYPE_ENUM    -} 14        = getVarInt
   wireGet ft = wireGetErr ft
 
+{-# INLINE verifyUtf8 #-}
+verifyUtf8 :: ByteString -> Get Utf8
+verifyUtf8 bs = case isValidUTF8 bs of
+                  Nothing -> return (Utf8 bs)
+                  Just i -> fail $ "Text.ProtocolBuffers.WireMessage.verifyUtf8: ByteString is not valid utf8 at position "++show i
+
 {-# INLINE wireGetEnum #-}
-wireGetEnum :: forall e. (Typeable e, Enum e) => (Int -> Maybe e) -> Get e
+wireGetEnum :: (Typeable e, Enum e) => (Int -> Maybe e) -> Get e
 wireGetEnum toMaybe'Enum = do
   int <- wireGet 14
   case toMaybe'Enum int of
     Just v -> return v
     Nothing -> throwError (msg ++ show int)
- where msg = "Bad wireGet of Enum "++show (typeOf (undefined::e))++", unrecognized Int value is "
+ where msg = "Bad wireGet of Enum "++show (typeOf (undefined `asTypeOf` typeHack toMaybe'Enum))++", unrecognized Int value is "
+       typeHack :: (Int -> Maybe e) -> e
+       typeHack f = maybe undefined id (f undefined)
 
 -- This will have to examine the value of positive numbers to get the size
 {-# INLINE size'Varint #-}
