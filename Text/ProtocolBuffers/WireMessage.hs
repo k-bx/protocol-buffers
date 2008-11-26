@@ -29,13 +29,12 @@ module Text.ProtocolBuffers.WireMessage
     , wireSizeReq,wireSizeOpt,wireSizeRep
     , wirePutReq,wirePutOpt,wirePutRep
     , wireSizeErr,wirePutErr,wireGetErr
-    , getMessage,getBareMessage,getMessageWith,getBareMessageWith,wireGetEnum
+    , getMessageWith,getBareMessageWith,wireGetEnum
     , unknownField,unknown,wireGetFromWire
     , castWord64ToDouble,castWord32ToFloat,castDoubleToWord64,castFloatToWord32
     , zzEncode64,zzEncode32,zzDecode64,zzDecode32
     ) where
 
--- GHC internals for getting at Double and Float representation as Word64 and Word32
 import Control.Monad(when)
 import Control.Monad.Error.Class(throwError,catchError)
 import Control.Monad.ST
@@ -44,8 +43,10 @@ import Data.Bits (Bits(..))
 import qualified Data.ByteString.Lazy as BS (length)
 import qualified Data.Foldable as F(foldl',forM_)
 import Data.List (genericLength)
-import qualified Data.Set as Set(notMember,delete,null)
+import qualified Data.Set as Set(delete,null,notMember)
 import Data.Typeable (Typeable(..))
+-- GHC internals for getting at Double and Float representation as Word64 and Word32
+-- This has been superceded by the ST array trick (ugly, but promised to work)
 --import GHC.Exts (Double(D#),Float(F#),unsafeCoerce#)
 --import GHC.Word (Word64(W64#)) -- ,Word32(W32#))
 
@@ -154,7 +155,7 @@ messageAsFieldGetM :: (ReflectDescriptor msg, Wire msg) => Get (FieldId,msg)
 messageAsFieldGetM = do
   wireTag <- fmap WireTag getVarInt
   let (fieldId,wireType) = splitWireTag wireTag
-  when (wireType /= 2) (fail $ "messageAsFieldGetM: wireType was not 2 "++show (fieldId,wireType))
+  when (wireType /= 2) (throwError $ "messageAsFieldGetM: wireType was not 2 "++show (fieldId,wireType))
   msg <- wireGet 11
   return (fieldId,msg)
 
@@ -236,19 +237,14 @@ splitWireTag :: WireTag -> (FieldId,WireType)
 splitWireTag (WireTag wireTag) = ( FieldId . fromIntegral $ wireTag `shiftR` 3
                                  , WireType . fromIntegral $ wireTag .&. 7 )
 
--- | Used by generated code
-getMessage :: (Mergeable message, ReflectDescriptor message,Typeable message)
-           => (FieldId -> message -> Get message)           -- handles "allowed" wireTags
-           -> Get message
-getMessage = getMessageWith unknown
 
--- getMessage assumes the wireTag for the message, if it existed, has already been read.
--- getMessage assumes that it still needs to read the Varint encoded length of the message.
+
+-- getMessageWith assumes the wireTag for the message, if it existed, has already been read.
+-- getMessageWith assumes that it still needs to read the Varint encoded length of the message.
 getMessageWith :: (Mergeable message, ReflectDescriptor message)
-               => (FieldId -> WireType -> message -> Get message) -- handle wireTags that updater cannot
-               -> (FieldId -> message -> Get message)             -- handles "allowed" wireTags
+               => (WireTag -> FieldId -> WireType -> message -> Get message)
                -> Get message
-getMessageWith punt updater = do
+getMessageWith updater = do
   messageLength <- getVarInt
   start <- bytesRead
   let stop = messageLength+start
@@ -262,12 +258,8 @@ getMessageWith punt updater = do
           GT -> do
             wireTag <- fmap WireTag getVarInt -- get tag off wire
             let (fieldId,wireType) = splitWireTag wireTag
-            if Set.notMember wireTag allowed
-              then punt fieldId wireType message >>= go reqs
-              else let reqs' = Set.delete wireTag reqs
-                   in catchError (updater fieldId message) 
-                                 (\_ -> punt fieldId wireType message)
-                        >>= go reqs'
+                reqs' = Set.delete wireTag reqs
+            updater wireTag fieldId wireType message >>= go reqs'
       go' message = do
         here <- bytesRead
         case compare stop here of
@@ -276,47 +268,29 @@ getMessageWith punt updater = do
           GT -> do
             wireTag <- fmap WireTag getVarInt -- get tag off wire
             let (fieldId,wireType) = splitWireTag wireTag
-            if Set.notMember wireTag allowed
-              then punt fieldId wireType message >>= go'
-              else catchError (updater fieldId message)
-                              (\_ -> punt fieldId wireType message)
-                     >>= go'
+            updater wireTag fieldId wireType message >>= go'
   go required initialMessage
  where
   initialMessage = mergeEmpty
-  (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
+  (GetMessageInfo {requiredTags=required}) = getMessageInfo initialMessage
   notEnoughData messageLength start =
-      fail ("Text.ProtocolBuffers.WireMessage.getMessage: Required fields missing when processing "
-            ++ (show . descName . reflectDescriptorInfo $ initialMessage)
-            ++ " at (messageLength,start) == " ++ show (messageLength,start))
+      throwError ("Text.ProtocolBuffers.WireMessage.getMessageWith: Required fields missing when processing "
+                  ++ (show . descName . reflectDescriptorInfo $ initialMessage)
+                  ++ " at (messageLength,start) == " ++ show (messageLength,start))
   tooMuchData messageLength start here =
-      fail ("Text.ProtocolBuffers.WireMessage.getMessage : overran expected length when processing"
-            ++ (show . descName . reflectDescriptorInfo $ initialMessage)
-            ++ " at  (messageLength,start,here) == " ++ show (messageLength,start,here))
-
-unknown :: (Typeable a,ReflectDescriptor a) => FieldId -> WireType -> a -> Get a
-unknown fieldId wireType initialMessage = do
-  here <- bytesRead
-  fail ("Text.ProtocolBuffers.WireMessage.unknown: Unknown field found or failure parsing field (e.g. unexpected Enum value):"
-        ++ "(message type name,field id number,wire type code,bytes read) == "
-        ++ show (typeOf initialMessage,fieldId,wireType,here) ++ " when processing "
-        ++ (show . descName . reflectDescriptorInfo $ initialMessage))
+      throwError ("Text.ProtocolBuffers.WireMessage.getMessageWith: overran expected length when processing"
+                  ++ (show . descName . reflectDescriptorInfo $ initialMessage)
+                  ++ " at  (messageLength,start,here) == " ++ show (messageLength,start,here))
 
 -- | Used by generated code
--- getBareMessage assumes the wireTag for the message, if it existed, has already been read.
--- getBareMessage assumes that it does needs to read the Varint encoded length of the message.
--- getBareMessage will consume the entire ByteString it is operating on, or until it
--- finds any STOP_GROUP tag
-getBareMessage :: (Typeable message, Mergeable message, ReflectDescriptor message)
-               => (FieldId -> message -> Get message)             -- handles "allowed" wireTags
-               -> Get message
-getBareMessage = getBareMessageWith unknown
-
+-- getBareMessageWith assumes the wireTag for the message, if it existed, has already been read.
+-- getBareMessageWith assumes that it does needs to read the Varint encoded length of the message.
+-- getBareMessageWith will consume the entire ByteString it is operating on, or until it
+-- finds any STOP_GROUP tag (wireType == 4)
 getBareMessageWith :: (Mergeable message, ReflectDescriptor message)
-                   => (FieldId -> WireType -> message -> Get message) -- handle wireTags that updater cannot
-                   -> (FieldId -> message -> Get message)             -- handles "allowed" wireTags
+                   => (WireTag -> FieldId -> WireType -> message -> Get message) -- handle wireTags that are unknown or produce errors
                    -> Get message
-getBareMessageWith punt updater = go required initialMessage
+getBareMessageWith updater = go required initialMessage
  where
   go reqs message | Set.null reqs = go' message
                   | otherwise = do
@@ -326,35 +300,36 @@ getBareMessageWith punt updater = go required initialMessage
         wireTag <- fmap WireTag getVarInt -- get tag off wire
         let (fieldId,wireType) = splitWireTag wireTag
         if wireType == 4 then notEnoughData -- END_GROUP too soon
-          else if Set.notMember wireTag allowed
-                 then punt fieldId wireType message >>= go reqs
-                 else let reqs' = Set.delete wireTag reqs
-                      in catchError (updater fieldId message)
-                                    (\_ -> punt fieldId wireType message)
-                           >>= go reqs'
+          else let reqs' = Set.delete wireTag reqs
+               in updater wireTag fieldId wireType message >>= go reqs'
   go' message = do
     done <- isReallyEmpty
     if done then return message
       else do
         wireTag <- fmap WireTag getVarInt -- get tag off wire
-        let (fieldId,wireType) = splitWireTag wireTag -- WIRETYPE_END_GROUP
+        let (fieldId,wireType) = splitWireTag wireTag
         if wireType == 4 then return message
-          else if Set.notMember wireTag allowed
-                 then punt fieldId wireType message >>= go'
-                 else catchError (updater fieldId message)
-                                 (\_ -> punt fieldId wireType message)
-                        >>= go'
+          else updater wireTag fieldId wireType message >>= go'
   initialMessage = mergeEmpty
-  (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
-  notEnoughData = fail ("Text.ProtocolBuffers.WireMessage.getBareMessage: Required fields missing when processing "
-                        ++ (show . descName . reflectDescriptorInfo $ initialMessage))
+  (GetMessageInfo {requiredTags=required}) = getMessageInfo initialMessage
+  notEnoughData = throwError ("Text.ProtocolBuffers.WireMessage.getBareMessageWith: Required fields missing when processing "
+                              ++ (show . descName . reflectDescriptorInfo $ initialMessage))
 
-unknownField :: FieldId -> Get a
-unknownField fieldId = do 
+unknownField :: Typeable a => a -> FieldId -> Get a
+unknownField msg fieldId = do 
   here <- bytesRead
-  fail ("Impossible? Text.ProtocolBuffers.WireMessage.unknownField "
-        ++" The Message's updater claims there is an unknown field id on wire: "++show fieldId
-        ++" at a position just before here == "++show here)
+  throwError ("Impossible? Text.ProtocolBuffers.WireMessage.unknownField"
+              ++"\n  Updater for "++show (typeOf msg)++" claims there is an unknown field id on wire: "++show fieldId
+              ++"\n  at a position just before byte location "++show here)
+
+
+unknown :: (Typeable a,ReflectDescriptor a) => FieldId -> WireType -> a -> Get a
+unknown fieldId wireType initialMessage = do
+  here <- bytesRead
+  throwError ("Text.ProtocolBuffers.WireMessage.unknown: Unknown field found or failure parsing field (e.g. unexpected Enum value):"
+              ++ "(message type name,field id number,wire type code,bytes read) == "
+              ++ show (typeOf initialMessage,fieldId,wireType,here) ++ " when processing "
+              ++ (show . descName . reflectDescriptorInfo $ initialMessage))
 
 {-# INLINE castWord32ToFloat #-}
 castWord32ToFloat :: Word32 -> Float
@@ -384,8 +359,8 @@ wirePutErr ft x = fail $ concat [ "Impossible? wirePut field type mismatch error
                                 , " does not match internal type ", show (typeOf x) ]
 wireGetErr :: Typeable a => FieldType -> Get a
 wireGetErr ft = answer where
-  answer = fail $ concat [ "Impossible? wireGet field type mismatch error: Field type number ", show ft
-                         , " does not match internal type ", show (typeOf (undefined `asTypeOf` typeHack answer)) ]
+  answer = throwError $ concat [ "Impossible? wireGet field type mismatch error: Field type number ", show ft
+                               , " does not match internal type ", show (typeOf (undefined `asTypeOf` typeHack answer)) ]
   typeHack :: Get a -> a
   typeHack = undefined
 
@@ -466,7 +441,7 @@ instance Wire Bool where
     case x of
       0 -> return False
       x' | x' < 128 -> return True
-      _ -> fail ("TYPE_BOOL read failure : " ++ show x)
+      _ -> throwError ("TYPE_BOOL read failure : " ++ show x)
   wireGet ft = wireGetErr ft
 
 instance Wire Utf8 where
@@ -500,7 +475,7 @@ instance Wire Int where
 verifyUtf8 :: ByteString -> Get Utf8
 verifyUtf8 bs = case isValidUTF8 bs of
                   Nothing -> return (Utf8 bs)
-                  Just i -> fail $ "Text.ProtocolBuffers.WireMessage.verifyUtf8: ByteString is not valid utf8 at position "++show i
+                  Just i -> throwError $ "Text.ProtocolBuffers.WireMessage.verifyUtf8: ByteString is not valid utf8 at position "++show i
 
 {-# INLINE wireGetEnum #-}
 wireGetEnum :: (Typeable e, Enum e) => (Int -> Maybe e) -> Get e
@@ -611,9 +586,9 @@ wireGetFromWire fi wt = getLazyByteString =<< calcLen where
                      there <- bytesRead
                      return ((there-here)+len)
               3 -> lenOf (skipGroup fi)
-              4 -> fail $ "Cannot wireGetFromWire with wireType of STOP_GROUP: "++show (fi,wt)
+              4 -> throwError $ "Cannot wireGetFromWire with wireType of STOP_GROUP: "++show (fi,wt)
               5 -> return 4
-              wtf -> fail $ "Invalid wire type (expected 0,1,2,3,or 5) found: "++show (fi,wtf)
+              wtf -> throwError $ "Invalid wire type (expected 0,1,2,3,or 5) found: "++show (fi,wtf)
   lenOf g = do here <- bytesRead
                there <- lookAhead (g >> bytesRead)
                return (there-here)
@@ -631,10 +606,10 @@ skipGroup start_fi = go where
       1 -> skip 8 >> go
       2 -> getVarInt >>= skip >> go
       3 -> skipGroup fieldId >> go
-      4 | start_fi /= fieldId -> fail $ "skipGroup failed, fieldId mismatch bewteen START_GROUP and STOP_GROUP: "++show (start_fi,(fieldId,wireType))
+      4 | start_fi /= fieldId -> throwError $ "skipGroup failed, fieldId mismatch bewteen START_GROUP and STOP_GROUP: "++show (start_fi,(fieldId,wireType))
         | otherwise -> return ()
       5 -> skip 4 >> go
-      wtf -> fail $ "Invalid wire type (expected 0,1,2,3,4,or 5) found: "++show (fieldId,wtf)
+      wtf -> throwError $ "Invalid wire type (expected 0,1,2,3,4,or 5) found: "++show (fieldId,wtf)
 
 {-
   enum WireType {
@@ -684,3 +659,216 @@ toWireType 16 =  1
 toWireType 17 =  0
 toWireType 18 =  0
 toWireType  x = error $ "Text.ProcolBuffers.Basic.toWireType: Bad FieldType: "++show x
+
+{-
+
+-- getMessageWith assumes the wireTag for the message, if it existed, has already been read.
+-- getMessageWith assumes that it still needs to read the Varint encoded length of the message.
+getMessageWith :: (Mergeable message, ReflectDescriptor message)
+               => (FieldId -> WireType -> message -> Get message) -- handle wireTags that updater cannot
+               -> (FieldId -> message -> Get message)             -- handles "allowed" wireTags
+               -> Get message
+getMessageWith punt updater = do
+  messageLength <- getVarInt
+  start <- bytesRead
+  let stop = messageLength+start
+      -- switch from go to go' once all the required fields have been found
+      go reqs message | Set.null reqs = go' message
+                      | otherwise = do
+        here <- bytesRead
+        case compare stop here of
+          EQ -> notEnoughData messageLength start
+          LT -> tooMuchData messageLength start here
+          GT -> do
+            wireTag <- fmap WireTag getVarInt -- get tag off wire
+            let (fieldId,wireType) = splitWireTag wireTag
+            if Set.notMember wireTag allowed
+              then punt fieldId wireType message >>= go reqs
+              else let reqs' = Set.delete wireTag reqs
+                   in catchError (updater fieldId message) 
+                                 (\_ -> punt fieldId wireType message)
+                        >>= go reqs'
+      go' message = do
+        here <- bytesRead
+        case compare stop here of
+          EQ -> return message
+          LT -> tooMuchData messageLength start here
+          GT -> do
+            wireTag <- fmap WireTag getVarInt -- get tag off wire
+            let (fieldId,wireType) = splitWireTag wireTag
+            if Set.notMember wireTag allowed
+              then punt fieldId wireType message >>= go'
+              else catchError (updater fieldId message)
+                              (\_ -> punt fieldId wireType message)
+                     >>= go'
+  go required initialMessage
+ where
+  initialMessage = mergeEmpty
+  (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
+  notEnoughData messageLength start =
+      fail ("Text.ProtocolBuffers.WireMessage.getMessageWith: Required fields missing when processing "
+            ++ (show . descName . reflectDescriptorInfo $ initialMessage)
+            ++ " at (messageLength,start) == " ++ show (messageLength,start))
+  tooMuchData messageLength start here =
+      fail ("Text.ProtocolBuffers.WireMessage.getMessageWith: overran expected length when processing"
+            ++ (show . descName . reflectDescriptorInfo $ initialMessage)
+            ++ " at  (messageLength,start,here) == " ++ show (messageLength,start,here))
+
+-- | Used by generated code
+-- getBareMessageWith assumes the wireTag for the message, if it existed, has already been read.
+-- getBareMessageWith assumes that it does needs to read the Varint encoded length of the message.
+-- getBareMessageWith will consume the entire ByteString it is operating on, or until it
+-- finds any STOP_GROUP tag
+getBareMessageWith :: (Mergeable message, ReflectDescriptor message)
+                   => (FieldId -> WireType -> message -> Get message) -- handle wireTags that updater cannot
+                   -> (FieldId -> message -> Get message)             -- handles "allowed" wireTags
+                   -> Get message
+getBareMessageWith punt updater = go required initialMessage
+ where
+  go reqs message | Set.null reqs = go' message
+                  | otherwise = do
+    done <- isReallyEmpty
+    if done then notEnoughData
+      else do
+        wireTag <- fmap WireTag getVarInt -- get tag off wire
+        let (fieldId,wireType) = splitWireTag wireTag
+        if wireType == 4 then notEnoughData -- END_GROUP too soon
+          else if Set.notMember wireTag allowed
+                 then punt fieldId wireType message >>= go reqs
+                 else let reqs' = Set.delete wireTag reqs
+                      in catchError (updater fieldId message)
+                                    (\_ -> punt fieldId wireType message)
+                           >>= go reqs'
+  go' message = do
+    done <- isReallyEmpty
+    if done then return message
+      else do
+        wireTag <- fmap WireTag getVarInt -- get tag off wire
+        let (fieldId,wireType) = splitWireTag wireTag -- WIRETYPE_END_GROUP
+        if wireType == 4 then return message
+          else if Set.notMember wireTag allowed
+                 then punt fieldId wireType message >>= go'
+                 else catchError (updater fieldId message)
+                                 (\_ -> punt fieldId wireType message)
+                        >>= go'
+  initialMessage = mergeEmpty
+  (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
+  notEnoughData = fail ("Text.ProtocolBuffers.WireMessage.getBareMessageWith: Required fields missing when processing "
+                        ++ (show . descName . reflectDescriptorInfo $ initialMessage))
+
+
+-}
+{-
+-- getMessageWith assumes the wireTag for the message, if it existed, has already been read.
+-- getMessageWith assumes that it still needs to read the Varint encoded length of the message.
+getMessageWith :: (Mergeable message, ReflectDescriptor message)
+               => (FieldId -> message -> Get message)             -- handles "allowed" wireTags including known extensions
+               -> Maybe (FieldId -> WireType -> message -> Get message) -- handle extension wireTags that updater does not
+               -> (FieldId -> WireType -> message -> Get message) -- handle wireTags that are unknown or produce errors
+               -> Get message
+getMessageWith updater mayExt punt = do
+  messageLength <- getVarInt
+  start <- bytesRead
+  let stop = messageLength+start
+      getExt = case mayExt of
+                 Nothing -> punt
+                 Just loadExt -> 
+                   (\fieldId wireType msg -> catchError (loadExt fieldId wireType msg)
+                                                        (\_ -> punt fieldId wireType msg))
+      -- switch from go to go' once all the required fields have been found
+      go reqs message | Set.null reqs = go' message
+                      | otherwise = do
+        here <- bytesRead
+        case compare stop here of
+          EQ -> notEnoughData messageLength start
+          LT -> tooMuchData messageLength start here
+          GT -> do
+            wireTag <- fmap WireTag getVarInt -- get tag off wire
+            let (fieldId,wireType) = splitWireTag wireTag
+            if Set.notMember wireTag allowed
+              then getExt fieldId wireType message >>= go reqs
+              else let reqs' = Set.delete wireTag reqs
+                   in catchError (updater fieldId message)
+                                 (\_ -> punt fieldId wireType message)
+                        >>= go reqs'
+      go' message = do
+        here <- bytesRead
+        case compare stop here of
+          EQ -> return message
+          LT -> tooMuchData messageLength start here
+          GT -> do
+            wireTag <- fmap WireTag getVarInt -- get tag off wire
+            let (fieldId,wireType) = splitWireTag wireTag
+            if Set.notMember wireTag allowed
+              then getExt fieldId wireType message >>= go'
+              else catchError (updater fieldId message)
+                              (\_ -> punt fieldId wireType message)
+                     >>= go'
+  go required initialMessage
+ where
+  initialMessage = mergeEmpty
+  (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
+  notEnoughData messageLength start =
+      throwError ("Text.ProtocolBuffers.WireMessage.getMessageWith: Required fields missing when processing "
+                  ++ (show . descName . reflectDescriptorInfo $ initialMessage)
+                  ++ " at (messageLength,start) == " ++ show (messageLength,start))
+  tooMuchData messageLength start here =
+      throwError ("Text.ProtocolBuffers.WireMessage.getMessageWith: overran expected length when processing"
+                  ++ (show . descName . reflectDescriptorInfo $ initialMessage)
+                  ++ " at  (messageLength,start,here) == " ++ show (messageLength,start,here))
+
+-- | Used by generated code
+-- getBareMessageWith assumes the wireTag for the message, if it existed, has already been read.
+-- getBareMessageWith assumes that it does needs to read the Varint encoded length of the message.
+-- getBareMessageWith will consume the entire ByteString it is operating on, or until it
+-- finds any STOP_GROUP tag
+getBareMessageWith :: (Mergeable message, ReflectDescriptor message)
+                   => (FieldId -> message -> Get message)             -- handles "allowed" wireTags including known extensions
+                   -> Maybe (FieldId -> WireType -> message -> Get message) -- handle extension wireTags that updater does not
+                   -> (FieldId -> WireType -> message -> Get message) -- handle wireTags that are unknown or produce errors
+                   -> Get message
+getBareMessageWith updater mayExt punt = go required initialMessage
+ where
+  getExt = case mayExt of
+             Nothing -> punt
+             Just loadExt -> 
+               (\fieldId wireType msg -> catchError (loadExt fieldId wireType msg)
+                                                    (\_ -> punt fieldId wireType msg))
+  go reqs message | Set.null reqs = go' message
+                  | otherwise = do
+    done <- isReallyEmpty
+    if done then notEnoughData
+      else do
+        wireTag <- fmap WireTag getVarInt -- get tag off wire
+        let (fieldId,wireType) = splitWireTag wireTag
+        if wireType == 4 then notEnoughData -- END_GROUP too soon
+          else if Set.notMember wireTag allowed
+                 then getExt fieldId wireType message >>= go reqs
+                 else let reqs' = Set.delete wireTag reqs
+                      in catchError (updater fieldId message)
+                                    (\_ -> punt fieldId wireType message)
+                           >>= go reqs'
+  go' message = do
+    done <- isReallyEmpty
+    if done then return message
+      else do
+        wireTag <- fmap WireTag getVarInt -- get tag off wire
+        let (fieldId,wireType) = splitWireTag wireTag -- WIRETYPE_END_GROUP
+        if wireType == 4 then return message
+          else if Set.notMember wireTag allowed
+                 then getExt fieldId wireType message >>= go'
+                 else catchError (updater fieldId message)
+                                 (\_ -> punt fieldId wireType message)
+                        >>= go'
+  initialMessage = mergeEmpty
+  (GetMessageInfo {requiredTags=required,allowedTags=allowed}) = getMessageInfo initialMessage
+  notEnoughData = throwError ("Text.ProtocolBuffers.WireMessage.getBareMessageWith: Required fields missing when processing "
+                              ++ (show . descName . reflectDescriptorInfo $ initialMessage))
+
+unknownField :: FieldId -> Get a
+unknownField fieldId = do 
+  here <- bytesRead
+  throwError ("Impossible? Text.ProtocolBuffers.WireMessage.unknownField"
+              ++"\n  Updater claims there is an unknown field id on wire: "++show fieldId
+              ++"\n  at a position just before byte location "++show here)
+-}

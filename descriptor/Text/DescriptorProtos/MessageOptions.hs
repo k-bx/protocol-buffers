@@ -1,5 +1,5 @@
 module Text.DescriptorProtos.MessageOptions (MessageOptions(..)) where
-import Prelude ((+), (<=), (&&), ( || ))
+import Prelude ((+), (==), (<=), (&&), ( || ))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
@@ -51,8 +51,8 @@ instance P'.Wire MessageOptions where
              P'.wirePutUnknownField x'4
   wireGet ft'
    = case ft' of
-       10 -> P'.getBareMessageWith other'Field update'Self
-       11 -> P'.getMessageWith other'Field update'Self
+       10 -> P'.getBareMessageWith check'allowed
+       11 -> P'.getMessageWith check'allowed
        _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
@@ -61,13 +61,14 @@ instance P'.Wire MessageOptions where
              999
               -> P'.fmap (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
                   (P'.wireGet 11)
-             _ -> P'.unknownField field'Number
-        other'Field field'Number wire'Type old'Self
-         = (if P'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then P'.loadExtension else
-             P'.loadUnknown)
-            field'Number
-            wire'Type
-            old'Self
+             _ -> P'.unknownField old'Self field'Number
+        allowed'wire'Tags = P'.fromDistinctAscList [8, 7994]
+        check'allowed wire'Tag field'Number wire'Type old'Self
+         = P'.catchError
+            (if P'.member wire'Tag allowed'wire'Tags then update'Self field'Number old'Self else
+              if P'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then
+               P'.loadExtension field'Number wire'Type old'Self else P'.unknown field'Number wire'Type old'Self)
+            (\ _ -> P'.loadUnknown field'Number wire'Type old'Self)
  
 instance P'.MessageAPI msg' (msg' -> MessageOptions) MessageOptions where
   getVal m' f' = f' m'
@@ -75,7 +76,7 @@ instance P'.MessageAPI msg' (msg' -> MessageOptions) MessageOptions where
 instance P'.GPB MessageOptions
  
 instance P'.ReflectDescriptor MessageOptions where
+  getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [8, 7994])
   reflectDescriptorInfo _
    = P'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.MessageOptions\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"MessageOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"MessageOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.MessageOptions.message_set_wire_format\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"MessageOptions\"], baseName' = FName \"message_set_wire_format\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.MessageOptions.uninterpreted_option\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"MessageOptions\"], baseName' = FName \"uninterpreted_option\"}, fieldNumber = FieldId {getFieldId = 999}, wireTag = WireTag {getWireTag = 7994}, wireTagLength = 2, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.UninterpretedOption\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"UninterpretedOption\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [(FieldId {getFieldId = 1000},FieldId {getFieldId = 18999}),(FieldId {getFieldId = 20000},FieldId {getFieldId = 536870911})], knownKeys = fromList [], storeUnknown = True}"
-  getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [8, 7994])

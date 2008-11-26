@@ -1,5 +1,5 @@
 module Text.DescriptorProtos.FileOptions (FileOptions(..)) where
-import Prelude ((+), (<=), (&&), ( || ))
+import Prelude ((+), (==), (<=), (&&), ( || ))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FileOptions.OptimizeMode as DescriptorProtos.FileOptions (OptimizeMode)
@@ -66,8 +66,8 @@ instance P'.Wire FileOptions where
              P'.wirePutUnknownField x'7
   wireGet ft'
    = case ft' of
-       10 -> P'.getBareMessageWith other'Field update'Self
-       11 -> P'.getMessageWith other'Field update'Self
+       10 -> P'.getBareMessageWith check'allowed
+       11 -> P'.getMessageWith check'allowed
        _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
@@ -79,13 +79,14 @@ instance P'.Wire FileOptions where
              999
               -> P'.fmap (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
                   (P'.wireGet 11)
-             _ -> P'.unknownField field'Number
-        other'Field field'Number wire'Type old'Self
-         = (if P'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then P'.loadExtension else
-             P'.loadUnknown)
-            field'Number
-            wire'Type
-            old'Self
+             _ -> P'.unknownField old'Self field'Number
+        allowed'wire'Tags = P'.fromDistinctAscList [10, 66, 72, 80, 7994]
+        check'allowed wire'Tag field'Number wire'Type old'Self
+         = P'.catchError
+            (if P'.member wire'Tag allowed'wire'Tags then update'Self field'Number old'Self else
+              if P'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then
+               P'.loadExtension field'Number wire'Type old'Self else P'.unknown field'Number wire'Type old'Self)
+            (\ _ -> P'.loadUnknown field'Number wire'Type old'Self)
  
 instance P'.MessageAPI msg' (msg' -> FileOptions) FileOptions where
   getVal m' f' = f' m'
@@ -93,7 +94,7 @@ instance P'.MessageAPI msg' (msg' -> FileOptions) FileOptions where
 instance P'.GPB FileOptions
  
 instance P'.ReflectDescriptor FileOptions where
+  getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [10, 66, 72, 80, 7994])
   reflectDescriptorInfo _
    = P'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.FileOptions\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"FileOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"FileOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.java_package\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"java_package\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.java_outer_classname\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"java_outer_classname\"}, fieldNumber = FieldId {getFieldId = 8}, wireTag = WireTag {getWireTag = 66}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.java_multiple_files\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"java_multiple_files\"}, fieldNumber = FieldId {getFieldId = 10}, wireTag = WireTag {getWireTag = 80}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.optimize_for\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"optimize_for\"}, fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 72}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 14}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.FileOptions.OptimizeMode\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName = MName \"OptimizeMode\"}), hsRawDefault = Just (Chunk \"CODE_SIZE\" Empty), hsDefault = Just (HsDef'Enum \"CODE_SIZE\")},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.uninterpreted_option\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"uninterpreted_option\"}, fieldNumber = FieldId {getFieldId = 999}, wireTag = WireTag {getWireTag = 7994}, wireTagLength = 2, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.UninterpretedOption\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"UninterpretedOption\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [(FieldId {getFieldId = 1000},FieldId {getFieldId = 18999}),(FieldId {getFieldId = 20000},FieldId {getFieldId = 536870911})], knownKeys = fromList [], storeUnknown = True}"
-  getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [10, 66, 72, 80, 7994])

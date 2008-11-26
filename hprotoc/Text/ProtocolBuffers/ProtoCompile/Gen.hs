@@ -1,11 +1,9 @@
--- try "test", "testDesc", and "testLabel" to see sample output
--- 
--- Obsolete : Turn *Proto into Language.Haskell.Exts.Syntax from haskell-src-exts package
--- Now cut back to use just Language.Haskell.Syntax, see coments marked YYY for the Exts verision
--- 
+-- This module uses the Reflection data structures (ProtoInfo,EnumInfo,DescriptorInfo) to
+-- build an AST using Language.Haskell.Syntax.  This get quite verbose, so a large number
+-- of helper functions (and operators) are defined to aid in specifying the output code.
+--
 -- Note that this may eventually also generate hs-boot files to allow
--- for breaking mutual recursion.  This is ignored for getting
--- descriptor.proto running.
+-- for breaking mutual recursion.
 --
 -- Mangling: For the current moment, assume the mangling is done in a prior pass:
 --   (*) Uppercase all module names and type names and enum constants
@@ -15,15 +13,6 @@
 -- The names are also assumed to have become fully-qualified, and all
 -- the optional type codes have been set.
 --
--- default values are an awful mess.  They are documented in descriptor.proto as
-{-
-  // For numeric types, contains the original text representation of the value.
-  // For booleans, "true" or "false".
-  // For strings, contains the default text contents (not escaped in any way).
-  // For bytes, contains the C escaped value.  All bytes >= 128 are escaped.
-  // TODO(kenton):  Base-64 encode?
-  optional string default_value = 7;
--}
 module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModule,enumModule,prettyPrint) where
 
 import Text.ProtocolBuffers.Basic
@@ -207,8 +196,12 @@ instanceEnum ei
         toEnum' = [ match "toEnum" [] (compose mayErr (lvar "toMaybe'Enum")) ]
         mayErr = pvar "fromMaybe" $$ (HsParen (pvar "error" $$  (litStr $ 
                    "hprotoc generated code: toEnum failure for type "++ fqMod (enumName ei))))
-        succ' = zipWith (equate "succ") values (tail values)
-        pred' = zipWith (equate "pred") (tail values) values
+        succ' = zipWith (equate "succ") values (tail values) ++
+                [ match "succ" [HsPWildCard] (pvar "error" $$  (litStr $ 
+                   "hprotoc generated code: succ failure for type "++ fqMod (enumName ei))) ]
+        pred' = zipWith (equate "pred") (tail values) values ++
+                [ match "pred" [HsPWildCard] (pvar "error" $$  (litStr $ 
+                   "hprotoc generated code: pred failure for type "++ fqMod (enumName ei))) ]
         equate f (_,n1) (_,n2) = match f [HsPApp (local n1) []] (lcon n2)
 
 -- fromEnum TYPE_ENUM == 14 :: Int
@@ -240,8 +233,8 @@ instanceReflectEnum ei
         ascList = HsList (map one values)
           where one (v,ns) = HsTuple [litInt (getEnumCode v),litStr ns,lcon ns]
         ei' = foldl' HsApp (pcon "EnumInfo") [protoNameExp
-                                                        ,HsList $ map litStr (enumFilePath ei)
-                                                        ,HsList (map two values)]
+                                             ,HsList $ map litStr (enumFilePath ei)
+                                             ,HsList (map two values)]
           where two (v,ns) = HsTuple [litInt (getEnumCode v),litStr ns]
         protoNameExp = HsParen $ foldl' HsApp (pvar "makePNF")
                                         [ xxx'Exp, mList a, mList b, litStr (mName c) ]
@@ -249,6 +242,10 @@ instanceReflectEnum ei
 
 hasExt :: DescriptorInfo -> Bool
 hasExt di = not (null (extRanges di))
+
+--------------------------------------------
+-- FileDescriptorProto module creation
+--------------------------------------------
 
 protoModule :: ProtoInfo -> ByteString -> HsModule
 protoModule pri@(ProtoInfo protoName _ _ keyInfos _ _ _) fdpBS
@@ -292,6 +289,9 @@ embed'fdpBS bs = [ myType, myValue ]
                       HsParen (pvar "wireGet" $$ litInt 11) $$ 
                       HsParen (pvar "pack" $$ litStr (LC.unpack bs))) noWhere
 
+--------------------------------------------
+-- DescriptorProto module creation
+--------------------------------------------
 descriptorModule :: DescriptorInfo -> HsModule
 descriptorModule di
     = let protoName = descName di
@@ -539,22 +539,29 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                 , var]
 
         getCases = HsUnGuardedRhs $ cases
-          (pvar "getBareMessageWith" $$ lvar "update'Self" $$ maybeExt $$ processUnknown)
-          (pvar "getMessageWith" $$ lvar "update'Self" $$ maybeExt $$ processUnknown)
+          (pvar "getBareMessageWith" $$ lvar "check'allowed")
+          (pvar "getMessageWith" $$ lvar "check'allowed")
           (pvar "wireGetErr" $$ lvar "ft'")
-        whereDecls | extensible = [whereUpdateSelf,whereOtherField]
-                   | otherwise  = [whereUpdateSelf]
-        processUnknown | storeUnknown di = pvar "loadUnknown"
-                       | otherwise = pvar "unknown"
-        maybeExt | extensible = HsParen (pcon "Just" $$ lvar "other'Field")
-                 | otherwise = pcon "Nothing"
-        whereOtherField =
-          inst "other'Field" [var "field'Number", var "wire'Type", var "old'Self"]
-               (HsParen (HsIf (isAllowed (lvar "field'Number"))
-                              (pvar "loadExtension")
-                              (pvar "notExtension"))
-                $$ lvar "field'Number" $$ lvar "wire'Type" $$ lvar "old'Self")
-        isAllowed x = pvar "or" $$ HsList ranges where
+        whereDecls = [whereUpdateSelf,whereAllowed,whereCheckAllowed]
+        whereAllowed = inst "allowed'wire'Tags" [] (pvar "fromDistinctAscList" $$ HsList (map litInt allowed))
+        allowed = sort $ [ getWireTag (wireTag f) | f <- F.toList (fields di)] ++
+                         [ getWireTag (wireTag f) | f <- F.toList (knownKeys di)]
+        locals = ["wire'Tag","field'Number","wire'Type","old'Self"]
+        whereCheckAllowed = inst "check'allowed" (map var locals) process
+         where process = if storeUnknown di then catchUn updateBranch else updateBranch
+               catchUn s = pvar "catchError" $$ HsParen s
+                 $$ HsParen (HsLambda src [HsPWildCard] (args (pvar "loadUnknown")))
+               updateBranch | null allowed = extBranch
+                            | otherwise = HsIf (pvar "member" $$ lvar "wire'Tag" $$ lvar "allowed'wire'Tags")
+                                               (lvar "update'Self" $$ lvar "field'Number" $$ lvar "old'Self")
+                                               extBranch
+               extBranch | extensible = HsIf (isAllowedExt (lvar "field'Number"))
+                                             (args (pvar "loadExtension"))
+                                             unknownBranch
+                         | otherwise = unknownBranch
+               unknownBranch =args (pvar "unknown")
+               args x = x $$ lvar "field'Number" $$ lvar "wire'Type" $$ lvar "old'Self"
+        isAllowedExt x = pvar "or" $$ HsList ranges where
           (<=!) = mkOp "<="; (&&!) = mkOp "&&"; (==!) = mkOp ("==")
           ranges = map (\(FieldId lo,FieldId hi) -> if hi < maxHi
                                                       then if lo == hi
@@ -563,11 +570,11 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                       else litInt lo <=! x) allowedExts
              where FieldId maxHi = maxBound
         whereUpdateSelf = inst "update'Self" [var "field'Number", var "old'Self"]
-                               (HsCase (lvar "field'Number") updateAlts)
+                            (HsCase (lvar "field'Number") updateAlts)
         updateAlts = map toUpdate (F.toList fieldInfos)
                      ++ (if extensible && (not (Seq.null fieldExts)) then map toUpdateExt (F.toList fieldExts) else [])
                      ++ [HsAlt src HsPWildCard (HsUnGuardedAlt $
-                           pvar "unknownField" $$ (lvar "field'Number")) noWhere]
+                           pvar "unknownField" $$ (lvar "old'Self") $$ (lvar "field'Number")) noWhere]
         toUpdateExt fi = HsAlt src (litIntP . getFieldId . fieldNumber $ fi) (HsUnGuardedAlt $
                            pvar "wireGetKey" $$ HsVar (mayQualName protoName (fieldName fi)) $$ lvar "old'Self") noWhere
         toUpdate fi = HsAlt src (litIntP . getFieldId . fieldNumber $ fi) (HsUnGuardedAlt $ 
@@ -586,7 +593,10 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                                $$ lvar "old'Self" )
                                                   $$ HsParen x
                            | otherwise = x
-
+        -- in the above, the [10,11] check optimizes using the
+        -- knowledge that only TYPE_MESSAGE and TYPE_GROUP have merges
+        -- that are not right-biased replacements.  The "append" uses
+        -- knowledge of how all repeated fields get merged.
     in HsInstDecl src [] (private "Wire") [HsTyCon me]
         [ HsFunBind [HsMatch src (HsIdent "wireSize") [var "ft'",HsPAsPat (HsIdent "self'") (HsPParen mine)] sizeCases whereCalcSize]
         , HsFunBind [HsMatch src (HsIdent "wirePut")  [var "ft'",HsPAsPat (HsIdent "self'") (HsPParen mine)] putCases wherePutFields]

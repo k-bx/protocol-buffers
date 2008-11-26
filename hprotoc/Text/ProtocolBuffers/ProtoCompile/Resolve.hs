@@ -245,7 +245,7 @@ resolveEnv nameU envIn = do
                                  , "which parses as "++show (isGlobal,xs)
                                  , "in environment: "++(whereEnv envIn)
                                  , "allowed: "++show (allowed envIn)]
-    Just e@(E'Error {}) -> throw (show e)
+    Just (E'Error s _es) -> throw s
     Just e -> return e
 
 resolveRE :: Utf8 -> RE Entity
@@ -267,7 +267,7 @@ getType s f a = do
 expectMGE :: Either ErrStr Entity -> Either ErrStr Entity
 expectMGE ee@(Left {}) = ee
 expectMGE ee@(Right e) = if isMGE e then ee
-                           else Left $ "expectMGE: Name resolution failed to find a Message, Group, or Enum:\n"++ishow e
+                           else Left $ "expectMGE: Name resolution failed to find a Message, Group, or Enum:\n"++ishow (eName e) -- cannot show all of "e" because this will loop and hang the hprotoc program
   where isMGE e' = case e' of E'Message {} -> True
                               E'Group {} -> True
                               E'Enum {} -> True
@@ -277,7 +277,7 @@ expectMGE ee@(Right e) = if isMGE e then ee
 expectM :: Either ErrStr Entity -> Either ErrStr Entity
 expectM ee@(Left {}) = ee
 expectM ee@(Right e) = if isMGE e then ee
-                         else Left $ "expectMGE: Name resolution failed to find a Message, Group, or Enum:\n"++ishow (eName e)
+                         else Left $ "expectMGE: Name resolution failed to find a Message, Group, or Enum:\n"++ishow (eName e) -- cannot show all of "e" because this will loop and hang the hprotoc program
   where isMGE e' = case e' of E'Message {} -> True
                               _ -> False
 
@@ -515,7 +515,7 @@ entityMsg isGroup dp = annErr ("entityMsg "++show (D.DescriptorProto.name dp)) $
   return (self,entity)
 
 entityField :: Bool -> D.FieldDescriptorProto -> SE (IName String,Entity)
-entityField isKey fdp = annErr ("entityField "++show fdp) $ do
+entityField isKey fdp = annErr ("entityField "++show (D.FieldDescriptorProto.name fdp)) $ do
   (self,names) <- getNames "entityField.name" D.FieldDescriptorProto.name fdp
   let isKey' = maybe False (const True) (D.FieldDescriptorProto.extendee fdp)
   when (isKey/=isKey') $
@@ -551,7 +551,7 @@ entityEnumValue evdp = do -- Merely use getNames to add mangled self to ReMap st
   return ()
 
 entityService :: D.ServiceDescriptorProto -> SE (IName String,Entity)
-entityService sdp = mdo
+entityService sdp = annErr ("entityService "++show (D.ServiceDescriptorProto.name sdp)) $ mdo
   (self,names) <- getNames "entityService.name" D.ServiceDescriptorProto.name sdp
   let entity = E'Service names (M.fromListWithKey unique methods)
   (badMethods,methods) <- descend names entity $
@@ -589,7 +589,7 @@ resolveFDP = runReaderT . fqFileDP
 fqFail :: Show a => String -> a -> Entity -> RE b
 fqFail msg dp entity = do
   env <- ask
-  throw $ unlines [ msg, "resolving: "++show dp, "in environment: "++whereEnv env, "found: "++show entity ]
+  throw $ unlines [ msg, "resolving: "++show dp, "in environment: "++whereEnv env, "found: "++show (eName entity) ]
 
 fqFileDP :: D.FileDescriptorProto -> RE D.FileDescriptorProto
 fqFileDP fdp = do
@@ -603,7 +603,7 @@ fqFileDP fdp = do
                    , D.FileDescriptorProto.extension    = newKeys }
 
 fqMessage :: D.DescriptorProto -> RE D.DescriptorProto
-fqMessage dp = do
+fqMessage dp = annErr ("fqMessage "++show (D.DescriptorProto.name dp)) $ do
   entity <- resolveRE =<< getJust "fqMessage.name" (D.DescriptorProto.name dp)
   case entity of
     E'Message {} -> return ()
@@ -620,7 +620,7 @@ fqMessage dp = do
                     , D.DescriptorProto.enum_type   = newEnums }
 
 fqService :: D.ServiceDescriptorProto -> RE D.ServiceDescriptorProto
-fqService sdp = do
+fqService sdp =  annErr ("fqService "++show (D.ServiceDescriptorProto.name sdp)) $ do
   entity <- resolveRE =<< getJust "fqService.name" (D.ServiceDescriptorProto.name sdp)
   case entity of
     E'Service {} -> do newMethods <- local (Local entity) $ T.mapM fqMethod (D.ServiceDescriptorProto.method sdp)
@@ -648,7 +648,7 @@ fqMethod mdp = do
 -- TYPE_ENUM, and if it is the latter then any default value string is
 -- checked for validity.
 fqField :: Bool -> D.FieldDescriptorProto -> RE D.FieldDescriptorProto
-fqField isKey fdp = annErr ("fqField "++show fdp) $ do
+fqField isKey fdp = annErr ("fqField "++show (D.FieldDescriptorProto.name fdp)) $ do
   let isKey' = maybe False (const True) (D.FieldDescriptorProto.extendee fdp)
   when (isKey/=isKey') $
     ask >>= \env -> throwError $ "fqField.isKey: Expected key and got field or vice-versa:\n"++ishow ((isKey,isKey'),whereEnv env,fdp)

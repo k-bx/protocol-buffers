@@ -2,7 +2,9 @@
 -- compile.  This and the Prelude will both be imported qualified as
 -- P', the prime ensuring no name conflicts are possible.
 module Text.ProtocolBuffers.Header
-    ( emptyBS, pack, append, fromMaybe, ap, fromDistinctAscList
+    ( emptyBS, pack, append, fromMaybe, ap
+    , fromDistinctAscList, member
+    , throwError,catchError
     , module Data.Generics
     , module Data.Typeable
     , module Text.ProtocolBuffers.Basic
@@ -14,18 +16,19 @@ module Text.ProtocolBuffers.Header
     ) where
 
 import Control.Monad(ap)
+import Control.Monad.Error.Class(throwError,catchError)
 import Data.ByteString.Lazy(empty)
 import Data.ByteString.Lazy.Char8(pack)
 import Data.Generics(Data(..))
 import Data.Maybe(fromMaybe)
 import Data.Sequence((|>)) -- for append, see below
-import Data.Set(fromDistinctAscList)
+import Data.Set(fromDistinctAscList,member)
 import Data.Typeable(Typeable(..))
 
 import Text.ProtocolBuffers.Basic -- all
 import Text.ProtocolBuffers.Default()
 import Text.ProtocolBuffers.Extensions
-  ( wireSizeExtField,wirePutExtField,loadExtension,notExtension,getMessageExt,getBareMessageExt
+  ( wireSizeExtField,wirePutExtField,loadExtension,notExtension
   , GPB,Key(..),ExtField,ExtendMessage(..),MessageAPI(..),ExtKey(wireGetKey) )
 import Text.ProtocolBuffers.Identifiers(FIName(..),MName(..),FName(..))
 import Text.ProtocolBuffers.Mergeable()
@@ -38,7 +41,6 @@ import Text.ProtocolBuffers.WireMessage
   ( prependMessageSize,putSize
   , wireSizeReq,wireSizeOpt,wireSizeRep
   , wirePutReq,wirePutOpt,wirePutRep
-  , getMessage,getBareMessage
   , getMessageWith,getBareMessageWith,wireGetEnum
   , wireSizeErr,wirePutErr,wireGetErr
   , unknown,unknownField)

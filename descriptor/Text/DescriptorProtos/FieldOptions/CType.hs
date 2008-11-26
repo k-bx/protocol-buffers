@@ -1,5 +1,5 @@
 module Text.DescriptorProtos.FieldOptions.CType (CType(..)) where
-import Prelude ((+))
+import Prelude ((+), (.))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
@@ -25,10 +25,12 @@ instance P'.Enum CType where
   fromEnum (CORD) = 1
   fromEnum (STRING_PIECE) = 2
   toEnum
-   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldOptions.CType") P'..
+   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldOptions.CType") .
       toMaybe'Enum
   succ (CORD) = STRING_PIECE
+  succ _ = P'.error "hprotoc generated code: succ failure for type Text.DescriptorProtos.FieldOptions.CType"
   pred (STRING_PIECE) = CORD
+  pred _ = P'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FieldOptions.CType"
  
 instance P'.Wire CType where
   wireSize ft' enum = P'.wireSize ft' (P'.fromEnum enum)

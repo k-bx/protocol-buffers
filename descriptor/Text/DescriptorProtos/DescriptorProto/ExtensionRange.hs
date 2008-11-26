@@ -42,15 +42,21 @@ instance P'.Wire ExtensionRange where
              P'.wirePutUnknownField x'3
   wireGet ft'
    = case ft' of
-       10 -> P'.getBareMessageWith P'.loadUnknown update'Self
-       11 -> P'.getMessageWith P'.loadUnknown update'Self
+       10 -> P'.getBareMessageWith check'allowed
+       11 -> P'.getMessageWith check'allowed
        _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
          = case field'Number of
              1 -> P'.fmap (\ new'Field -> old'Self{start = P'.Just new'Field}) (P'.wireGet 5)
              2 -> P'.fmap (\ new'Field -> old'Self{end = P'.Just new'Field}) (P'.wireGet 5)
-             _ -> P'.unknownField field'Number
+             _ -> P'.unknownField old'Self field'Number
+        allowed'wire'Tags = P'.fromDistinctAscList [8, 16]
+        check'allowed wire'Tag field'Number wire'Type old'Self
+         = P'.catchError
+            (if P'.member wire'Tag allowed'wire'Tags then update'Self field'Number old'Self else
+              P'.unknown field'Number wire'Type old'Self)
+            (\ _ -> P'.loadUnknown field'Number wire'Type old'Self)
  
 instance P'.MessageAPI msg' (msg' -> ExtensionRange) ExtensionRange where
   getVal m' f' = f' m'
@@ -58,7 +64,7 @@ instance P'.MessageAPI msg' (msg' -> ExtensionRange) ExtensionRange where
 instance P'.GPB ExtensionRange
  
 instance P'.ReflectDescriptor ExtensionRange where
+  getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [8, 16])
   reflectDescriptorInfo _
    = P'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.DescriptorProto.ExtensionRange\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\",MName \"DescriptorProto\"], baseName = MName \"ExtensionRange\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"DescriptorProto\",\"ExtensionRange.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.DescriptorProto.ExtensionRange.start\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"DescriptorProto\",MName \"ExtensionRange\"], baseName' = FName \"start\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 5}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.DescriptorProto.ExtensionRange.end\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"DescriptorProto\",MName \"ExtensionRange\"], baseName' = FName \"end\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 16}, wireTagLength = 1, isRequired = False, canRepeat = False, typeCode = FieldType {getFieldType = 5}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"
-  getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [8, 16])

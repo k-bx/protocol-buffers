@@ -42,14 +42,20 @@ instance P'.Wire FileDescriptorSet where
              P'.wirePutUnknownField x'2
   wireGet ft'
    = case ft' of
-       10 -> P'.getBareMessageWith P'.loadUnknown update'Self
-       11 -> P'.getMessageWith P'.loadUnknown update'Self
+       10 -> P'.getBareMessageWith check'allowed
+       11 -> P'.getMessageWith check'allowed
        _ -> P'.wireGetErr ft'
     where
         update'Self field'Number old'Self
          = case field'Number of
              1 -> P'.fmap (\ new'Field -> old'Self{file = P'.append (file old'Self) new'Field}) (P'.wireGet 11)
-             _ -> P'.unknownField field'Number
+             _ -> P'.unknownField old'Self field'Number
+        allowed'wire'Tags = P'.fromDistinctAscList [10]
+        check'allowed wire'Tag field'Number wire'Type old'Self
+         = P'.catchError
+            (if P'.member wire'Tag allowed'wire'Tags then update'Self field'Number old'Self else
+              P'.unknown field'Number wire'Type old'Self)
+            (\ _ -> P'.loadUnknown field'Number wire'Type old'Self)
  
 instance P'.MessageAPI msg' (msg' -> FileDescriptorSet) FileDescriptorSet where
   getVal m' f' = f' m'
@@ -57,7 +63,7 @@ instance P'.MessageAPI msg' (msg' -> FileDescriptorSet) FileDescriptorSet where
 instance P'.GPB FileDescriptorSet
  
 instance P'.ReflectDescriptor FileDescriptorSet where
+  getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [10])
   reflectDescriptorInfo _
    = P'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.FileDescriptorSet\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"FileDescriptorSet\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"FileDescriptorSet.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileDescriptorSet.file\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileDescriptorSet\"], baseName' = FName \"file\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, wireTagLength = 1, isRequired = False, canRepeat = True, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.FileDescriptorProto\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"FileDescriptorProto\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"
-  getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [10])

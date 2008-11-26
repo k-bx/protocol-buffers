@@ -1,5 +1,5 @@
 module Text.DescriptorProtos.FieldDescriptorProto.Type (Type(..)) where
-import Prelude ((+))
+import Prelude ((+), (.))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
@@ -73,7 +73,7 @@ instance P'.Enum Type where
   fromEnum (TYPE_SINT32) = 17
   fromEnum (TYPE_SINT64) = 18
   toEnum
-   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldDescriptorProto.Type") P'..
+   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldDescriptorProto.Type") .
       toMaybe'Enum
   succ (TYPE_DOUBLE) = TYPE_FLOAT
   succ (TYPE_FLOAT) = TYPE_INT64
@@ -92,6 +92,7 @@ instance P'.Enum Type where
   succ (TYPE_SFIXED32) = TYPE_SFIXED64
   succ (TYPE_SFIXED64) = TYPE_SINT32
   succ (TYPE_SINT32) = TYPE_SINT64
+  succ _ = P'.error "hprotoc generated code: succ failure for type Text.DescriptorProtos.FieldDescriptorProto.Type"
   pred (TYPE_FLOAT) = TYPE_DOUBLE
   pred (TYPE_INT64) = TYPE_FLOAT
   pred (TYPE_UINT64) = TYPE_INT64
@@ -109,6 +110,7 @@ instance P'.Enum Type where
   pred (TYPE_SFIXED64) = TYPE_SFIXED32
   pred (TYPE_SINT32) = TYPE_SFIXED64
   pred (TYPE_SINT64) = TYPE_SINT32
+  pred _ = P'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FieldDescriptorProto.Type"
  
 instance P'.Wire Type where
   wireSize ft' enum = P'.wireSize ft' (P'.fromEnum enum)

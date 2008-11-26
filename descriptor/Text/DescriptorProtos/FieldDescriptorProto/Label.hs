@@ -1,5 +1,5 @@
 module Text.DescriptorProtos.FieldDescriptorProto.Label (Label(..)) where
-import Prelude ((+))
+import Prelude ((+), (.))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
@@ -28,12 +28,14 @@ instance P'.Enum Label where
   fromEnum (LABEL_REQUIRED) = 2
   fromEnum (LABEL_REPEATED) = 3
   toEnum
-   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldDescriptorProto.Label") P'..
+   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldDescriptorProto.Label") .
       toMaybe'Enum
   succ (LABEL_OPTIONAL) = LABEL_REQUIRED
   succ (LABEL_REQUIRED) = LABEL_REPEATED
+  succ _ = P'.error "hprotoc generated code: succ failure for type Text.DescriptorProtos.FieldDescriptorProto.Label"
   pred (LABEL_REQUIRED) = LABEL_OPTIONAL
   pred (LABEL_REPEATED) = LABEL_REQUIRED
+  pred _ = P'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FieldDescriptorProto.Label"
  
 instance P'.Wire Label where
   wireSize ft' enum = P'.wireSize ft' (P'.fromEnum enum)

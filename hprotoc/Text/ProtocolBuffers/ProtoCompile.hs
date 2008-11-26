@@ -32,7 +32,7 @@ import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serialize
 -- | Version of protocol-buffers.
 -- The version tags that I have used are ["unreleased"]
 version :: Version
-version = Version { versionBranch = [1,1,0]
+version = Version { versionBranch = [1,2,1]
                   , versionTags = [] }
 
 data Options = Options { optPrefix :: [MName String]

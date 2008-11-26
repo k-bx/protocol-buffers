@@ -22,14 +22,14 @@ module Text.ProtocolBuffers.Extensions
   -- * External types and classes
   , Key(..),ExtKey(..),MessageAPI(..)
   -- * Internal types, functions, and classes
-  , wireSizeExtField,wirePutExtField,getMessageExt,getBareMessageExt,loadExtension,notExtension
+  , wireSizeExtField,wirePutExtField,loadExtension,notExtension
   , GPB,ExtField(..),ExtendMessage(..),ExtFieldValue(..)
   ) where
 
+import Control.Monad.Error.Class(throwError)
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Foldable as F
 import Data.Generics
-import Data.Ix(inRange)
 import Data.Map(Map)
 import qualified Data.Map as M
 import Data.Maybe(fromMaybe)
@@ -538,26 +538,8 @@ wirePutExtField (ExtField m) = mapM_ aPut (M.assocs m) where
   aPut (fi,(ExtOptional ft (GPDyn GPWitness d))) = wirePutOpt (toWireTag fi ft) ft (Just d)
   aPut (fi,(ExtRepeated ft (GPDynSeq GPWitness s))) = wirePutRep (toWireTag fi ft) ft s
 
--- | This is used by the generated code to get messages that have extensions
-getMessageExt :: (Mergeable message, ReflectDescriptor message,Typeable message,ExtendMessage message)
-              => (FieldId -> message -> Get message)           -- handles "allowed" wireTags
-              -> Get message
-getMessageExt = getMessageWith loadExtension
-
--- | This is used by the generated code to get messages that have extensions
-getBareMessageExt :: (Mergeable message, ReflectDescriptor message,Typeable message,ExtendMessage message)
-                  => (FieldId -> message -> Get message)           -- handles "allowed" wireTags
-                  -> Get message
-getBareMessageExt = getBareMessageWith loadExtension
-
--- | 'isValidExt' is used by 'extension' to check whether the field
--- number is in one of the ranges declared in the '.proto' file.
-{-# INLINE isValidExt #-}
-isValidExt ::  ExtendMessage a => FieldId -> a -> Bool
-isValidExt fi msg = any (flip inRange fi) (validExtRanges msg)
-
 notExtension :: (ReflectDescriptor a, ExtendMessage a,Typeable a) => FieldId -> WireType -> a -> Get a
-notExtension fieldId wireType msg = throwError ("Field id "++show fieldId++" is not a valid extension field id for "++typeOf (undefined `asTypeOf` msg))
+notExtension fieldId _wireType msg = throwError ("Field id "++show fieldId++" is not a valid extension field id for "++show (typeOf (undefined `asTypeOf` msg)))
 
 -- | get a value from the wire into the message's ExtField. This is
 -- used by 'getMessageExt' and 'getBareMessageExt' above.

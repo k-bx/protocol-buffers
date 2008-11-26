@@ -1,5 +1,5 @@
 module Text.DescriptorProtos.FileOptions.OptimizeMode (OptimizeMode(..)) where
-import Prelude ((+))
+import Prelude ((+), (.))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
  
@@ -25,10 +25,12 @@ instance P'.Enum OptimizeMode where
   fromEnum (SPEED) = 1
   fromEnum (CODE_SIZE) = 2
   toEnum
-   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FileOptions.OptimizeMode") P'..
+   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FileOptions.OptimizeMode") .
       toMaybe'Enum
   succ (SPEED) = CODE_SIZE
+  succ _ = P'.error "hprotoc generated code: succ failure for type Text.DescriptorProtos.FileOptions.OptimizeMode"
   pred (CODE_SIZE) = SPEED
+  pred _ = P'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FileOptions.OptimizeMode"
  
 instance P'.Wire OptimizeMode where
   wireSize ft' enum = P'.wireSize ft' (P'.fromEnum enum)
