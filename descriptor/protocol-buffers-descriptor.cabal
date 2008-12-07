@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        1.2.1
+version:        1.2.2
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -48,7 +48,7 @@ Library
                    Text.DescriptorProtos.UninterpretedOption
                    Text.DescriptorProtos.UninterpretedOption.NamePart
 
-  build-depends:   protocol-buffers == 1.2.1,
+  build-depends:   protocol-buffers == 1.2.2,
                    containers,
                    bytestring
 

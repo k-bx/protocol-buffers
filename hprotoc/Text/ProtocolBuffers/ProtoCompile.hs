@@ -5,7 +5,7 @@ import Control.Monad(when)
 import qualified Data.ByteString.Lazy.Char8 as LC (writeFile)
 import Data.List(break)
 import qualified Data.Sequence as Seq (fromList,singleton)
-import Data.Version(Version(..),showVersion)
+import Data.Version(showVersion)
 import Language.Haskell.Pretty(prettyPrintStyleMode,Style(..),Mode(..),PPHsMode(..),PPLayout(..))
 import System.Console.GetOpt(OptDescr(Option),ArgDescr(NoArg,ReqArg)
                             ,usageInfo,getOpt,ArgOrder(ReturnInOrder))
@@ -29,11 +29,8 @@ import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,makeNameMaps,getTLS
                                                 ,LocalFP(..),CanonFP(..),TopLevel(..))
 import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 
--- | Version of protocol-buffers.
--- The version tags that I have used are ["unreleased"]
-version :: Version
-version = Version { versionBranch = [1,2,1]
-                  , versionTags = [] }
+-- The Paths_hprotoc module is produced by cabal
+import Paths_hprotoc(version)
 
 data Options = Options { optPrefix :: [MName String]
                        , optAs :: [(CanonFP,[MName String])]
@@ -83,7 +80,7 @@ data Flag = VersionInfo
 optionList :: [OptDescr OptionAction]
 optionList =
   [ Option ['a'] ["as"] (ReqArg (Mutate . setAs) "FILEPATH=MODULE")
-               "assign prefix module to imported prot file: --as decriptor.proto=Text"
+               "assign prefix module to imported prot file: --as descriptor.proto=Text"
   , Option ['I'] ["proto_path"] (ReqArg (Mutate . setInclude) "DIR")
                "directory from which to search for imported proto files (default is pwd); all DIR searched"
   , Option ['d'] ["haskell_out"] (ReqArg (Mutate . setTarget) "DIR")

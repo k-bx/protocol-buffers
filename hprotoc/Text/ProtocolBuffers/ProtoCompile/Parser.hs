@@ -4,8 +4,8 @@
 -- Since the Lexer should also avoid such errors this should be a
 -- reliably total function of the input.
 --
--- The inernals have been updated to handle Google's protobuf version
--- 2.0.2 formats.
+-- The internals have been updated to handle Google's protobuf version
+-- 2.0.3 formats, including EnumValueOptions.
 module Text.ProtocolBuffers.ProtoCompile.Parser(parseProto) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
@@ -58,11 +58,12 @@ import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.Char(isUpper,toLower)
 import Data.Ix(inRange)
 import Data.Maybe(fromMaybe)
+import Data.Monoid(mconcat)
 import Data.Sequence((|>))
 import qualified Data.Sequence as Seq(fromList)
 --import System.FilePath(takeFileName)
-import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName,anyToken
-                                    ,getInput,setInput,getPosition,setPosition,getState,setState
+import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName,anyToken,many1,lookAhead,try
+                                    ,getInput,setInput,getPosition,setPosition,getState,setState,pzero
                                     ,(<?>),(<|>),token,choice,between,eof,unexpected,skipMany)
 import Text.ParserCombinators.Parsec.Pos(newPos)
 
@@ -73,20 +74,18 @@ default ()
 type P = GenParser Lexed
 
 parseProto :: String -> ByteString -> Either ParseError D.FileDescriptorProto
-parseProto filename file = do
-  let lexed = alexScanTokens file
-      ipos = case lexed of
-               [] -> setPosition (newPos filename 0 0)
-               (l:_) -> setPosition (newPos filename (getLinePos l) 0)
-  runParser (ipos >> parser) (initState filename) filename lexed
+parseProto filename fileContents = do
+  let initial_line_number = case lexed of
+                              [] -> setPosition (newPos filename 0 0)
+                              (l:_) -> setPosition (newPos filename (getLinePos l) 0)
+      initState = defaultValue {D.FileDescriptorProto.name=utf8FromString filename}
+      lexed = alexScanTokens fileContents
+  runParser (initial_line_number >> parser) initState filename lexed
 
 utf8FromString :: String -> Maybe Utf8
 utf8FromString = Just . Utf8 . U.fromString
 utf8ToString :: Utf8 -> String
 utf8ToString = U.toString . utf8
-
-initState :: String -> D.FileDescriptorProto
-initState filename = defaultValue {D.FileDescriptorProto.name=utf8FromString filename}
 
 {-# INLINE mayRead #-}
 mayRead :: ReadS a -> String -> Maybe a
@@ -112,16 +111,26 @@ pName :: ByteString -> P s Utf8
 pName name = tok (\l-> case l of L_Name _ x -> if (x==name) then return (Utf8 x) else Nothing
                                  _ -> Nothing) <?> ("name "++show (U.toString name))
 
+rawStrMany :: P s (ByteString,ByteString) -- used for any and all access to L_String
+rawStrMany = fmap mconcat (many1 singleStringLit)
+  where singleStringLit :: P s (ByteString,ByteString)
+        singleStringLit = tok (\l-> case l of L_String _ raw x -> return (raw,x)
+                                              _ -> Nothing) <?> "expected string literal in single or double quotes"
 
-bsLit :: P s (ByteString,ByteString)
-bsLit = tok (\l-> case l of L_String _ raw x -> return (raw,x)
-                            _ -> Nothing) <?> "quoted bytes literal"
+getNextToken :: P s Lexed -- used in storing value for UninterpretedOption
+getNextToken = do
+  l <- lookAhead anyToken
+  case l of
+    L_String line _ _ -> rawStrMany >>= \(raw,bs) -> return (L_String line raw bs)
+    _ -> anyToken
+
+bsLit :: P s ByteString
+bsLit = fmap fst rawStrMany <?> "quoted bytes literal, raw form"
 
 strLit :: P s Utf8
-strLit = tok (\l-> case l of L_String _ _ x -> case isValidUTF8 x of
-                                                 Nothing -> return (Utf8 x)
-                                                 Just n -> fail $ "bad utf-8 byte in string literal position # "++show n
-                             _ -> fail "quoted string literal (UTF-8)")
+strLit = fmap snd rawStrMany >>= \ x -> case isValidUTF8 x of
+                                          Nothing -> return (Utf8 x)
+                                          Just n -> fail $ "bad utf-8 byte in string literal position # "++show n
 
 intLit,fieldInt,enumInt :: (Num a) => P s a
 intLit = tok (\l-> case l of L_Integer _ x -> return (fromInteger x)
@@ -164,16 +173,20 @@ enumLit = do
     Nothing -> let self = enumName (reflectEnumInfo (undefined :: a))
                in unexpected $ "Enum value not recognized: "++show s++", wanted enum value of type "++show self
 
+-- -------------------------------------------------------------------
 -- subParser changes the user state. It is a bit of a hack and is used
--- to define an interesting style of parsing below.
-subParser :: Show t => GenParser t sSub a -> sSub -> GenParser t s sSub
+-- to define an interesting style of parsing.
+subParser :: forall t sSub a s. Show t => GenParser t sSub a -> sSub -> GenParser t s sSub
 subParser doSub inSub = do
   in1 <- getInput
   pos1 <- getPosition
   let out = runParser (setPosition pos1 >> doSub >> getStatus) inSub (sourceName pos1) in1
   case out of
     Left pe -> do
-      context <- replicateM 10 anyToken
+      let anyTok :: Int -> GenParser t s [t]
+          anyTok i | i<=0 = return []
+                   | otherwise = try (liftM2 (:) anyToken (anyTok (pred i))) <|> (return [])
+      context <- anyTok 10
       fail ( unlines [ "The error message from the nested subParser was:\n"++indent (show pe) 
                      , "  The next 10 tokens were "++show context ] )
     Right (outSub,in2,pos2) -> setInput in2 >> setPosition pos2 >> return outSub
@@ -239,7 +252,7 @@ pOptionWith :: P s t -> P s (Either D.UninterpretedOption String, t)
 pOptionWith = liftM2 (,) (pName (U.fromString "option") >> pOptionE)
 
 pUnValue :: D.UninterpretedOption -> P s D.UninterpretedOption
-pUnValue uno = tok storeLexed where
+pUnValue uno = getNextToken >>= storeLexed where
   storeLexed (L_Name _ bs) = return $ uno {D.UninterpretedOption.identifier_value = Just (Utf8 bs)}
   storeLexed (L_Integer _ i) | i >= 0 =
     return $ uno { D.UninterpretedOption.positive_int_value = Just (fromInteger i) }
@@ -247,7 +260,7 @@ pUnValue uno = tok storeLexed where
     return $ uno { D.UninterpretedOption.negative_int_value = Just (fromInteger i) }
   storeLexed (L_Double _ d) = return $ uno {D.UninterpretedOption.double_value = Just d }
   storeLexed (L_String _ _raw bs) = return $ uno {D.UninterpretedOption.string_value = Just bs }
-  storeLexed _ = Nothing
+  storeLexed _ = pzero
 
 makeUninterpetedOption :: [(Utf8,Bool)] -> D.UninterpretedOption
 makeUninterpetedOption nameParts = defaultValue { D.UninterpretedOption.name = Seq.fromList . map makeNamePart $ nameParts }
@@ -363,10 +376,8 @@ constant (Just t) =
                             (fail $ "default floating point literal "++show d++" is out of range for type "++show t)
                        return' (U.fromString . show $ d)
     TYPE_BOOL    -> boolLit >>= \b -> return' $ if b then true else false
-    TYPE_STRING  -> bsLit >>= \(_raw,s) -> case isValidUTF8 s of
-                                             Nothing -> (return s)
-                                             Just errPos -> fail $ "default string literal is invalid UTF-8 at byte # "++show errPos
-    TYPE_BYTES   -> bsLit >>= \(raw,_s) -> return raw
+    TYPE_STRING  -> strLit >>= return . utf8
+    TYPE_BYTES   -> bsLit
     TYPE_GROUP   -> unexpected $ "cannot have a default for field of "++show t
     TYPE_MESSAGE -> unexpected $ "cannot have a default for field of "++show t
     TYPE_ENUM    -> fmap utf8 ident1 -- IMPOSSIBLE : SHOULD HAVE HAD Maybe Type PARAMETER match Nothing
@@ -425,13 +436,13 @@ enumVal = do
   number <- pChar '=' >> enumInt
   let v1 = defaultValue { D.EnumValueDescriptorProto.name = Just name
                         , D.EnumValueDescriptorProto.number = Just number }
-  v <- (eol >> return v1) <|> subParser (pChar '{' >> subEnumValue) v1
+  v <- (eol >> return v1) <|> subParser (pChar '[' >> subEnumValue) v1
   update' (\s -> s {D.EnumDescriptorProto.value=D.EnumDescriptorProto.value s |> v})
 
 subEnumValue,enumValueOption :: P D.EnumValueDescriptorProto ()
-subEnumValue = pChar '}' <|> (choice [ eol, enumValueOption ] >> subEnumValue)
+subEnumValue = enumValueOption >> ( (pChar ']' >> eol) <|> (pChar ',' >> subEnumValue) )
 
-enumValueOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
+enumValueOption = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where
   getOld = fmap (fromMaybe mergeEmpty . D.EnumValueDescriptorProto.options) getState
   setNew p = update' (\s -> s {D.EnumValueDescriptorProto.options=Just p})
   setOption (Left uno,old) =
@@ -494,13 +505,16 @@ rpcOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
 cEncode :: [Word8] -> [Char]
 cEncode = concatMap one where
   one :: Word8 -> [Char]
-  one x | (32 <= x) && (x < 127) = [toEnum .  fromEnum $  x]  -- main case of unescaped value
+  -- special non-octal escaped values
   one 9 = sl  't'
   one 10 = sl 'n'
   one 13 = sl 'r'
   one 34 = sl '"'
   one 39 = sl '\''
   one 92 = sl '\\'
+  -- main case of unescaped value
+  one x | (32 <= x) && (x < 127) = [toEnum .  fromEnum $  x]
+  -- below are the octal escaped values.  This always emits 3 digits.
   one 0 = '\\':"000"
   one x | x < 8 = '\\':'0':'0':(showOct x "")
         | x < 64 = '\\':'0':(showOct x "")
