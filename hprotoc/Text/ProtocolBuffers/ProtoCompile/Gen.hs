@@ -19,12 +19,15 @@ import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),DescriptorInfo(..),ProtoInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..))
 
+import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(RecResult(..),KeyT,pnKey,pnfKey)
+
 import qualified Data.ByteString.Lazy.Char8 as LC(unpack)
 import qualified Data.Foldable as F(foldr,toList)
 import Data.List(sortBy,foldl',foldl1',sort)
 import Data.Function(on)
-import Language.Haskell.Pretty(prettyPrint)
-import Language.Haskell.Syntax
+import Language.Haskell.Exts.Pretty(prettyPrint)
+import Language.Haskell.Exts.Syntax hiding (Int,String)
+import Language.Haskell.Exts.Syntax as Hse
 import qualified Data.Map as M
 import qualified Data.Sequence as Seq(null,length)
 import qualified Data.Set as S
@@ -35,62 +38,65 @@ default (Int)
 
 -- -- -- -- Helper functions
 
-noWhere :: [HsDecl]
-noWhere = [] -- YYY noWhere = (HsBDecls [])
+noWhere :: Binds
+noWhere = BDecls []
 
-($$) :: HsExp -> HsExp -> HsExp
-($$) = HsApp
+($$) :: Exp -> Exp -> Exp
+($$) = App
 
 infixl 1 $$
 
 src :: SrcLoc
 src = SrcLoc "No SrcLoc" 0 0
 
-litStr :: String -> HsExp
-litStr = HsLit . HsString
+litStr :: String -> Exp
+litStr = Lit . Hse.String
 
-litIntP :: Integral x => x -> HsPat
-litIntP x | x<0 = HsPParen $ HsPLit (HsInt (toInteger x))
-          | otherwise = HsPLit (HsInt (toInteger x))
+litIntP :: Integral x => x -> Pat
+litIntP x | x<0 = PParen $ PLit (Hse.Int (toInteger x))
+          | otherwise = PLit (Hse.Int (toInteger x))
 
-litInt :: Integral x => x -> HsExp
-litInt x | x<0 = HsParen $ HsLit (HsInt (toInteger x))
-         | otherwise = HsLit (HsInt (toInteger x))
+litInt :: Integral x => x -> Exp
+litInt x | x<0 = Paren $ Lit (Hse.Int (toInteger x))
+         | otherwise = Lit (Hse.Int (toInteger x))
 
-typeApp :: String -> HsType -> HsType
-typeApp s =  HsTyApp (HsTyCon (private s))
+typeApp :: String -> Type -> Type
+typeApp s =  TyApp (TyCon (private s))
 
-private :: String -> HsQName
-private t = Qual (Module "P'") (HsIdent t)
+private :: String -> QName
+private t = Qual (ModuleName "P'") (Ident t)
 
-local :: String -> HsQName
-local t = UnQual (HsIdent t)
+local :: String -> QName
+local t = UnQual (Ident t)
 
-pvar :: String -> HsExp
-pvar t = HsVar (private t)
+pvar :: String -> Exp
+pvar t = Var (private t)
 
-pcon :: String -> HsExp
-pcon t = HsCon (private t)
+pcon :: String -> Exp
+pcon t = Con (private t)
 
-lvar :: String -> HsExp
-lvar t = HsVar (local t)
+lvar :: String -> Exp
+lvar t = Var (local t)
 
-lcon :: String -> HsExp
-lcon t = HsCon (local t)
+lcon :: String -> Exp
+lcon t = Con (local t)
 
-var :: String -> HsPat
-var t = HsPVar (HsIdent t)
+patvar :: String -> Pat
+patvar t = PVar (Ident t)
 
-match :: String -> [HsPat] -> HsExp -> HsMatch
-match s p r = HsMatch src (HsIdent s) p (HsUnGuardedRhs r) noWhere
+match :: String -> [Pat] -> Exp -> Match
+match s p r = Match src (Ident s) p (UnGuardedRhs r) noWhere
 
-inst :: String -> [HsPat] -> HsExp -> HsDecl
-inst s p r  = HsFunBind [match s p r]
+inst :: String -> [Pat] -> Exp -> InstDecl
+inst s p r  = InsDecl $ FunBind [match s p r]
 
-mkOp :: String -> HsExp -> HsExp -> HsExp
-mkOp s a b = HsInfixApp a (HsQVarOp (UnQual (HsSymbol s))) b
+defun :: String -> [Pat] -> Exp -> Decl
+defun s p r  = FunBind [match s p r]
 
-compose :: HsExp -> HsExp -> HsExp
+mkOp :: String -> Exp -> Exp -> Exp
+mkOp s a b = InfixApp a (QVarOp (UnQual (Symbol s))) b
+
+compose :: Exp -> Exp -> Exp
 compose = mkOp "."
 
 fqMod :: ProtoName -> String
@@ -100,23 +106,26 @@ joinMod :: [MName String] -> String
 joinMod [] = ""
 joinMod ms = fmName $ foldr1 dotFM . map promoteFM $ ms
 
-baseIdent :: ProtoName -> HsName
-baseIdent = HsIdent . mName . baseName
-baseIdent' :: ProtoFName -> HsName
-baseIdent' = HsIdent . fName . baseName'
+baseIdent :: ProtoName -> Name
+baseIdent = Ident . mName . baseName
+baseIdent' :: ProtoFName -> Name
+baseIdent' = Ident . fName . baseName'
 
-qualName :: ProtoName -> HsQName
+qualName :: ProtoName -> QName
 qualName p@(ProtoName _ _prefix [] _base) = UnQual (baseIdent p)
-qualName p@(ProtoName _ _prefix (parents) _base) = Qual (Module (joinMod parents)) (baseIdent p)
+qualName p@(ProtoName _ _prefix (parents) _base) = Qual (ModuleName (joinMod parents)) (baseIdent p)
 
-qualFName :: ProtoFName -> HsQName
+qualFName :: ProtoFName -> QName
 qualFName p@(ProtoFName _ _prefix [] _base) = UnQual (baseIdent' p)
-qualFName p@(ProtoFName _ _prefix parents _base) = Qual (Module (joinMod parents)) (baseIdent' p)
+qualFName p@(ProtoFName _ _prefix parents _base) = Qual (ModuleName (joinMod parents)) (baseIdent' p)
 
-unqualName :: ProtoName -> HsQName
-unqualName p@(ProtoName _ _prefix _parent _base) = UnQual (baseIdent p)
+unqualName :: ProtoName -> QName
+unqualName p = UnQual (baseIdent p)
 
-mayQualName :: ProtoName -> ProtoFName -> HsQName
+unqualFName :: ProtoFName -> QName
+unqualFName p = UnQual (baseIdent' p)
+
+mayQualName :: ProtoName -> ProtoFName -> QName
 mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix parents _base) =
   if joinMod (c'prefix++c'parents++[c'base]) == joinMod (prefix++parents)
     then UnQual (baseIdent' name) -- name is local, make UnQual
@@ -125,14 +134,14 @@ mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix pa
 --------------------------------------------
 -- EnumDescriptorProto module creation
 --------------------------------------------
-enumModule :: EnumInfo -> HsModule
+enumModule :: EnumInfo -> Module
 enumModule ei
     = let protoName = enumName ei
-      in HsModule src (Module (fqMod protoName))
-           (Just [HsEThingAll (UnQual (baseIdent protoName))])
+      in Module src (ModuleName (fqMod protoName)) [] Nothing
+           (Just [EThingAll (unqualName protoName)])
            (standardImports True False) (enumDecls ei)
 
-enumDecls :: EnumInfo -> [HsDecl]
+enumDecls :: EnumInfo -> [Decl]
 enumDecls ei =  map ($ ei) [ enumX
                            , instanceMergeableEnum
                            , instanceBounded
@@ -145,18 +154,19 @@ enumDecls ei =  map ($ ei) [ enumX
                            , instanceReflectEnum
                            ]
 
-enumX :: EnumInfo -> HsDecl
-enumX ei = HsDataDecl src [] (baseIdent (enumName ei)) [] (map enumValueX (enumValues ei)) derivesEnum
-  where enumValueX (_,name) = HsConDecl src (HsIdent name) []
+enumX :: EnumInfo -> Decl
+enumX ei = DataDecl src DataType [] (baseIdent (enumName ei)) [] (map enumValueX (enumValues ei)) derivesEnum
+--  where enumValueX (_,name) = ConDecl src (HsIdent name) []
+  where enumValueX (_,name) = QualConDecl src [] [] (ConDecl (Ident name) [])
 
-instanceMergeableEnum :: EnumInfo -> HsDecl
+instanceMergeableEnum :: EnumInfo -> Decl
 instanceMergeableEnum ei 
-  = HsInstDecl src [] (private "Mergeable") [HsTyCon (unqualName (enumName ei))] []
+  = InstDecl src [] (private "Mergeable") [TyCon (unqualName (enumName ei))] []
 
-instanceBounded :: EnumInfo -> HsDecl
+instanceBounded :: EnumInfo -> Decl
 instanceBounded ei
-    = HsInstDecl src [] (private "Bounded") [HsTyCon (unqualName (enumName ei))] 
-        [set "minBound" (head values),set "maxBound" (last values)] -- values cannot be null in a well formed enum
+    = InstDecl src [] (private "Bounded") [TyCon (unqualName (enumName ei))] 
+         [set "minBound" (head values),set "maxBound" (last values)] -- values cannot be null in a well formed enum
   where values = enumValues ei
         set f (_,n) = inst f [] (lcon n)
 
@@ -168,77 +178,77 @@ instanceBounded ei
   // This never returns NULL.
 
 -}
-instanceDefaultEnum :: EnumInfo -> HsDecl
+instanceDefaultEnum :: EnumInfo -> Decl
 instanceDefaultEnum ei
-    = HsInstDecl src [] (private "Default") [HsTyCon (unqualName (enumName ei))]
+    = InstDecl src [] (private "Default") [TyCon (unqualName (enumName ei))]
       [ inst "defaultValue" [] firstValue ]
-  where firstValue :: HsExp
+  where firstValue :: Exp
         firstValue = case enumValues ei of
                        (:) (_,n) _ -> lcon n
                        [] -> error $ "Impossible? EnumDescriptorProto had empty sequence of EnumValueDescriptorProto.\n" ++ show ei
 
-declToEnum :: EnumInfo -> [HsDecl]
-declToEnum ei = [ HsTypeSig src [HsIdent "toMaybe'Enum"]
-                    (HsQualType [] (HsTyFun (HsTyCon (private "Int"))
-                                            (typeApp "Maybe" (HsTyCon (unqualName (enumName ei))))))
-                , HsFunBind (map toEnum'one values ++ [final]) ]
+declToEnum :: EnumInfo -> [Decl]
+declToEnum ei = [ TypeSig src [Ident "toMaybe'Enum"]
+                    (TyFun (TyCon (private "Int"))
+                           (typeApp "Maybe" (TyCon (unqualName (enumName ei)))))
+                , FunBind (map toEnum'one values ++ [final]) ]
   where values = enumValues ei
         toEnum'one (v,n) = match "toMaybe'Enum" [litIntP (getEnumCode v)] (pcon "Just" $$ lcon n)
-        final = match "toMaybe'Enum" [HsPWildCard] (pcon "Nothing")
+        final = match "toMaybe'Enum" [PWildCard] (pcon "Nothing")
 
-instanceEnum :: EnumInfo -> HsDecl
+instanceEnum :: EnumInfo -> Decl
 instanceEnum ei
-    = HsInstDecl src [] (private "Enum") [HsTyCon (unqualName (enumName ei))]
-        (map HsFunBind [fromEnum',toEnum',succ',pred'])
+    = InstDecl src [] (private "Enum") [TyCon (unqualName (enumName ei))]
+        (map (InsDecl . FunBind) [fromEnum',toEnum',succ',pred'])
   where values = enumValues ei
         fromEnum' = map fromEnum'one values
-        fromEnum'one (v,n) = match "fromEnum" [HsPApp (local n) []] (litInt (getEnumCode v))
+        fromEnum'one (v,n) = match "fromEnum" [PApp (local n) []] (litInt (getEnumCode v))
         toEnum' = [ match "toEnum" [] (compose mayErr (lvar "toMaybe'Enum")) ]
-        mayErr = pvar "fromMaybe" $$ (HsParen (pvar "error" $$  (litStr $ 
+        mayErr = pvar "fromMaybe" $$ (Paren (pvar "error" $$  (litStr $ 
                    "hprotoc generated code: toEnum failure for type "++ fqMod (enumName ei))))
         succ' = zipWith (equate "succ") values (tail values) ++
-                [ match "succ" [HsPWildCard] (pvar "error" $$  (litStr $ 
+                [ match "succ" [PWildCard] (pvar "error" $$  (litStr $ 
                    "hprotoc generated code: succ failure for type "++ fqMod (enumName ei))) ]
         pred' = zipWith (equate "pred") (tail values) values ++
-                [ match "pred" [HsPWildCard] (pvar "error" $$  (litStr $ 
+                [ match "pred" [PWildCard] (pvar "error" $$  (litStr $ 
                    "hprotoc generated code: pred failure for type "++ fqMod (enumName ei))) ]
-        equate f (_,n1) (_,n2) = match f [HsPApp (local n1) []] (lcon n2)
+        equate f (_,n1) (_,n2) = match f [PApp (local n1) []] (lcon n2)
 
 -- fromEnum TYPE_ENUM == 14 :: Int
-instanceWireEnum :: EnumInfo -> HsDecl
+instanceWireEnum :: EnumInfo -> Decl
 instanceWireEnum ei
-    = HsInstDecl src [] (private "Wire") [HsTyCon (unqualName (enumName ei))]
+    = InstDecl src [] (private "Wire") [TyCon (unqualName (enumName ei))]
         [ withName "wireSize", withName "wirePut", withGet, withGetErr ]
-  where withName foo = inst foo [var "ft'",var "enum"] rhs
+  where withName foo = inst foo [patvar "ft'",patvar "enum"] rhs
           where rhs = pvar foo $$ lvar "ft'" $$
-                        (HsParen $ pvar "fromEnum" $$ lvar "enum")
+                        (Paren $ pvar "fromEnum" $$ lvar "enum")
         withGet = inst "wireGet" [litIntP 14] rhs
           where rhs = pvar "wireGetEnum" $$ lvar "toMaybe'Enum"
-        withGetErr = inst "wireGet" [var "ft'"] rhs
+        withGetErr = inst "wireGet" [patvar "ft'"] rhs
           where rhs = pvar "wireGetErr" $$ lvar "ft'"
 
-instanceGPB :: ProtoName -> HsDecl
+instanceGPB :: ProtoName -> Decl
 instanceGPB protoName
-    = HsInstDecl src [] (private "GPB") [HsTyCon (unqualName protoName)] []
+    = InstDecl src [] (private "GPB") [TyCon (unqualName protoName)] []
 
-instanceReflectEnum :: EnumInfo -> HsDecl
+instanceReflectEnum :: EnumInfo -> Decl
 instanceReflectEnum ei
-    = HsInstDecl src [] (private "ReflectEnum") [HsTyCon (unqualName (enumName ei))]
+    = InstDecl src [] (private "ReflectEnum") [TyCon (unqualName (enumName ei))]
         [ inst "reflectEnum" [] ascList
-        , inst "reflectEnumInfo" [ HsPWildCard ] ei' ]
+        , inst "reflectEnumInfo" [ PWildCard ] ei' ]
   where (ProtoName xxx a b c) = enumName ei
-        xxx'Exp = HsParen $ pvar "pack" $$ litStr (LC.unpack (utf8 (fiName xxx)))
+        xxx'Exp = Paren $ pvar "pack" $$ litStr (LC.unpack (utf8 (fiName xxx)))
         values = enumValues ei
-        ascList,ei',protoNameExp :: HsExp
-        ascList = HsList (map one values)
-          where one (v,ns) = HsTuple [litInt (getEnumCode v),litStr ns,lcon ns]
-        ei' = foldl' HsApp (pcon "EnumInfo") [protoNameExp
-                                             ,HsList $ map litStr (enumFilePath ei)
-                                             ,HsList (map two values)]
-          where two (v,ns) = HsTuple [litInt (getEnumCode v),litStr ns]
-        protoNameExp = HsParen $ foldl' HsApp (pvar "makePNF")
+        ascList,ei',protoNameExp :: Exp
+        ascList = List (map one values)
+          where one (v,ns) = Tuple [litInt (getEnumCode v),litStr ns,lcon ns]
+        ei' = foldl' App (pcon "EnumInfo") [protoNameExp
+                                             ,List $ map litStr (enumFilePath ei)
+                                             ,List (map two values)]
+          where two (v,ns) = Tuple [litInt (getEnumCode v),litStr ns]
+        protoNameExp = Paren $ foldl' App (pvar "makePNF")
                                         [ xxx'Exp, mList a, mList b, litStr (mName c) ]
-          where mList = HsList . map (litStr . mName)
+          where mList = List . map (litStr . mName)
 
 hasExt :: DescriptorInfo -> Bool
 hasExt di = not (null (extRanges di))
@@ -247,23 +257,24 @@ hasExt di = not (null (extRanges di))
 -- FileDescriptorProto module creation
 --------------------------------------------
 
-protoModule :: ProtoInfo -> ByteString -> HsModule
-protoModule pri@(ProtoInfo protoName _ _ keyInfos _ _ _) fdpBS
-  = let exportKeys = map (HsEVar . UnQual . baseIdent' . fieldName . snd) (F.toList keyInfos)
-        exportNames = map (HsEVar . UnQual . HsIdent) ["protoInfo","fileDescriptorProto"]
+protoModule :: RecResult -> ProtoInfo -> ByteString -> Module -- XXX rec
+protoModule rec pri@(ProtoInfo protoName _ _ keyInfos _ _ _) fdpBS
+  = let exportKeys = map (EVar . unqualFName . fieldName . snd) (F.toList keyInfos)
+        exportNames = map (EVar . UnQual . Ident) ["protoInfo","fileDescriptorProto"]
         imports = protoImports ++ map formatImport (protoImport pri)
-    in HsModule src (Module (fqMod protoName)) (Just (exportKeys++exportNames)) imports (keysX protoName keyInfos ++ embed'ProtoInfo pri ++ embed'fdpBS fdpBS)
+    in Module src (ModuleName (fqMod protoName)) [] Nothing (Just (exportKeys++exportNames))
+              imports (keysX protoName keyInfos ++ embed'ProtoInfo pri ++ embed'fdpBS fdpBS)
   where protoImports = standardImports False (not . Seq.null . extensionKeys $ pri) ++
-                       [ HsImportDecl src (Module "Text.DescriptorProtos.FileDescriptorProto") False Nothing
-                           (Just (False,[HsIAbs (HsIdent "FileDescriptorProto")]))
-                       , HsImportDecl src (Module "Text.ProtocolBuffers.Reflections") False Nothing
-                           (Just (False,[HsIAbs (HsIdent "ProtoInfo")]))
-                       , HsImportDecl src (Module "Text.ProtocolBuffers.WireMessage") True (Just (Module "P'"))
-                           (Just (False,[HsIVar (HsIdent "wireGet,getFromBS")]))
+                       [ ImportDecl src (ModuleName "Text.DescriptorProtos.FileDescriptorProto") False False Nothing
+                           (Just (False,[IAbs (Ident "FileDescriptorProto")]))
+                       , ImportDecl src (ModuleName "Text.ProtocolBuffers.Reflections") False False Nothing
+                           (Just (False,[IAbs (Ident "ProtoInfo")]))
+                       , ImportDecl src (ModuleName "Text.ProtocolBuffers.WireMessage") True False (Just (ModuleName "P'"))
+                           (Just (False,[IVar (Ident "wireGet,getFromBS")]))
                        ]
-        formatImport ((a,b),s) = HsImportDecl src (Module a) True asM (Just (False,map (HsIAbs . HsIdent) (S.toList s)))
+        formatImport ((a,b),s) = ImportDecl src (ModuleName a) True False asM (Just (False,map (IAbs . Ident) (S.toList s)))
           where asM | a==b = Nothing
-                    | otherwise = Just (Module b)
+                    | otherwise = Just (ModuleName b)
 
 protoImport :: ProtoInfo -> [((String,String),S.Set String)]
 protoImport protoInfo
@@ -275,43 +286,87 @@ protoImport protoInfo
         keyNames = F.foldr (\(e,fi) rest -> e : addName fi rest) [] (extensionKeys protoInfo)
         addName fi rest = maybe rest (:rest) (typeName fi)
 
-embed'ProtoInfo :: ProtoInfo -> [HsDecl]
+embed'ProtoInfo :: ProtoInfo -> [Decl]
 embed'ProtoInfo pri = [ myType, myValue ]
-  where myType = HsTypeSig src [ HsIdent "protoInfo" ] (HsQualType [] (HsTyCon (local "ProtoInfo")))
-        myValue = HsPatBind src (HsPApp (local "protoInfo") []) (HsUnGuardedRhs $
+  where myType = TypeSig src [ Ident "protoInfo" ] (TyCon (local "ProtoInfo"))
+        myValue = PatBind src (PApp (local "protoInfo") []) (UnGuardedRhs $
                     pvar "read" $$ litStr (show pri)) noWhere
 
-embed'fdpBS :: ByteString -> [HsDecl]
+embed'fdpBS :: ByteString -> [Decl]
 embed'fdpBS bs = [ myType, myValue ]
-  where myType = HsTypeSig src [ HsIdent "fileDescriptorProto" ] (HsQualType [] (HsTyCon (local "FileDescriptorProto")))
-        myValue = HsPatBind src (HsPApp (local "fileDescriptorProto") []) (HsUnGuardedRhs $
+  where myType = TypeSig src [ Ident "fileDescriptorProto" ] (TyCon (local "FileDescriptorProto"))
+        myValue = PatBind src (PApp (local "fileDescriptorProto") []) (UnGuardedRhs $
                     pvar "getFromBS" $$
-                      HsParen (pvar "wireGet" $$ litInt 11) $$ 
-                      HsParen (pvar "pack" $$ litStr (LC.unpack bs))) noWhere
+                      Paren (pvar "wireGet" $$ litInt 11) $$ 
+                      Paren (pvar "pack" $$ litStr (LC.unpack bs))) noWhere
 
 --------------------------------------------
 -- DescriptorProto module creation
 --------------------------------------------
-descriptorModule :: DescriptorInfo -> HsModule
-descriptorModule di
-    = let protoName = descName di
-          un = UnQual . baseIdent $ protoName
-          imports = standardImports False (hasExt di) ++ map formatImport (toImport di)
-          exportKeys = map (HsEVar . UnQual . baseIdent' . fieldName . snd) (F.toList (keys di))
-          formatImport ((a,b),s) = HsImportDecl src (Module a) True asM (Just (False, map (HsIAbs . HsIdent) (S.toList s)))
-            where asM | a==b = Nothing
-                      | otherwise = Just (Module b)
-      in HsModule src (Module (fqMod protoName))
-           (Just (HsEThingAll un : exportKeys))
-           imports (descriptorX di : (keysX protoName (keys di) ++ instancesDescriptor di))
+descriptorBootModule :: DescriptorInfo -> Module
+descriptorBootModule di
+  = let protoName = descName di
+        un = unqualName protoName
+        classes = ["Show","Eq","Ord","Typeable","Mergeable","Default","Wire","GPB","ReflectDescriptor"]
+                  ++ if hasExt di then ["ExtendMessage"] else []
+                  ++ if storeUnknown di then ["UnknownMessage"] else []
+        instMesAPI = InstDecl src [] (private "MessageAPI")
+                       [TyVar (Ident "msg'"), TyFun (TyVar (Ident "msg'")) (TyCon un),  (TyCon un)] []
+        dataDecl = DataDecl src DataType [] (baseIdent protoName) [] [] []
+        mkInst :: String -> Decl
+        mkInst s = InstDecl src [] (private s) [TyCon un] []
+    in Module src (ModuleName (fqMod protoName)) [] Nothing (Just [EAbs un]) minimalImports
+         (dataDecl : instMesAPI : map mkInst classes)
 
-standardImports :: Bool -> Bool -> [HsImportDecl]
+descriptorKeyModule :: RecResult -> DescriptorInfo -> Module -- XXX rec
+descriptorKeyModule rec di
+  = let protoName = descName di
+        un = unqualName protoName
+        imports = minimalImports ++ map formatImport (toImport di) -- XXX XXX
+        exportKeys = map (EVar . unqualFName . fieldName . snd) (F.toList (keys di))
+        formatImport ((a,b),s) = ImportDecl src (ModuleName a) True False asM
+                                   (Just (False, map (IAbs . Ident) (S.toList s)))
+          where asM | a==b = Nothing
+                    | otherwise = Just (ModuleName b)
+    in Module src (ModuleName (fqMod protoName ++ "'Key")) [] Nothing
+         (Just exportKeys) imports (keysXType protoName (keys di))
+
+minimalImports :: [ImportDecl]
+minimalImports =
+  [ ImportDecl src (ModuleName "Prelude") True False (Just (ModuleName "P'")) Nothing
+  , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False (Just (ModuleName "P'")) Nothing ]
+
+-- Imports needed by 'Key modules
+keyImport :: DescriptorInfo -> [((String,String),S.Set String)]
+keyImport di = M.assocs . M.fromListWith S.union . map withMod $ allNames
+ where protoName = descName di
+       withMod (Left p@(ProtoName _ _prefix modname base)) = ((fqMod p,joinMod modname),S.singleton (mName base))
+       withMod (Right (ProtoFName _ prefix modname base)) = ((joinMod (prefix++modname),joinMod modname),S.singleton (fName base))
+       allNames = F.foldr addName keyNames (fields di)
+       keyNames = F.foldr (\(e,fi) rest -> Left e : addName fi rest) [] (keys di)
+       addName fi rest = maybe rest (:rest) (fmap Left (typeName fi))
+
+descriptorModule :: RecResult -> DescriptorInfo -> Module -- XXX rec
+descriptorModule rec di
+  = let protoName = descName di
+        un = unqualName protoName
+        imports = standardImports False (hasExt di) ++ map formatImport (toImport di)
+        exportKeys = map (EVar . unqualFName . fieldName . snd) (F.toList (keys di))
+        formatImport ((a,b),s) = ImportDecl src (ModuleName a) True False asM
+                                   (Just (False, map (IAbs . Ident) (S.toList s)))
+          where asM | a==b = Nothing
+                    | otherwise = Just (ModuleName b)
+    in Module src (ModuleName (fqMod protoName)) [] Nothing
+         (Just (EThingAll un : exportKeys))
+         imports (descriptorX di : (keysX protoName (keys di) ++ instancesDescriptor di))
+
+standardImports :: Bool -> Bool -> [ImportDecl]
 standardImports en ext =
-  [ HsImportDecl src (Module "Prelude") False Nothing (Just (False,ops))
-  , HsImportDecl src (Module "Prelude") True (Just (Module "P'")) Nothing
-  , HsImportDecl src (Module "Text.ProtocolBuffers.Header") True (Just (Module "P'")) Nothing ]
- where ops | ext = map (HsIVar . HsSymbol) $ base ++ ["==","<=","&&"," || "]
-           | otherwise = map (HsIVar . HsSymbol) base
+  [ ImportDecl src (ModuleName "Prelude") False False Nothing (Just (False,ops))
+  , ImportDecl src (ModuleName "Prelude") True False (Just (ModuleName "P'")) Nothing
+  , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False (Just (ModuleName "P'")) Nothing ]
+ where ops | ext = map (IVar . Symbol) $ base ++ ["==","<=","&&"," || "]
+           | otherwise = map (IVar . Symbol) base
        base | en = ["+","."]
             | otherwise = ["+"]
 
@@ -328,62 +383,82 @@ toImport di
         addName fi rest = maybe rest (:rest) (fmap Left (typeName fi))
         keysKnown = F.foldr (\fi rest -> Right (fieldName fi) : rest) [] (knownKeys di)
 
-keysX :: ProtoName -> Seq KeyInfo -> [HsDecl]
-keysX self i = concatMap (makeKey self) . F.toList $ i
+keysXType :: ProtoName -> Seq KeyInfo -> [Decl]
+keysXType self i = map (makeKeyType self) . F.toList $ i
 
-makeKey :: ProtoName -> KeyInfo -> [HsDecl]
-makeKey self (extendee,f) = [ keyType, keyVal ]
-  where keyType = HsTypeSig src [ baseIdent' . fieldName $ f ] (HsQualType [] (foldl1 HsTyApp . map HsTyCon $
+makeKeyType :: ProtoName -> KeyInfo -> Decl
+makeKeyType self (extendee,f) = keyType
+  where keyType = TypeSig src [ baseIdent' . fieldName $ f ] (foldl1 TyApp . map TyCon $
                     [ private "Key", private labeled
                     , if extendee /= self then qualName extendee else unqualName extendee
-                    , typeQName ]))
+                    , typeQName ])
         labeled | canRepeat f = "Seq"
                 | otherwise = "Maybe"
         typeNumber = getFieldType . typeCode $ f
-        typeQName :: HsQName
+        typeQName :: QName
         typeQName = case useType typeNumber of
                       Just s -> private s
                       Nothing -> case typeName f of
                                    Just s | self /= s -> qualName s
                                           | otherwise -> unqualName s
                                    Nothing -> error $  "No Name for Field!\n" ++ show f
-        keyVal = HsPatBind src (HsPApp (UnQual (baseIdent' . fieldName $ f)) []) (HsUnGuardedRhs
+
+keysX :: ProtoName -> Seq KeyInfo -> [Decl]
+keysX self i = concatMap (makeKey self) . F.toList $ i
+
+makeKey :: ProtoName -> KeyInfo -> [Decl]
+makeKey self (extendee,f) = [ keyType, keyVal ]
+  where keyType = TypeSig src [ baseIdent' . fieldName $ f ] (foldl1 TyApp . map TyCon $
+                    [ private "Key", private labeled
+                    , if extendee /= self then qualName extendee else unqualName extendee
+                    , typeQName ])
+        labeled | canRepeat f = "Seq"
+                | otherwise = "Maybe"
+        typeNumber = getFieldType . typeCode $ f
+        typeQName :: QName
+        typeQName = case useType typeNumber of
+                      Just s -> private s
+                      Nothing -> case typeName f of
+                                   Just s | self /= s -> qualName s
+                                          | otherwise -> unqualName s
+                                   Nothing -> error $  "No Name for Field!\n" ++ show f
+        keyVal = PatBind src (PApp (unqualFName . fieldName $ f) []) (UnGuardedRhs
                    (pvar "Key" $$ litInt (getFieldId (fieldNumber f))
                                $$ litInt typeNumber
                                $$ maybe (pvar "Nothing")
-                                        (HsParen . (pvar "Just" $$) . (defToSyntax (typeCode f)))
+                                        (Paren . (pvar "Just" $$) . (defToSyntax (typeCode f)))
                                         (hsDefault f)
                    )) noWhere
 
-defToSyntax :: FieldType -> HsDefault -> HsExp
+defToSyntax :: FieldType -> HsDefault -> Exp
 defToSyntax tc x =
   case x of
     HsDef'Bool b -> pcon (show b)
-    HsDef'ByteString bs -> (if tc == 9 then (\xx -> HsParen (pvar "Utf8" $$ xx)) else id) $
-                           (HsParen $ pvar "pack" $$ litStr (LC.unpack bs))
-    HsDef'Rational r | r < 0 -> HsParen $ HsLit (HsFrac r)
-                     | otherwise -> HsLit (HsFrac r)
+    HsDef'ByteString bs -> (if tc == 9 then (\xx -> Paren (pvar "Utf8" $$ xx)) else id) $
+                           (Paren $ pvar "pack" $$ litStr (LC.unpack bs))
+    HsDef'Rational r | r < 0 -> Paren $ Lit (Frac r)
+                     | otherwise -> Lit (Frac r)
     HsDef'Integer i -> litInt i 
-    HsDef'Enum s -> HsParen $ pvar "read" $$ litStr s
+    HsDef'Enum s -> Paren $ pvar "read" $$ litStr s
 
-descriptorX :: DescriptorInfo -> HsDecl
-descriptorX di = HsDataDecl src [] name [] [con] derives
+descriptorX :: DescriptorInfo -> Decl
+descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] derives
   where self = descName di
-        name = baseIdent $ self
-        con = HsRecDecl src name eFields
+        name = baseIdent self
+        con = RecDecl name eFields
                 where eFields = F.foldr ((:) . fieldX) end (fields di)
                       end = (if hasExt di then (extfield:) else id) 
                           $ (if storeUnknown di then [unknownField] else [])
-        extfield :: ([HsName],HsBangType)
-        extfield = ([HsIdent "ext'field"],HsUnBangedTy (HsTyCon (Qual (Module "P'") (HsIdent "ExtField"))))
-        unknownField :: ([HsName],HsBangType)
-        unknownField = ([HsIdent "unknown'field"],HsUnBangedTy (HsTyCon (Qual (Module "P'") (HsIdent "UnknownField"))))
-        fieldX :: FieldInfo -> ([HsName],HsBangType)
-        fieldX fi = ([baseIdent' . fieldName $ fi],HsUnBangedTy (labeled (HsTyCon typed)))
+        extfield :: ([Name],BangType)
+        extfield = ([Ident "ext'field"],UnBangedTy (TyCon (private "ExtField")))
+        unknownField :: ([Name],BangType)
+        unknownField = ([Ident "unknown'field"],UnBangedTy (TyCon (private  "UnknownField")))
+        fieldX :: FieldInfo -> ([Name],BangType)
+        fieldX fi = ([baseIdent' . fieldName $ fi],UnBangedTy (labeled (TyCon typed)))
           where labeled | canRepeat fi = typeApp "Seq"
                         | isRequired fi = id
                         | otherwise = typeApp "Maybe"
-                typed :: HsQName
+                typed :: QName
                 typed = case useType (getFieldType (typeCode fi)) of
                           Just s -> private s
                           Nothing -> case typeName fi of
@@ -391,7 +466,7 @@ descriptorX di = HsDataDecl src [] name [] [con] derives
                                               | otherwise -> unqualName s
                                        Nothing -> error $  "No Name for Field!\n" ++ show fi
 
-instancesDescriptor :: DescriptorInfo -> [HsDecl]
+instancesDescriptor :: DescriptorInfo -> [Decl]
 instancesDescriptor di = map ($ di) $
    (if hasExt di then (instanceExtendMessage:) else id) $
    (if storeUnknown di then (instanceUnknownMessage:) else id) $
@@ -403,56 +478,56 @@ instancesDescriptor di = map ($ di) $
    , instanceReflectDescriptor
    ]
 
-instanceExtendMessage :: DescriptorInfo -> HsDecl
+instanceExtendMessage :: DescriptorInfo -> Decl
 instanceExtendMessage di
-    = HsInstDecl src [] (private "ExtendMessage") [HsTyCon (UnQual (baseIdent (descName di)))]
+    = InstDecl src [] (private "ExtendMessage") [TyCon (unqualName (descName di))]
         [ inst "getExtField" [] (lvar "ext'field")
-        , inst "putExtField" [var "e'f", var "msg"] putextfield
-        , inst "validExtRanges" [var "msg"] (pvar "extRanges" $$ (HsParen $ pvar "reflectDescriptorInfo" $$ lvar "msg"))
+        , inst "putExtField" [patvar "e'f", patvar "msg"] putextfield
+        , inst "validExtRanges" [patvar "msg"] (pvar "extRanges" $$ (Paren $ pvar "reflectDescriptorInfo" $$ lvar "msg"))
         ]
-  where putextfield = HsRecUpdate (lvar "msg") [ HsFieldUpdate (local "ext'field") (lvar "e'f") ]
+  where putextfield = RecUpdate (lvar "msg") [ FieldUpdate (local "ext'field") (lvar "e'f") ]
 
-instanceUnknownMessage :: DescriptorInfo -> HsDecl
+instanceUnknownMessage :: DescriptorInfo -> Decl
 instanceUnknownMessage di
-    = HsInstDecl src [] (private "UnknownMessage") [HsTyCon (UnQual (baseIdent (descName di)))]
+    = InstDecl src [] (private "UnknownMessage") [TyCon (unqualName (descName di))]
         [ inst "getUnknownField" [] (lvar "unknown'field")
-        , inst "putUnknownField" [var "u'f",var "msg"] putunknownfield
+        , inst "putUnknownField" [patvar "u'f",patvar "msg"] putunknownfield
         ]
-  where putunknownfield = HsRecUpdate (lvar "msg") [ HsFieldUpdate (local "unknown'field") (lvar "u'f") ]
+  where putunknownfield = RecUpdate (lvar "msg") [ FieldUpdate (local "unknown'field") (lvar "u'f") ]
 
-instanceMergeable :: DescriptorInfo -> HsDecl
+instanceMergeable :: DescriptorInfo -> Decl
 instanceMergeable di
-    = HsInstDecl src [] (private "Mergeable") [HsTyCon un]
-        [ inst "mergeEmpty" [] (foldl' HsApp (HsCon un) (replicate len (pcon "mergeEmpty")))
-        , inst "mergeAppend" [HsPApp un patternVars1, HsPApp un patternVars2]
-                             (foldl' HsApp (HsCon un) (zipWith append vars1 vars2))
+    = InstDecl src [] (private "Mergeable") [TyCon un]
+        [ inst "mergeEmpty" [] (foldl' App (Con un) (replicate len (pcon "mergeEmpty")))
+        , inst "mergeAppend" [PApp un patternVars1, PApp un patternVars2]
+                             (foldl' App (Con un) (zipWith append vars1 vars2))
         ]
-  where un = UnQual (baseIdent (descName di))
+  where un = unqualName (descName di)
         len = (if hasExt di then succ else id)
             $ (if storeUnknown di then succ else id)
             $ Seq.length (fields di)
-        patternVars1,patternVars2 :: [HsPat]
+        patternVars1,patternVars2 :: [Pat]
         patternVars1 = take len inf
-            where inf = map (\n -> var ("x'" ++ show n)) [1..]
+            where inf = map (\n -> patvar ("x'" ++ show n)) [1..]
         patternVars2 = take len inf
-            where inf = map (\n -> var ("y'" ++ show n)) [1..]
-        vars1,vars2 :: [HsExp]
+            where inf = map (\n -> patvar ("y'" ++ show n)) [1..]
+        vars1,vars2 :: [Exp]
         vars1 = take len inf
             where inf = map (\n -> lvar ("x'" ++ show n)) [1..]
         vars2 = take len inf
             where inf = map (\n -> lvar ("y'" ++ show n)) [1..]
-        append x y = HsParen $ pvar "mergeAppend" $$ x $$ y
+        append x y = Paren $ pvar "mergeAppend" $$ x $$ y
 
-instanceDefault :: DescriptorInfo -> HsDecl
+instanceDefault :: DescriptorInfo -> Decl
 instanceDefault di
-    = HsInstDecl src [] (private "Default") [HsTyCon un]
-        [ inst "defaultValue" [] (foldl' HsApp (HsCon un) deflistExt) ]
-  where un = UnQual (baseIdent (descName di))
+    = InstDecl src [] (private "Default") [TyCon un]
+        [ inst "defaultValue" [] (foldl' App (Con un) deflistExt) ]
+  where un = unqualName (descName di)
         deflistExt = F.foldr ((:) . defX) end (fields di)
         end = (if hasExt di then (pvar "defaultValue":) else id) 
             $ (if storeUnknown di then [pvar "defaultValue"] else [])
 
-        defX :: FieldInfo -> HsExp
+        defX :: FieldInfo -> Exp
         defX fi | isRequired fi = dv1
                 | otherwise = dv2
           where dv1 = case hsDefault fi of
@@ -460,16 +535,16 @@ instanceDefault di
                         Just hsdef -> defToSyntax (typeCode fi) hsdef
                 dv2 = case hsDefault fi of
                         Nothing -> pvar "defaultValue"
-                        Just hsdef -> HsParen $ pcon "Just" $$ defToSyntax (typeCode fi) hsdef
+                        Just hsdef -> Paren $ pcon "Just" $$ defToSyntax (typeCode fi) hsdef
 
-instanceMessageAPI :: ProtoName -> HsDecl
+instanceMessageAPI :: ProtoName -> Decl
 instanceMessageAPI protoName
-    = HsInstDecl src [] (private "MessageAPI")
-        [HsTyVar (HsIdent "msg'"), HsTyFun (HsTyVar (HsIdent "msg'")) (HsTyCon un),  (HsTyCon un)]
-        [ inst "getVal" [var "m'",var "f'"] (HsApp (lvar "f'" ) (lvar "m'")) ]
-  where un = UnQual (baseIdent protoName)
+    = InstDecl src [] (private "MessageAPI")
+        [TyVar (Ident "msg'"), TyFun (TyVar (Ident "msg'")) (TyCon un),  (TyCon un)]
+        [ inst "getVal" [patvar "m'",patvar "f'"] (App (lvar "f'" ) (lvar "m'")) ]
+  where un = unqualName protoName
 
-instanceWireDescriptor :: DescriptorInfo -> HsDecl
+instanceWireDescriptor :: DescriptorInfo -> Decl
 instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                           , fields = fieldInfos
                                           , extRanges = allowedExts
@@ -479,7 +554,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         len = (if extensible then succ else id) 
             $ (if storeUnknown di then succ else id)
             $ Seq.length fieldInfos
-        mine = HsPApp me . take len . map (\n -> var ("x'" ++ show n)) $ [1..]
+        mine = PApp me . take len . map (\n -> patvar ("x'" ++ show n)) $ [1..]
         vars = take len . map (\n -> lvar ("x'" ++ show n)) $ [1..]
         mExt | extensible = Just (vars !! Seq.length fieldInfos)
              | otherwise = Nothing
@@ -487,17 +562,17 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                  | otherwise = Nothing
 
         -- first case is for Group behavior, second case is for Message behavior, last is error handler
-        cases g m e = HsCase (lvar "ft'") [ HsAlt src (litIntP 10) (HsUnGuardedAlt g) noWhere
-                                          , HsAlt src (litIntP 11) (HsUnGuardedAlt m) noWhere
-                                          , HsAlt src HsPWildCard  (HsUnGuardedAlt e) noWhere
+        cases g m e = Case (lvar "ft'") [ Alt src (litIntP 10) (UnGuardedAlt g) noWhere
+                                          , Alt src (litIntP 11) (UnGuardedAlt m) noWhere
+                                          , Alt src PWildCard  (UnGuardedAlt e) noWhere
                                           ]
 
-        sizeCases = HsUnGuardedRhs $ cases (lvar "calc'Size") 
+        sizeCases = UnGuardedRhs $ cases (lvar "calc'Size") 
                                            (pvar "prependMessageSize" $$ lvar "calc'Size")
                                            (pvar "wireSizeErr" $$ lvar "ft'" $$ lvar "self'")
-        whereCalcSize = [inst "calc'Size" [] sizes]
-        sizes | null sizesList = HsLit (HsInt 0)
-              | otherwise = HsParen (foldl1' (+!) sizesList)
+        whereCalcSize = BDecls [defun "calc'Size" [] sizes]
+        sizes | null sizesList = Lit (Hse.Int 0)
+              | otherwise = Paren (foldl1' (+!) sizesList)
           where (+!) = mkOp "+"
                 sizesList | Just v <- mUnknown = sizesListExt ++ [ pvar "wireSizeUnknownField" $$ v ]
                           | otherwise = sizesListExt
@@ -507,23 +582,23 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         toSize var fi = let f = if isRequired fi then "wireSizeReq"
                                   else if canRepeat fi then "wireSizeRep"
                                       else "wireSizeOpt"
-                        in foldl' HsApp (pvar f) [ litInt (wireTagLength fi)
+                        in foldl' App (pvar f) [ litInt (wireTagLength fi)
                                                  , litInt (getFieldType (typeCode fi))
                                                  , var]
 
-        putCases = HsUnGuardedRhs $ cases
+        putCases = UnGuardedRhs $ cases
           (lvar "put'Fields")
-          (HsDo [ HsQualifier $ pvar "putSize" $$
-                    (HsParen $ foldl' HsApp (pvar "wireSize") [ litInt 10 , lvar "self'" ])
-                , HsQualifier $ lvar "put'Fields" ])
+          (Do [ Qualifier $ pvar "putSize" $$
+                    (Paren $ foldl' App (pvar "wireSize") [ litInt 10 , lvar "self'" ])
+                , Qualifier $ lvar "put'Fields" ])
           (pvar "wirePutErr" $$ lvar "ft'" $$ lvar "self'")
-        wherePutFields = [inst "put'Fields" [] (HsDo putStmts)]
+        wherePutFields = BDecls [defun "put'Fields" [] (Do putStmts)]
         putStmts = putStmtsContent
-          where putStmtsContent | null putStmtsAll = [HsQualifier $ pvar "return" $$ HsCon (Special HsUnitCon)]
+          where putStmtsContent | null putStmtsAll = [Qualifier $ pvar "return" $$ Con (Special UnitCon)]
                                 | otherwise = putStmtsAll
-                putStmtsAll | Just v <- mUnknown = putStmtsListExt ++ [ HsQualifier $ pvar "wirePutUnknownField" $$ v ]
+                putStmtsAll | Just v <- mUnknown = putStmtsListExt ++ [ Qualifier $ pvar "wirePutUnknownField" $$ v ]
                              | otherwise = putStmtsListExt
-                putStmtsListExt | Just v <- mExt = sortedPutStmtsList ++ [ HsQualifier $ pvar "wirePutExtField" $$ v ]
+                putStmtsListExt | Just v <- mExt = sortedPutStmtsList ++ [ Qualifier $ pvar "wirePutExtField" $$ v ]
                                 | otherwise = sortedPutStmtsList
                 sortedPutStmtsList = map snd                                          -- remove number
                                      . sortBy (compare `on` fst)                      -- sort by number
@@ -533,35 +608,35 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         toPut var fi = let f = if isRequired fi then "wirePutReq"
                                  else if canRepeat fi then "wirePutRep"
                                      else "wirePutOpt"
-                       in HsQualifier $
-                          foldl' HsApp (pvar f) [ litInt (getWireTag (wireTag fi))
+                       in Qualifier $
+                          foldl' App (pvar f) [ litInt (getWireTag (wireTag fi))
                                                 , litInt (getFieldType (typeCode fi))
                                                 , var]
 
-        getCases = HsUnGuardedRhs $ cases
+        getCases = UnGuardedRhs $ cases
           (pvar "getBareMessageWith" $$ lvar "check'allowed")
           (pvar "getMessageWith" $$ lvar "check'allowed")
           (pvar "wireGetErr" $$ lvar "ft'")
-        whereDecls = [whereUpdateSelf,whereAllowed,whereCheckAllowed]
-        whereAllowed = inst "allowed'wire'Tags" [] (pvar "fromDistinctAscList" $$ HsList (map litInt allowed))
+        whereDecls = BDecls [whereUpdateSelf,whereAllowed,whereCheckAllowed]
+        whereAllowed = defun "allowed'wire'Tags" [] (pvar "fromDistinctAscList" $$ List (map litInt allowed))
         allowed = sort $ [ getWireTag (wireTag f) | f <- F.toList (fields di)] ++
                          [ getWireTag (wireTag f) | f <- F.toList (knownKeys di)]
         locals = ["wire'Tag","field'Number","wire'Type","old'Self"]
-        whereCheckAllowed = inst "check'allowed" (map var locals) process
+        whereCheckAllowed = defun "check'allowed" (map patvar locals) process
          where process = if storeUnknown di then catchUn updateBranch else updateBranch
-               catchUn s = pvar "catchError" $$ HsParen s
-                 $$ HsParen (HsLambda src [HsPWildCard] (args (pvar "loadUnknown")))
+               catchUn s = pvar "catchError" $$ Paren s
+                 $$ Paren (Lambda src [PWildCard] (args (pvar "loadUnknown")))
                updateBranch | null allowed = extBranch
-                            | otherwise = HsIf (pvar "member" $$ lvar "wire'Tag" $$ lvar "allowed'wire'Tags")
+                            | otherwise = If (pvar "member" $$ lvar "wire'Tag" $$ lvar "allowed'wire'Tags")
                                                (lvar "update'Self" $$ lvar "field'Number" $$ lvar "old'Self")
                                                extBranch
-               extBranch | extensible = HsIf (isAllowedExt (lvar "field'Number"))
+               extBranch | extensible = If (isAllowedExt (lvar "field'Number"))
                                              (args (pvar "loadExtension"))
                                              unknownBranch
                          | otherwise = unknownBranch
                unknownBranch =args (pvar "unknown")
                args x = x $$ lvar "field'Number" $$ lvar "wire'Type" $$ lvar "old'Self"
-        isAllowedExt x = pvar "or" $$ HsList ranges where
+        isAllowedExt x = pvar "or" $$ List ranges where
           (<=!) = mkOp "<="; (&&!) = mkOp "&&"; (==!) = mkOp ("==")
           ranges = map (\(FieldId lo,FieldId hi) -> if hi < maxHi
                                                       then if lo == hi
@@ -569,59 +644,59 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                              else (litInt lo <=! x) &&! (x <=! litInt hi)
                                                       else litInt lo <=! x) allowedExts
              where FieldId maxHi = maxBound
-        whereUpdateSelf = inst "update'Self" [var "field'Number", var "old'Self"]
-                            (HsCase (lvar "field'Number") updateAlts)
+        whereUpdateSelf = defun "update'Self" [patvar "field'Number", patvar "old'Self"]
+                            (Case (lvar "field'Number") updateAlts)
         updateAlts = map toUpdate (F.toList fieldInfos)
                      ++ (if extensible && (not (Seq.null fieldExts)) then map toUpdateExt (F.toList fieldExts) else [])
-                     ++ [HsAlt src HsPWildCard (HsUnGuardedAlt $
+                     ++ [Alt src PWildCard (UnGuardedAlt $
                            pvar "unknownField" $$ (lvar "old'Self") $$ (lvar "field'Number")) noWhere]
-        toUpdateExt fi = HsAlt src (litIntP . getFieldId . fieldNumber $ fi) (HsUnGuardedAlt $
-                           pvar "wireGetKey" $$ HsVar (mayQualName protoName (fieldName fi)) $$ lvar "old'Self") noWhere
-        toUpdate fi = HsAlt src (litIntP . getFieldId . fieldNumber $ fi) (HsUnGuardedAlt $ 
-                        pvar "fmap" $$ (HsParen $ HsLambda src [var "new'Field"] $
-                                          HsRecUpdate (lvar "old'Self")
-                                                      [HsFieldUpdate (UnQual . baseIdent' . fieldName $ fi)
-                                                                     (labelUpdate fi)])
-                                    $$ (HsParen (pvar "wireGet" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
-        labelUpdate fi | canRepeat fi = pvar "append" $$ HsParen ((lvar . fName . baseName' . fieldName $ fi)
+        toUpdateExt fi = Alt src (litIntP . getFieldId . fieldNumber $ fi) (UnGuardedAlt $
+                           pvar "wireGetKey" $$ Var (mayQualName protoName (fieldName fi)) $$ lvar "old'Self") noWhere
+        toUpdate fi = Alt src (litIntP . getFieldId . fieldNumber $ fi) (UnGuardedAlt $ 
+                        pvar "fmap" $$ (Paren $ Lambda src [patvar "new'Field"] $
+                                          RecUpdate (lvar "old'Self")
+                                                    [FieldUpdate (unqualFName . fieldName $ fi)
+                                                                 (labelUpdate fi)])
+                                    $$ (Paren (pvar "wireGet" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
+        labelUpdate fi | canRepeat fi = pvar "append" $$ Paren ((Var . unqualFName . fieldName $ fi)
                                                                   $$ lvar "old'Self")
                                                       $$ lvar "new'Field"
                        | isRequired fi = qMerge (lvar "new'Field")
                        | otherwise = qMerge (pcon "Just" $$ lvar "new'Field")
             where qMerge x | fromIntegral (getFieldType (typeCode fi)) `elem` [10,11] =
-                               pvar "mergeAppend" $$ HsParen ( (lvar . fName . baseName' . fieldName $ fi)
+                               pvar "mergeAppend" $$ Paren ( (Var . unqualFName . fieldName $ fi)
                                                                $$ lvar "old'Self" )
-                                                  $$ HsParen x
+                                                  $$ Paren x
                            | otherwise = x
         -- in the above, the [10,11] check optimizes using the
         -- knowledge that only TYPE_MESSAGE and TYPE_GROUP have merges
         -- that are not right-biased replacements.  The "append" uses
         -- knowledge of how all repeated fields get merged.
-    in HsInstDecl src [] (private "Wire") [HsTyCon me]
-        [ HsFunBind [HsMatch src (HsIdent "wireSize") [var "ft'",HsPAsPat (HsIdent "self'") (HsPParen mine)] sizeCases whereCalcSize]
-        , HsFunBind [HsMatch src (HsIdent "wirePut")  [var "ft'",HsPAsPat (HsIdent "self'") (HsPParen mine)] putCases wherePutFields]
-        , HsFunBind [HsMatch src (HsIdent "wireGet") [var "ft'"] getCases whereDecls]
+    in InstDecl src [] (private "Wire") [TyCon me] . map InsDecl $
+        [ FunBind [Match src (Ident "wireSize") [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] sizeCases whereCalcSize]
+        , FunBind [Match src (Ident "wirePut")  [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] putCases wherePutFields]
+        , FunBind [Match src (Ident "wireGet") [patvar "ft'"] getCases whereDecls]
         ]
 
-instanceReflectDescriptor :: DescriptorInfo -> HsDecl
+instanceReflectDescriptor :: DescriptorInfo -> Decl
 instanceReflectDescriptor di
-    = HsInstDecl src [] (private "ReflectDescriptor") [HsTyCon (UnQual (baseIdent (descName di)))]
-        [ inst "getMessageInfo" [HsPWildCard] gmi
-        , inst "reflectDescriptorInfo" [ HsPWildCard ] rdi ]
+    = InstDecl src [] (private "ReflectDescriptor") [TyCon (unqualName (descName di))]
+        [ inst "getMessageInfo" [PWildCard] gmi
+        , inst "reflectDescriptorInfo" [ PWildCard ] rdi ]
   where -- massive shortcut through show and read
-        rdi :: HsExp
+        rdi :: Exp
         rdi = pvar "read" $$ litStr (show di) -- cheat using show and read
-        gmi,reqId,allId :: HsExp
-        gmi = pcon "GetMessageInfo" $$ HsParen reqId $$ HsParen allId
+        gmi,reqId,allId :: Exp
+        gmi = pcon "GetMessageInfo" $$ Paren reqId $$ Paren allId
         reqId = pvar "fromDistinctAscList" $$
-                HsList (map litInt . sort $ [ getWireTag (wireTag f) | f <- F.toList (fields di), isRequired f])
+                List (map litInt . sort $ [ getWireTag (wireTag f) | f <- F.toList (fields di), isRequired f])
         allId = pvar "fromDistinctAscList" $$
-                HsList (map litInt . sort $ [ getWireTag (wireTag f) | f <- F.toList (fields di)] ++
+                List (map litInt . sort $ [ getWireTag (wireTag f) | f <- F.toList (fields di)] ++
                                             [ getWireTag (wireTag f) | f <- F.toList (knownKeys di)])
 
 ------------------------------------------------------------------
 
-derives,derivesEnum :: [HsQName]
+derives,derivesEnum :: [QName]
 derives = map private ["Show","Eq","Ord","Typeable"]
 derivesEnum = map private ["Read","Show","Eq","Ord","Typeable"]
 

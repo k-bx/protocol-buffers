@@ -6,7 +6,7 @@ import qualified Data.ByteString.Lazy.Char8 as LC (writeFile)
 import Data.List(break)
 import qualified Data.Sequence as Seq (fromList,singleton)
 import Data.Version(showVersion)
-import Language.Haskell.Pretty(prettyPrintStyleMode,Style(..),Mode(..),PPHsMode(..),PPLayout(..))
+import Language.Haskell.Exts.Pretty(prettyPrintStyleMode,Style(..),Mode(..),PPHsMode(..),PPLayout(..))
 import System.Console.GetOpt(OptDescr(Option),ArgDescr(NoArg,ReqArg)
                             ,usageInfo,getOpt,ArgOrder(ReturnInOrder))
 import System.Directory(getCurrentDirectory,createDirectoryIfMissing)
@@ -24,10 +24,11 @@ import qualified Text.DescriptorProtos.FileDescriptorProto as D.FileDescriptorPr
 import qualified Text.DescriptorProtos.FileDescriptorSet   as D(FileDescriptorSet)
 import qualified Text.DescriptorProtos.FileDescriptorSet   as D.FileDescriptorSet(FileDescriptorSet(..))
 
+import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(sccResult,displayResult)
 import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModule,enumModule)
+import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,makeNameMaps,getTLS
                                                 ,LocalFP(..),CanonFP(..),TopLevel(..))
-import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 
 -- The Paths_hprotoc module is produced by cabal
 import Paths_hprotoc(version)
@@ -182,12 +183,14 @@ run options = do
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
   print "Haskell name mangling done"
   let protoInfo = makeProtoInfo (optUnknownFields options) nameMap fdp
+      rec = sccResult protoInfo
+  putStrLn (displayResult rec)
   let produceMSG di = do
         let file = combine (unLocalFP . optTarget $ options) . joinPath . descFilePath $ di
         print file
         when (not (optDryRun options)) $ do
           mkdirFor file
-          writeFile file (prettyPrintStyleMode style myMode (descriptorModule di))
+          writeFile file (prettyPrintStyleMode style myMode (descriptorModule rec di))
       produceENM ei = do
         let file = combine (unLocalFP . optTarget $ options) . joinPath . enumFilePath $ ei
         print file
@@ -196,7 +199,6 @@ run options = do
           writeFile file (prettyPrintStyleMode style myMode (enumModule ei))
   mapM_ produceMSG (messages protoInfo)
   mapM_ produceENM (enums protoInfo)
-
   let file = combine (unLocalFP . optTarget $ options) . joinPath . protoFilePath $ protoInfo
   print file
-  writeFile file (prettyPrintStyleMode style myMode (protoModule protoInfo (serializeFDP fdp)))
+  writeFile file (prettyPrintStyleMode style myMode (protoModule rec protoInfo (serializeFDP fdp)))
