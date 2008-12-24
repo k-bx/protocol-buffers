@@ -13,30 +13,39 @@
 -- The names are also assumed to have become fully-qualified, and all
 -- the optional type codes have been set.
 --
-module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModule,enumModule,prettyPrint) where
+module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,prettyPrint) where
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),DescriptorInfo(..),ProtoInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..))
 
-import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(RecResult(..),KeyT,pnKey,pnfKey)
+import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(Result(..),VertexKind(..),pKey,pfKey,getKind,Part(..))
 
 import qualified Data.ByteString.Lazy.Char8 as LC(unpack)
 import qualified Data.Foldable as F(foldr,toList)
-import Data.List(sortBy,foldl',foldl1',sort)
+import Data.List(sortBy,foldl',foldl1',group,sort,union)
 import Data.Function(on)
 import Language.Haskell.Exts.Pretty(prettyPrint)
 import Language.Haskell.Exts.Syntax hiding (Int,String)
 import Language.Haskell.Exts.Syntax as Hse
 import qualified Data.Map as M
+import Data.Maybe(mapMaybe)
 import qualified Data.Sequence as Seq(null,length)
 import qualified Data.Set as S
+import System.FilePath(joinPath)
 
---import Debug.Trace(trace)
+import Debug.Trace(trace)
+
 
 default (Int)
 
 -- -- -- -- Helper functions
+
+imp :: String -> a
+imp s = error ("Impossible? Text.ProtocolBuffers.ProtoCompile.Gen."++s)
+
+nubSort :: Ord a => [a] -> [a]
+nubSort = map head . group . sort
 
 noWhere :: Binds
 noWhere = BDecls []
@@ -100,7 +109,74 @@ compose :: Exp -> Exp -> Exp
 compose = mkOp "."
 
 fqMod :: ProtoName -> String
-fqMod (ProtoName _ a b c) = fmName $ foldr dotFM (promoteFM c) . map promoteFM $ a++b
+fqMod (ProtoName _ a b c) = joinMod $ a++b++[c]
+
+-- importPN takes the Result to look up the target info it takes the
+-- current MKey (pKey of protoName, no 'Key appended) and Part to
+-- identify the module being created.  The ProtoName is the target
+-- TYPE that is needed.
+importPN :: Result -> ModuleName -> Part -> ProtoName -> Maybe ImportDecl
+importPN r selfMod@(ModuleName self) part pn =
+  let o = pKey pn
+      m1 = ModuleName (joinMod (haskellPrefix pn ++ parentModule pn ++ [baseName pn]))
+      m2 = ModuleName (joinMod (parentModule pn))
+-- ZZZ      fromSource = canSource && S.member (FMName self,o) (rIBoot r)
+      fromSource = S.member (FMName self,part,o) (rIBoot r) -- ZZZ
+      ans = if m1 == selfMod then Nothing
+              else Just $ ImportDecl src m1 True fromSource (Just m2)
+                            (Just (False,[IAbs (Ident (mName (baseName pn)))]))
+  in trace (unlines . map (\ (a,b) -> a ++ " = "++b) $
+                 [("selfMod",show selfMod)
+                 ,("part",show part)
+                 ,("pn",show pn)
+                 ,("o",show o)
+                 ,("m1",show m1)
+                 ,("m2",show m2)
+                 ,("fromSource",show fromSource)
+                 ,("ans",show ans)]) $
+     ans
+
+-- ZZZ below
+importPFN :: Result -> ModuleName -> ProtoFName -> Maybe ImportDecl
+importPFN r m@(ModuleName self) pfn =
+  let o@(FMName other) = pfKey pfn
+      m1@(ModuleName m1') = ModuleName (joinMod (haskellPrefix' pfn ++ parentModule' pfn))
+      m2 = ModuleName (joinMod (parentModule' pfn))
+      qualified = (m1 /= m2) && (m1 /= m)
+      spec = Just (False,[IVar (Ident (fName (baseName' pfn)))])
+      kind = getKind r o
+      fromAlt = S.member (FMName self,FMName m1') (rIKey r)
+      ans = if m1 == m && kind /= SplitKeyTypeBoot then Nothing else Just $
+              case kind of
+                KeyTypeBoot -> ImportDecl src m1 qualified fromAlt (if qualified then Just m2 else Nothing) spec
+                SplitKeyTypeBoot | fromAlt -> ImportDecl src (keyFile m1) qualified False (if qualified then Just m2 else Nothing) spec
+                TopProtoInfo -> imp $ "importPFN from the TopProtoInfo module"
+                _ -> ImportDecl src m1 qualified False (if qualified then Just m2 else Nothing) spec
+  in trace (unlines . map (\ (a,b) -> a ++ " = "++b) $
+                [("m",show m)
+                ,("pfn",show pfn)
+                ,("o",show o)
+                ,("m1",show m1)
+                ,("m2",show m2)
+                ,("kind",show kind)
+                ,("ans",show ans)]) $
+     ans
+
+
+-- Several items might be taken from the same module, combine these statements
+mergeImports :: [ImportDecl] -> [ImportDecl]
+mergeImports importsIn =
+  let idKey (ImportDecl _p1 p2 p3 p4 p5 (Just (p6,_xs))) = (p2,p3,p4,p5,Just p6)
+      idKey (ImportDecl _p1 p2 p3 p4 p5 Nothing) = (p2,p3,p4,p5,Nothing)
+      mergeImports (ImportDecl p1 p2 p3 p4 p5 (Just (p6,xs)))
+                   (ImportDecl _ _ _ _ _ (Just (_,ys))) =
+        ImportDecl p1 p2 p3 p4 p5 (Just (p6,xs `union` ys))
+      mergeImports i _ = i -- identical, so drop one
+      combined = M.fromListWith mergeImports . map (\ i -> (idKey i,i)) $ importsIn
+  in M.elems combined
+
+keyFile :: ModuleName -> ModuleName
+keyFile (ModuleName s) = ModuleName (s++"'Key")
 
 joinMod :: [MName String] -> String
 joinMod [] = ""
@@ -257,13 +333,34 @@ hasExt di = not (null (extRanges di))
 -- FileDescriptorProto module creation
 --------------------------------------------
 
-protoModule :: RecResult -> ProtoInfo -> ByteString -> Module -- XXX rec
+protoModule :: Result -> ProtoInfo -> ByteString -> Module
+protoModule result pri@(ProtoInfo protoName _ _ keyInfos _ _ _) fdpBS
+  = let protoName = protoMod pri
+        (extendees,myKeys) = unzip $ F.toList (extensionKeys pri)
+        m = ModuleName (fqMod protoName)
+        exportKeys = map (EVar . unqualFName . fieldName) myKeys
+        exportNames = map (EVar . UnQual . Ident) ["protoInfo","fileDescriptorProto"]
+        imports = (protoImports ++) . mergeImports $
+                    mapMaybe (importPN result m Normal) $
+                      extendees ++ mapMaybe typeName myKeys
+    in Module src m [] Nothing (Just (exportKeys++exportNames)) imports
+         (keysXTypeVal protoName keyInfos ++ embed'ProtoInfo pri ++ embed'fdpBS fdpBS)
+ where protoImports = standardImports False (not . Seq.null . extensionKeys $ pri) ++
+         [ ImportDecl src (ModuleName "Text.DescriptorProtos.FileDescriptorProto") False False Nothing
+                        (Just (False,[IAbs (Ident "FileDescriptorProto")]))
+         , ImportDecl src (ModuleName "Text.ProtocolBuffers.Reflections") False False Nothing
+                        (Just (False,[IAbs (Ident "ProtoInfo")]))
+         , ImportDecl src (ModuleName "Text.ProtocolBuffers.WireMessage") True False (Just (ModuleName "P'"))
+                        (Just (False,[IVar (Ident "wireGet,getFromBS")])) ]
+
+{-
+protoModule :: Result -> ProtoInfo -> ByteString -> Module -- XXX rec
 protoModule rec pri@(ProtoInfo protoName _ _ keyInfos _ _ _) fdpBS
   = let exportKeys = map (EVar . unqualFName . fieldName . snd) (F.toList keyInfos)
         exportNames = map (EVar . UnQual . Ident) ["protoInfo","fileDescriptorProto"]
         imports = protoImports ++ map formatImport (protoImport pri)
     in Module src (ModuleName (fqMod protoName)) [] Nothing (Just (exportKeys++exportNames))
-              imports (keysX protoName keyInfos ++ embed'ProtoInfo pri ++ embed'fdpBS fdpBS)
+              imports (keysXTypeVal protoName keyInfos ++ embed'ProtoInfo pri ++ embed'fdpBS fdpBS)
   where protoImports = standardImports False (not . Seq.null . extensionKeys $ pri) ++
                        [ ImportDecl src (ModuleName "Text.DescriptorProtos.FileDescriptorProto") False False Nothing
                            (Just (False,[IAbs (Ident "FileDescriptorProto")]))
@@ -280,12 +377,12 @@ protoImport :: ProtoInfo -> [((String,String),S.Set String)]
 protoImport protoInfo
     = M.assocs . M.fromListWith S.union . filter isForeign . map withMod $ keyNames
   where isForeign = let here = fqMod protoName
-                    in (\((a,_),_) -> a/=here)
+                    in (\ ((a,_),_) -> a/=here)
         protoName = protoMod protoInfo
         withMod p@(ProtoName _ _prefix modname base) = ((fqMod p,joinMod modname),S.singleton (mName base))
-        keyNames = F.foldr (\(e,fi) rest -> e : addName fi rest) [] (extensionKeys protoInfo)
+        keyNames = F.foldr (\ (e,fi) rest -> e : addName fi rest) [] (extensionKeys protoInfo)
         addName fi rest = maybe rest (:rest) (typeName fi)
-
+-}
 embed'ProtoInfo :: ProtoInfo -> [Decl]
 embed'ProtoInfo pri = [ myType, myValue ]
   where myType = TypeSig src [ Ident "protoInfo" ] (TyCon (local "ProtoInfo"))
@@ -303,6 +400,21 @@ embed'fdpBS bs = [ myType, myValue ]
 --------------------------------------------
 -- DescriptorProto module creation
 --------------------------------------------
+descriptorModules :: Result -> DescriptorInfo -> [(FilePath,Module)]
+descriptorModules result di
+ = let mainPath = joinPath (descFilePath di)
+       bootPath = joinPath (descFilePath di) ++ "-boot"
+       keyfilePath = take (length mainPath - 3) mainPath ++ "'Key.hs"
+   in (mainPath,descriptorNormalModule result di) :
+      case getKind result (pKey (descName di)) of
+        TopProtoInfo -> imp $ "descriptorModules was given a TopProtoInfo kinded DescriptorInfo!"
+        Simple -> []
+        TypeBoot -> [(bootPath,descriptorBootModule di)]
+        KeyTypeBoot -> [(bootPath,descriptorKeyBootModule result di)]
+        SplitKeyTypeBoot -> [(bootPath,descriptorBootModule di)
+                           ,(keyfilePath,descriptorKeyfileModule result di)]
+
+-- This build a hs-boot that declares the type of the data type only
 descriptorBootModule :: DescriptorInfo -> Module
 descriptorBootModule di
   = let protoName = descName di
@@ -313,78 +425,73 @@ descriptorBootModule di
         instMesAPI = InstDecl src [] (private "MessageAPI")
                        [TyVar (Ident "msg'"), TyFun (TyVar (Ident "msg'")) (TyCon un),  (TyCon un)] []
         dataDecl = DataDecl src DataType [] (baseIdent protoName) [] [] []
-        mkInst :: String -> Decl
         mkInst s = InstDecl src [] (private s) [TyCon un] []
     in Module src (ModuleName (fqMod protoName)) [] Nothing (Just [EAbs un]) minimalImports
          (dataDecl : instMesAPI : map mkInst classes)
 
-descriptorKeyModule :: RecResult -> DescriptorInfo -> Module -- XXX rec
-descriptorKeyModule rec di
+-- This builds on the output of descriptorBootModule and declares a hs-boot that
+-- declares the data type and the keys
+descriptorKeyBootModule :: Result -> DescriptorInfo -> Module
+descriptorKeyBootModule result di
+  = let Module p1 m@(ModuleName self) p3 p4 (Just exports) imports decls = descriptorBootModule di
+        (extendees,myKeys) = unzip $ F.toList (keys di)
+        exportKeys = map (EVar . unqualFName . fieldName) myKeys
+        importTypes = mergeImports . mapMaybe (importPN result m Source) . nubSort $
+                        extendees ++ mapMaybe typeName myKeys
+        declKeys = keysXType (descName di) (keys di)
+    in Module p1 m p3 p4 (Just (exports++exportKeys)) (imports++importTypes) (decls++declKeys)
+
+-- This build the 'Key module that defines the keys only
+descriptorKeyfileModule :: Result -> DescriptorInfo -> Module
+descriptorKeyfileModule result di
+  = let protoName'Key = (descName di) { baseName = MName . (++"'Key") . mName $ (baseName (descName di)) }
+        (extendees,myKeys) = unzip $ F.toList (keys di)
+        m = ModuleName (fqMod protoName'Key)
+        exportKeys = map (EVar . unqualFName . fieldName) myKeys
+        importTypes = mergeImports . mapMaybe (importPN result m KeyFile) . nubSort $
+                        extendees ++ mapMaybe typeName myKeys
+        declKeys = keysXTypeVal protoName'Key (keys di)
+    in Module src m [] Nothing (Just exportKeys) (minimalImports++importTypes) declKeys
+
+-- This builds the normal module
+descriptorNormalModule :: Result -> DescriptorInfo -> Module
+descriptorNormalModule result di
   = let protoName = descName di
         un = unqualName protoName
-        imports = minimalImports ++ map formatImport (toImport di) -- XXX XXX
-        exportKeys = map (EVar . unqualFName . fieldName . snd) (F.toList (keys di))
-        formatImport ((a,b),s) = ImportDecl src (ModuleName a) True False asM
-                                   (Just (False, map (IAbs . Ident) (S.toList s)))
-          where asM | a==b = Nothing
-                    | otherwise = Just (ModuleName b)
-    in Module src (ModuleName (fqMod protoName ++ "'Key")) [] Nothing
-         (Just exportKeys) imports (keysXType protoName (keys di))
+        myKind = getKind result (pKey protoName)
+        sepKey = myKind == SplitKeyTypeBoot
+        (extendees,myKeys) = unzip $ F.toList (keys di)
+        m = ModuleName (fqMod protoName)
+        exportKeys = map (EVar . unqualFName . fieldName) myKeys
+        imports = (standardImports False (hasExt di) ++) . mergeImports . concat $
+                    [ mapMaybe (importPN result m Normal) $
+                       extendees ++ mapMaybe typeName (myKeys ++ (F.toList (fields di)))
+                    , mapMaybe (importPFN result m) (map fieldName (myKeys ++ F.toList (knownKeys di))) ]
+        declKeys | sepKey = []
+                 | otherwise = keysXTypeVal (descName di) (keys di)
+    in Module src m [] Nothing (Just (EThingAll un : exportKeys)) imports
+         (descriptorX di : declKeys ++ instancesDescriptor di)
 
 minimalImports :: [ImportDecl]
 minimalImports =
   [ ImportDecl src (ModuleName "Prelude") True False (Just (ModuleName "P'")) Nothing
   , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False (Just (ModuleName "P'")) Nothing ]
 
--- Imports needed by 'Key modules
-keyImport :: DescriptorInfo -> [((String,String),S.Set String)]
-keyImport di = M.assocs . M.fromListWith S.union . map withMod $ allNames
- where protoName = descName di
-       withMod (Left p@(ProtoName _ _prefix modname base)) = ((fqMod p,joinMod modname),S.singleton (mName base))
-       withMod (Right (ProtoFName _ prefix modname base)) = ((joinMod (prefix++modname),joinMod modname),S.singleton (fName base))
-       allNames = F.foldr addName keyNames (fields di)
-       keyNames = F.foldr (\(e,fi) rest -> Left e : addName fi rest) [] (keys di)
-       addName fi rest = maybe rest (:rest) (fmap Left (typeName fi))
-
-descriptorModule :: RecResult -> DescriptorInfo -> Module -- XXX rec
-descriptorModule rec di
-  = let protoName = descName di
-        un = unqualName protoName
-        imports = standardImports False (hasExt di) ++ map formatImport (toImport di)
-        exportKeys = map (EVar . unqualFName . fieldName . snd) (F.toList (keys di))
-        formatImport ((a,b),s) = ImportDecl src (ModuleName a) True False asM
-                                   (Just (False, map (IAbs . Ident) (S.toList s)))
-          where asM | a==b = Nothing
-                    | otherwise = Just (ModuleName b)
-    in Module src (ModuleName (fqMod protoName)) [] Nothing
-         (Just (EThingAll un : exportKeys))
-         imports (descriptorX di : (keysX protoName (keys di) ++ instancesDescriptor di))
-
 standardImports :: Bool -> Bool -> [ImportDecl]
-standardImports en ext =
+standardImports isEnumMod ext =
   [ ImportDecl src (ModuleName "Prelude") False False Nothing (Just (False,ops))
   , ImportDecl src (ModuleName "Prelude") True False (Just (ModuleName "P'")) Nothing
   , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False (Just (ModuleName "P'")) Nothing ]
  where ops | ext = map (IVar . Symbol) $ base ++ ["==","<=","&&"," || "]
            | otherwise = map (IVar . Symbol) base
-       base | en = ["+","."]
+       base | isEnumMod = ["+","."]
             | otherwise = ["+"]
 
-toImport :: DescriptorInfo -> [((String,String),S.Set String)]
-toImport di
-    = M.assocs . M.fromListWith S.union . filter isForeign . map withMod $ allNames
-  where isForeign = let here = fqMod protoName
-                    in (\((a,_),_) -> a/=here)
-        protoName = descName di
-        withMod (Left p@(ProtoName _ _prefix modname base)) = ((fqMod p,joinMod modname),S.singleton (mName base))
-        withMod (Right (ProtoFName _ prefix modname base)) = ((joinMod (prefix++modname),joinMod modname),S.singleton (fName base))
-        allNames = F.foldr addName keyNames (fields di)
-        keyNames = F.foldr (\(e,fi) rest -> Left e : addName fi rest) keysKnown (keys di)
-        addName fi rest = maybe rest (:rest) (fmap Left (typeName fi))
-        keysKnown = F.foldr (\fi rest -> Right (fieldName fi) : rest) [] (knownKeys di)
-
 keysXType :: ProtoName -> Seq KeyInfo -> [Decl]
-keysXType self i = map (makeKeyType self) . F.toList $ i
+keysXType self ks = map (makeKeyType self) . F.toList $ ks
+
+keysXTypeVal :: ProtoName -> Seq KeyInfo -> [Decl]
+keysXTypeVal self ks = concatMap (\ki -> [makeKeyType self ki,makeKeyVal self ki]) . F.toList $ ks
 
 makeKeyType :: ProtoName -> KeyInfo -> Decl
 makeKeyType self (extendee,f) = keyType
@@ -403,6 +510,68 @@ makeKeyType self (extendee,f) = keyType
                                           | otherwise -> unqualName s
                                    Nothing -> error $  "No Name for Field!\n" ++ show f
 
+makeKeyVal :: ProtoName -> KeyInfo -> Decl
+makeKeyVal self (extendee,f) = keyVal
+  where typeNumber = getFieldType . typeCode $ f
+        keyVal = PatBind src (PApp (unqualFName . fieldName $ f) []) (UnGuardedRhs
+                   (pvar "Key" $$ litInt (getFieldId (fieldNumber f))
+                               $$ litInt typeNumber
+                               $$ maybe (pvar "Nothing")
+                                        (Paren . (pvar "Just" $$) . (defToSyntax (typeCode f)))
+                                        (hsDefault f)
+                   )) noWhere
+
+defToSyntax :: FieldType -> HsDefault -> Exp
+defToSyntax tc x =
+  case x of
+    HsDef'Bool b -> pcon (show b)
+    HsDef'ByteString bs -> (if tc == 9 then (\xx -> Paren (pvar "Utf8" $$ xx)) else id) $
+                           (Paren $ pvar "pack" $$ litStr (LC.unpack bs))
+    HsDef'Rational r | r < 0 -> Paren $ Lit (Frac r)
+                     | otherwise -> Lit (Frac r)
+    HsDef'Integer i -> litInt i 
+    HsDef'Enum s -> Paren $ pvar "read" $$ litStr s
+
+{-
+-- Imports needed by 'Key modules
+keyImport :: DescriptorInfo -> [((String,String),S.Set String)]
+keyImport di = M.assocs . M.fromListWith S.union . map withMod $ allNames
+ where protoName = descName di
+       withMod (Left p@(ProtoName _ _prefix modname base)) = ((fqMod p,joinMod modname),S.singleton (mName base))
+       withMod (Right (ProtoFName _ prefix modname base)) = ((joinMod (prefix++modname),joinMod modname),S.singleton (fName base))
+       allNames = F.foldr addName keyNames (fields di)
+       keyNames = F.foldr (\ (e,fi) rest -> Left e : addName fi rest) [] (keys di)
+       addName fi rest = maybe rest (:rest) (fmap Left (typeName fi))
+
+descriptorModule :: Result -> DescriptorInfo -> Module -- XXX result
+descriptorModule result di
+  = let protoName = descName di
+        un = unqualName protoName
+        imports = standardImports False (hasExt di) ++ map formatImport (toImport di)
+        exportKeys = map (EVar . unqualFName . fieldName . snd) (F.toList (keys di))
+        formatImport ((a,b),s) = ImportDecl src (ModuleName a) True False asM
+                                   (Just (False, map (IAbs . Ident) (S.toList s)))
+          where asM | a==b = Nothing
+                    | otherwise = Just (ModuleName b)
+    in Module src (ModuleName (fqMod protoName)) [] Nothing
+         (Just (EThingAll un : exportKeys))
+         imports (descriptorX di : (keysX protoName (keys di) ++ instancesDescriptor di))
+
+toImport :: DescriptorInfo -> [((String,String),S.Set String)]
+toImport di
+    = M.assocs . M.fromListWith S.union . filter isForeign . map withMod $ allNames
+  where isForeign = let here = fqMod protoName
+                    in (\ ((a,_),_) -> a/=here)
+        protoName = descName di
+        withMod (Left p@(ProtoName _ _prefix modname base)) = ((fqMod p,joinMod modname),S.singleton (mName base))
+        withMod (Right (ProtoFName _ prefix modname base)) = ((joinMod (prefix++modname),joinMod modname),S.singleton (fName base))
+        allNames = F.foldr addName keyNames (fields di)
+        keyNames = F.foldr (\ (e,fi) rest -> Left e : addName fi rest) keysKnown (keys di)
+        addName fi rest = maybe rest (:rest) (fmap Left (typeName fi))
+        keysKnown = F.foldr (\fi rest -> Right (fieldName fi) : rest) [] (knownKeys di)
+-}
+
+{-
 keysX :: ProtoName -> Seq KeyInfo -> [Decl]
 keysX self i = concatMap (makeKey self) . F.toList $ i
 
@@ -429,17 +598,7 @@ makeKey self (extendee,f) = [ keyType, keyVal ]
                                         (Paren . (pvar "Just" $$) . (defToSyntax (typeCode f)))
                                         (hsDefault f)
                    )) noWhere
-
-defToSyntax :: FieldType -> HsDefault -> Exp
-defToSyntax tc x =
-  case x of
-    HsDef'Bool b -> pcon (show b)
-    HsDef'ByteString bs -> (if tc == 9 then (\xx -> Paren (pvar "Utf8" $$ xx)) else id) $
-                           (Paren $ pvar "pack" $$ litStr (LC.unpack bs))
-    HsDef'Rational r | r < 0 -> Paren $ Lit (Frac r)
-                     | otherwise -> Lit (Frac r)
-    HsDef'Integer i -> litInt i 
-    HsDef'Enum s -> Paren $ pvar "read" $$ litStr s
+-}
 
 descriptorX :: DescriptorInfo -> Decl
 descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] derives
@@ -638,11 +797,11 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                args x = x $$ lvar "field'Number" $$ lvar "wire'Type" $$ lvar "old'Self"
         isAllowedExt x = pvar "or" $$ List ranges where
           (<=!) = mkOp "<="; (&&!) = mkOp "&&"; (==!) = mkOp ("==")
-          ranges = map (\(FieldId lo,FieldId hi) -> if hi < maxHi
-                                                      then if lo == hi
-                                                             then (x ==! litInt lo)
-                                                             else (litInt lo <=! x) &&! (x <=! litInt hi)
-                                                      else litInt lo <=! x) allowedExts
+          ranges = map (\ (FieldId lo,FieldId hi) -> if hi < maxHi
+                                                       then if lo == hi
+                                                              then (x ==! litInt lo)
+                                                              else (litInt lo <=! x) &&! (x <=! litInt hi)
+                                                       else litInt lo <=! x) allowedExts
              where FieldId maxHi = maxBound
         whereUpdateSelf = defun "update'Self" [patvar "field'Number", patvar "old'Self"]
                             (Case (lvar "field'Number") updateAlts)
@@ -685,7 +844,7 @@ instanceReflectDescriptor di
         , inst "reflectDescriptorInfo" [ PWildCard ] rdi ]
   where -- massive shortcut through show and read
         rdi :: Exp
-        rdi = pvar "read" $$ litStr (show di) -- cheat using show and read
+        rdi = pvar "read" $$ litStr (show di)
         gmi,reqId,allId :: Exp
         gmi = pcon "GetMessageInfo" $$ Paren reqId $$ Paren allId
         reqId = pvar "fromDistinctAscList" $$
@@ -719,4 +878,4 @@ useType 15 = Just "Int32"
 useType 16 = Just "Int64"
 useType 17 = Just "Int32"
 useType 18 = Just "Int64"
-useType  x = error $ "Text.ProtocolBuffers.Gen: Impossible? useType Unknown type code "++show x
+useType  x = imp $ "useType: Unknown type code (expected 1 to 18) of "++show x

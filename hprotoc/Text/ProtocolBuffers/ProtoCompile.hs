@@ -1,7 +1,7 @@
 -- | This is the Main module for the command line program 'hprotoc'
 module Main where
 
-import Control.Monad(when)
+import Control.Monad(when,forM_)
 import qualified Data.ByteString.Lazy.Char8 as LC (writeFile)
 import Data.List(break)
 import qualified Data.Sequence as Seq (fromList,singleton)
@@ -24,8 +24,8 @@ import qualified Text.DescriptorProtos.FileDescriptorProto as D.FileDescriptorPr
 import qualified Text.DescriptorProtos.FileDescriptorSet   as D(FileDescriptorSet)
 import qualified Text.DescriptorProtos.FileDescriptorSet   as D.FileDescriptorSet(FileDescriptorSet(..))
 
-import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(sccResult,displayResult)
-import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModule,enumModule)
+import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(makeResult,displayResult)
+import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule)
 import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,makeNameMaps,getTLS
                                                 ,LocalFP(..),CanonFP(..),TopLevel(..))
@@ -183,14 +183,17 @@ run options = do
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
   print "Haskell name mangling done"
   let protoInfo = makeProtoInfo (optUnknownFields options) nameMap fdp
-      rec = sccResult protoInfo
-  putStrLn (displayResult rec)
+      result = makeResult protoInfo
+  putStrLn (displayResult result)
   let produceMSG di = do
-        let file = combine (unLocalFP . optTarget $ options) . joinPath . descFilePath $ di
-        print file
         when (not (optDryRun options)) $ do
-          mkdirFor file
-          writeFile file (prettyPrintStyleMode style myMode (descriptorModule rec di))
+          -- There might be several modules
+          let fileModules = descriptorModules result di
+          forM_ fileModules $ \ (relPath,modSyn) -> do
+            let file = combine (unLocalFP . optTarget $ options) relPath
+            print file
+            mkdirFor file
+            writeFile file (prettyPrintStyleMode style myMode modSyn)
       produceENM ei = do
         let file = combine (unLocalFP . optTarget $ options) . joinPath . enumFilePath $ ei
         print file
@@ -201,4 +204,4 @@ run options = do
   mapM_ produceENM (enums protoInfo)
   let file = combine (unLocalFP . optTarget $ options) . joinPath . protoFilePath $ protoInfo
   print file
-  writeFile file (prettyPrintStyleMode style myMode (protoModule rec protoInfo (serializeFDP fdp)))
+  writeFile file (prettyPrintStyleMode style myMode (protoModule result protoInfo (serializeFDP fdp)))

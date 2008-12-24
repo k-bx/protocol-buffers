@@ -1,6 +1,6 @@
 name:           hprotoc
 -- Synchronize this version number with Text.ProtocolBuffers.ProtocolCompile.version
-version:        1.3.1
+version:        1.4.0
 cabal-version:  >= 1.2
 build-type:     Simple
 license:        BSD3
@@ -27,7 +27,7 @@ Executable hprotoc
   ghc-options:     -Wall
   build-depends:   protocol-buffers == 1.2.2, protocol-buffers-descriptor == 1.2.2
   build-depends:   binary, utf8-string
-  build-depends:   parsec, haskell-src-exts,
+  build-depends:   parsec < 3, haskell-src-exts >= 0.4.6,
                    containers,bytestring,array,filepath,directory,mtl,QuickCheck
 
   if flag(small_base)
