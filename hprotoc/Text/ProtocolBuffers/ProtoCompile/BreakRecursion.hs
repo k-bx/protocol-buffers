@@ -109,6 +109,9 @@ import Debug.Trace(trace)
 fst3 :: (a,b,c) -> a
 fst3 (x,_,_) = x
 
+snd3 :: (a,b,c) -> b
+snd3 (_,x,_) = x
+
 imp :: String -> a
 imp s = error $ "Inconceivable! Text.ProtocolBuffers.ProtoCompile.BreakRecursion."++s
 
@@ -132,7 +135,7 @@ data VertexKind =
        | TypeBoot
        | KeyTypeBoot
        | SplitKeyTypeBoot
-  deriving (Show,Eq)
+  deriving (Show,Eq,Ord)
 
 -- Which of the 3 sorts of files (maked with * in analysis) a vertex represents
 data Part = Normal | Source | KeyFile deriving (Show,Eq,Ord)
@@ -157,7 +160,7 @@ data Result = Result { rKind :: Map MKey VertexKind
 
 displayResult :: Result -> String
 displayResult (Result {rKind = kv, rIBoot = ab, rIKey=ab'keys }) = unlines $
-  [ "Result from BreakRecursion"
+  [ "--- displayResult ----"
   , "Modules which are not Simple"
   ] ++ map (\(k,v) -> indent . shows (fmName k) . ("  has kind  "++) $ show v) (Map.assocs kv) ++
   [ "Module imports marked with SOURCE for Types"
@@ -170,7 +173,7 @@ displayResult (Result {rKind = kv, rIBoot = ab, rIKey=ab'keys }) = unlines $
 
 instance Monoid Result where
   mempty = Result mempty mempty mempty
-  mappend r1 r2 = Result { rKind = Map.unionWith (\_a b -> b) (rKind r1) (rKind r2)
+  mappend r1 r2 = Result { rKind = Map.unionWith max (rKind r1) (rKind r2)
                          , rIBoot = mappend (rIBoot r1) (rIBoot r2)
                          , rIKey = mappend (rIKey r1) (rIKey r2) }
 
@@ -357,6 +360,7 @@ makeEdgesForV r v =
 -}
 
 breakGraph ::  Result -> SCCs -> Result
+breakGraph r [] =  trace ("\nbreakGraph leaf answer\n"++displayResult r) $ r
 breakGraph r sccs = trace ("\nbreakGraph\n"++displayResult r) $
                     r `mappend` mconcat (map (breakCycle r) sccs)
 
@@ -374,28 +378,34 @@ XXX todo: need to add the extra vertex or recompute G!
 -}
 breakCycle :: Result -> G -> Result
 breakCycle oldR sccIn = 
-  let toCompare = mapMaybe f (pullEach sccIn)
+  let bits = map snd3 sccIn
+      toCompare = mapMaybe f (pullEach sccIn)
         where allV = Set.fromList (map (vMKey . fst3) sccIn)
               f :: (E,[E]) -> Maybe ((Int, Int), (Result, SCCs))
-              f (e@(v,L p me,_bLs), es) = trace (">< picking:\n"++showE e++"\nfrom:"++show (Set.toList allV)++"\n") $
-                  case (getKind oldR me,p) of
-                    (TopProtoInfo,Normal) -> ans'
-                    (Simple,Normal) -> ans'R `mplus` ans'TB
-                    (TypeBoot,Normal) -> ans'
-                    (TypeBoot,Source) -> imp $ "breakCycle.toCompare.f cannot have (TypeBoot,Source) in SCC!"
-                                              ++ unlines (map show (e:es))
-                    (KeyTypeBoot,Normal) -> ans'
-                    (KeyTypeBoot,Source) -> ans' `mplus` ans'SKTB
-                    (SplitKeyTypeBoot,Normal) -> ans'
-                    (SplitKeyTypeBoot,Source) -> imp $ "breakCycle.toCompare.f cannot have (SplitKeyTypeBoot,Source) in SCC!"
-                                              ++ unlines (map show (e:es))
-                    (SplitKeyTypeBoot,KeyFile) -> ans'
-                    _ -> imp $ "breakCycle.toCompare.f: impossible combination in SCC:"++ eMsg
-                where eMsg = '\n':unlines (map show (e:es))
+              f (e@(v,L p me,_bLs), es) =
+                let ans = case (getKind oldR me,p) of
+                            (TopProtoInfo,Normal) -> ans'R
+                            (Simple,Normal) -> ans'R `mplus` ans'TB
+                            (TypeBoot,Normal) -> ans' `mplus` ans'R
+                            (TypeBoot,Source) -> imp $ "breakCycle.toCompare.f cannot have (TypeBoot,Source) in SCC!"
+                                                      ++ unlines (map show (e:es))
+                            (KeyTypeBoot,Normal) -> ans' `mplus` ans'R
+                            (KeyTypeBoot,Source) -> ans'R `mplus` ans'SKTB
+                            (SplitKeyTypeBoot,Normal) -> ans' `mplus` ans'R
+                            (SplitKeyTypeBoot,Source) -> imp $ "breakCycle.toCompare.f cannot have (SplitKeyTypeBoot,Source) in SCC!"
+                                                      ++ unlines (map show (e:es))
+                            (SplitKeyTypeBoot,KeyFile) -> ans'R
+                            _ -> imp $ "breakCycle.toCompare.f: impossible combination in SCC:"++ eMsg
+                    observe = case ans of
+                                Nothing -> "Nothing"
+                                Just (s,_) -> "Just "++show s
+                 in trace (">< picking:\n"++showE e++"\nfrom:"++show bits++"\nscore: "++show observe++"\n") $
+                    ans
+                where eMsg = '\n':unlines (map showE (e:es))
                       newIBoot = Set.fromList $ do
                                    (va,L pa a,_) <- es
-                                   iguard (a /= me) $ "breakCycle.toCompare.newIBoot Simple vertex in SCC twice:"++eMsg
                                    iguard (Set.member a allV) $ "breakCycle.toCompare.newIBoot sanity check 083425 failed:"++eMsg
+-- not applicable when used in newIBoot2 -- iguard (a /= me) $ "breakCycle.toCompare.newIBoot Simple vertex in SCC twice:"++eMsg
                                    guard (((pa == Normal) &&
                                            (Set.member me (vTypeNeedsTypes va))) ||
                                           ((pa == getKey (getKind oldR a)) &&
@@ -407,20 +417,21 @@ breakCycle oldR sccIn =
                                     b <- Set.toList (Set.union (vTypeNeedsTypes v) (vKeysNeedsTypes v))
                                     guard (Set.member b allV)
                                     guard (Source == getType (getKind oldR b))
+                                    guard (me /= b || p == KeyFile)
                                     let x = (me,p,b)
-                                    guard (Set.notMember x (rIBoot oldR)) 
+                                    guard (Set.notMember x (rIBoot oldR))
                                     return x
-                      newIBoot2 = Set.union newIBoot . Set.fromList $ do
+                      newIBoot2 = Set.union newIBoot . Set.fromList $ 
+                                  (if Set.member me (vKeysNeedsTypes v) then ((me,KeyFile,me):) else id) $ do
                                     b <- Set.toList (vKeysNeedsTypes v)
--- bad check, this should NOT be here
---                                    guard (Set.member b allV)
+-- bad check, this should NOT be here -- guard (Set.member b allV)
                                     guard (Set.member (me,Source,b) (rIBoot oldR))
                                     let x = (me,KeyFile,b)
                                     iguard (Set.notMember x (rIBoot oldR)) $ "breakCycle.toCompare.newIBoot2 KeyTypeBoot already had entries for KeyFile!:"++eMsg
                                     return x
                       ans',ans'R,ans'TB,ans'SKTB :: Maybe ((Int, Int), (Result, SCCs))
                       ans' = if Set.null newIBoot
-                               then ans'R
+                               then Nothing
                                else go $ oldR `mappend` Result { rKind = mempty
                                                                , rIBoot = newIBoot
                                                                , rIKey = mempty }
