@@ -122,7 +122,7 @@ importPN r selfMod@(ModuleName self) part pn =
       m2 = ModuleName (joinMod (parentModule pn))
 -- ZZZ      fromSource = canSource && S.member (FMName self,o) (rIBoot r)
       fromSource = S.member (FMName self,part,o) (rIBoot r) -- ZZZ
-      ans = if m1 == selfMod then Nothing
+      ans = if m1 == selfMod && part /= KeyFile then Nothing
               else Just $ ImportDecl src m1 True fromSource (Just m2)
                             (Just (False,[IAbs (Ident (mName (baseName pn)))]))
   in trace (unlines . map (\ (a,b) -> a ++ " = "++b) $
@@ -139,7 +139,7 @@ importPN r selfMod@(ModuleName self) part pn =
 -- ZZZ below
 importPFN :: Result -> ModuleName -> ProtoFName -> Maybe ImportDecl
 importPFN r m@(ModuleName self) pfn =
-  let o@(FMName other) = pfKey pfn
+  let o@(FMName _other) = pfKey pfn
       m1@(ModuleName m1') = ModuleName (joinMod (haskellPrefix' pfn ++ parentModule' pfn))
       m2 = ModuleName (joinMod (parentModule' pfn))
       qualified = (m1 /= m2) && (m1 /= m)
@@ -150,7 +150,8 @@ importPFN r m@(ModuleName self) pfn =
               case kind of
                 KeyTypeBoot -> ImportDecl src m1 qualified fromAlt (if qualified then Just m2 else Nothing) spec
                 SplitKeyTypeBoot | fromAlt -> ImportDecl src (keyFile m1) qualified False (if qualified then Just m2 else Nothing) spec
-                TopProtoInfo -> imp $ "importPFN from the TopProtoInfo module"
+-- XXX bad line below
+--              TopProtoInfo -> imp $ "importPFN from the TopProtoInfo module"
                 _ -> ImportDecl src m1 qualified False (if qualified then Just m2 else Nothing) spec
   in trace (unlines . map (\ (a,b) -> a ++ " = "++b) $
                 [("m",show m)
@@ -433,7 +434,7 @@ descriptorBootModule di
 -- declares the data type and the keys
 descriptorKeyBootModule :: Result -> DescriptorInfo -> Module
 descriptorKeyBootModule result di
-  = let Module p1 m@(ModuleName self) p3 p4 (Just exports) imports decls = descriptorBootModule di
+  = let Module p1 m@(ModuleName _self) p3 p4 (Just exports) imports decls = descriptorBootModule di
         (extendees,myKeys) = unzip $ F.toList (keys di)
         exportKeys = map (EVar . unqualFName . fieldName) myKeys
         importTypes = mergeImports . mapMaybe (importPN result m Source) . nubSort $
@@ -446,9 +447,10 @@ descriptorKeyfileModule :: Result -> DescriptorInfo -> Module
 descriptorKeyfileModule result di
   = let protoName'Key = (descName di) { baseName = MName . (++"'Key") . mName $ (baseName (descName di)) }
         (extendees,myKeys) = unzip $ F.toList (keys di)
+        mBase = ModuleName (fqMod (descName di))
         m = ModuleName (fqMod protoName'Key)
         exportKeys = map (EVar . unqualFName . fieldName) myKeys
-        importTypes = mergeImports . mapMaybe (importPN result m KeyFile) . nubSort $
+        importTypes = mergeImports . mapMaybe (importPN result mBase KeyFile) . nubSort $
                         extendees ++ mapMaybe typeName myKeys
         declKeys = keysXTypeVal protoName'Key (keys di)
     in Module src m [] Nothing (Just exportKeys) (minimalImports++importTypes) declKeys
@@ -511,7 +513,7 @@ makeKeyType self (extendee,f) = keyType
                                    Nothing -> error $  "No Name for Field!\n" ++ show f
 
 makeKeyVal :: ProtoName -> KeyInfo -> Decl
-makeKeyVal self (extendee,f) = keyVal
+makeKeyVal _self (_extendee,f) = keyVal
   where typeNumber = getFieldType . typeCode $ f
         keyVal = PatBind src (PApp (unqualFName . fieldName $ f) []) (UnGuardedRhs
                    (pvar "Key" $$ litInt (getFieldId (fieldNumber f))
