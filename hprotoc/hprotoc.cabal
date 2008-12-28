@@ -36,6 +36,7 @@ Executable hprotoc
         build-depends: base == 3.*
 
   other-modules:   Paths_hprotoc
+                   Text.ProtocolBuffers.ProtoCompile.BreakRecursion
                    Text.ProtocolBuffers.ProtoCompile.Gen
                    Text.ProtocolBuffers.ProtoCompile.Instances
                    Text.ProtocolBuffers.ProtoCompile.Lexer
