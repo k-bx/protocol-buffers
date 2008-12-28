@@ -230,19 +230,20 @@ makeVertices pi =
                    , vNeedsKeys = nk (knownKeys di)      -- might include self
                    , vKeysNeedsTypes = knt (keys di)     -- might include self
                    , vTypeNeedsTypes = tnt (fields di) } -- might include self
+      allVT = Set.fromList (map (pKey . descName) (messages pi))
       allV = Set.fromList (pKey (protoMod pi) : map (pKey . descName) (messages pi))
       knt :: Seq KeyInfo -> Set MKey
       knt ks =
         let (pns, fsL) = unzip (F.toList ks)
             fnt :: [FieldInfo] -> Set MKey
             fnt fs = Set.fromList $ (map pKey . mapMaybe typeName $ fs) ++ (map (pfKey . fieldName) fs)
-        in Set.intersection allV $ Set.union (Set.fromList (map pKey pns)) (fnt fsL)
+        in Set.intersection allVT $ Set.union (Set.fromList (map pKey pns)) (fnt fsL)
 
       nk :: Seq FieldInfo -> Set MKey
       nk fs = Set.intersection allV $ Set.fromList $ map (pfKey . fieldName) . F.toList $ fs
 
       tnt :: Seq FieldInfo -> Set MKey
-      tnt fs = Set.intersection allV $ Set.fromList $ map pKey . mapMaybe typeName . F.toList $ fs
+      tnt fs = Set.intersection allVT $ Set.fromList $ map pKey . mapMaybe typeName . F.toList $ fs
   in answer
 
 -- The only need for KeyTypeBoot and SplitKeyTypeBoot is to break
@@ -449,7 +450,7 @@ breakCycle oldR sccIn =
                       go :: Result -> Maybe ((Int, Int), (Result, SCCs))
                       go newR = let (s,sccs) = score (makeG (map fst3 (e:es)) newR)
                                 in Just (s,(newR,sccs))
-  in trace (">< breakCycle\n") $
+  in trace (">< breakCycle of "++show bits++"\n\n") $
      if null toCompare
        then imp $ "breakCycle: This SCC had no Simple or KeyTypeBoot nodes!\n"++ unlines (map show sccIn)
        else let (newR,next'sccs) = snd $ maximumBy (compare `on` fst) toCompare
