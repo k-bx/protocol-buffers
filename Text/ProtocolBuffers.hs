@@ -5,7 +5,7 @@ other modules in protocol-buffers.  The exposed parts are:
 
 @
 import Text.ProtocolBuffers.Basic
-  ( Seq,Utf8(utf8),Int32,Int64,Word32,Word64
+  ( Seq,toUtf8,Utf8(utf8),Int32,Int64,Word32,Word64
   , WireTag,FieldId,WireType,FieldType,EnumCode,WireSize
   , Mergeable(mergeEmpty,mergeAppend,mergeConcat),Default(defaultValue),Wire)
 import Text.ProtocolBuffers.Default()
@@ -34,6 +34,11 @@ with the right-biased 'Mergeable' operations.  The 'mergeEmpty' should
 not be used as required values are filled in with undefined errors,
 please use 'defaultValue' instead.
 
+The Utf8 type is a newtype of the Lazy ByteString.  It can be safely
+constructed by checking for errors with 'toUtf8', which returns 'Left
+Int' indicating the index where an error is detected.  It can be
+deconstructed with 'utf8'.
+
 -}
 module Text.ProtocolBuffers(
     module Text.ProtocolBuffers.Basic
@@ -44,7 +49,7 @@ module Text.ProtocolBuffers(
   ) where
 
 import Text.ProtocolBuffers.Basic
-  ( Seq,Utf8(utf8),Int32,Int64,Word32,Word64
+  ( Seq,isValidUTF8,toUtf8,Utf8(utf8),Int32,Int64,Word32,Word64
   , WireTag,FieldId,WireType,FieldType,EnumCode,WireSize
   , Mergeable(mergeEmpty,mergeAppend,mergeConcat),Default(defaultValue),Wire)
 import Text.ProtocolBuffers.Default()

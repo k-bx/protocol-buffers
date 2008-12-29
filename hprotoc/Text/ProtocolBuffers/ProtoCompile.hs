@@ -184,6 +184,7 @@ run options = do
   print "Haskell name mangling done"
   let protoInfo = makeProtoInfo (optUnknownFields options) nameMap fdp
       result = makeResult protoInfo
+  putStrLn "Final Result"
   putStrLn (displayResult result)
   let produceMSG di = do
         when (not (optDryRun options)) $ do

@@ -77,11 +77,11 @@ The best score is the choice that reduces the size of the scc in the
 next round (and secondarily increases the number of sub-SCCs).
 
 The final Result is a Map of names to the non-Simple/TopProtoInfo
-renderings and a list of pairs (a,b) where 'a' should import the type
-defined in 'b' using a SOURCE pragma.  Keys from messages rendered as
-KeyTypeBoot should be imported using SOURCE pragmas.  Keys from
-messages rendered as SplitKeyTypeBoot should be imported from the
-auxiliary 'Key files.
+renderings and a list of "pairs" (a,p,b) where part 'p' of module 'a'
+should import the type defined in 'b' using a SOURCE pragma.  Keys
+from messages rendered as KeyTypeBoot should be imported using SOURCE
+pragmas.  Keys from messages rendered as SplitKeyTypeBoot should be
+imported from the auxiliary 'Key files.
 
 -}
 
@@ -106,6 +106,9 @@ import Text.ProtocolBuffers.Reflections
 
 import Debug.Trace(trace)
 
+ecart :: String -> a -> a
+ecart _ a = a
+
 fst3 :: (a,b,c) -> a
 fst3 (x,_,_) = x
 
@@ -129,31 +132,32 @@ pfKey :: ProtoFName -> MKey
 pfKey (ProtoFName {haskellPrefix'=a,parentModule'=b}) = foldr1 dotFM . map promoteFM $ a++b
 
 -- Which reprensentation a message currently has
-data VertexKind =
-         TopProtoInfo
-       | Simple
-       | TypeBoot
-       | KeyTypeBoot
-       | SplitKeyTypeBoot
+data VertexKind = TopProtoInfo
+                | Simple
+                | TypeBoot
+                | KeyTypeBoot
+                | SplitKeyTypeBoot
   deriving (Show,Eq,Ord)
 
 -- Which of the 3 sorts of files (maked with * in analysis) a vertex represents
 data Part = Normal | Source | KeyFile deriving (Show,Eq,Ord)
 
--- A vertex. Note that the value vPart is restricted by the value of vKind.
+-- Vertex data.  A graph may have several nodes with the same value of
+-- V and different values of Part.
 data V = V { vMKey :: !MKey
            , vNeedsKeys :: !(Set MKey)
            , vKeysNeedsTypes :: !(Set MKey)
            , vTypeNeedsTypes :: !(Set MKey) }
   deriving Show
 
--- An edge to a module's file
+-- A link to a module's file
 data Label = L !Part !MKey deriving (Show,Eq,Ord)
 
 type E = (V,Label,[Label])
 type G = [E]
 type SCCs = [G]
 
+-- The end product of this module is the Result value
 data Result = Result { rKind :: Map MKey VertexKind
                      , rIBoot :: Set (MKey,Part,MKey)
                      , rIKey :: Set (MKey,MKey) }
@@ -170,6 +174,13 @@ displayResult (Result {rKind = kv, rIBoot = ab, rIKey=ab'keys }) = unlines $
  where indent = (' ':).(' ':)
        untriple (a,p,b) = fmName a ++ " " ++ show p  ++ " : import {-# SOURCE #-} " ++ fmName b
        unpair (a,b) = fmName a ++ " : import {-# SOURCE or 'Key #-} " ++ fmName b
+
+showSCCs :: SCCs -> String
+showSCCs gs = concatMap (\ g -> "\n>< SCC Graph ><\n"++concatMap showE g) gs
+showG :: G -> String
+showG g = '\n':concatMap showE g
+showE :: E -> String
+showE (v,n,ls) = unlines $ [ "( "++show n, "  , "++show v, "  , "++show ls, ")" ]
 
 instance Monoid Result where
   mempty = Result mempty mempty mempty
@@ -194,62 +205,64 @@ getKey TypeBoot = Normal
 getKey KeyTypeBoot = Source
 getKey SplitKeyTypeBoot = KeyFile
 
+-- 'makeResult' is the main function for this module
 makeResult :: ProtoInfo -> Result
-makeResult pi =
-  let pvs@(p,vs) = makeVertices pi
-      result1 = breakKeys pvs
-      graph1 = makeG (p:vs) result1
-      answer = breakGraph result1 (cycles graph1)
-      msg1 = makeG (p:vs) answer
-      msg2 = cycles msg1
-  in trace ("makeResult's final graph is:"++showG msg1++showSCCs msg2) $
-     answer
+makeResult protoInfo =
+  let pvs@(p,vs) = makeVertices protoInfo
+      initResult = breakKeys pvs
+      sccs = cycles (makeG (p:vs) initResult)
+      answer = breakGraph initResult sccs
+      finalGraph = makeG (p:vs) answer
+      remainingProblems = cycles finalGraph
+      msg = unlines [ "<!!!!!!!!!!!> KLAXON, RED SPINNING LIGHT, ETC."
+                    , "! WARNING: hprotoc unexpectedly failed to disentangle all the mutually-recursive message definitions."
+                    , "! PLEASE REPORT THIS FAILURE ALONG WITH THE PROTO FILE."
+                    , "! The failed subset is:"
+                    ] ++ showSCCs remainingProblems ++ "\n</!!!!!!!!!!!>"
+  in if null remainingProblems then ecart (showG finalGraph) answer
+       else trace msg answer
 
-showSCCs :: SCCs -> String
-showSCCs gs = concatMap (\ g -> "\n>< SCC Graph ><\n"++concatMap showE g) gs
+-- Build the graph using the vertices and the Result so far.
+makeG :: [V] -> Result -> G
+makeG vs r = concatMap (makeEdgesForV r) vs
 
-showG :: G -> String
-showG g = '\n':concatMap showE g
-
-showE :: E -> String
-showE (v,n,ls) = unlines $ [ "( "++show n
-                           , "  , "++show v
-                           , "  , "++show ls
-                           , ")"
-                           ]
-
--- Returns all as Simple and Normal
+-- Returns all as Simple and Normal.  The fst V is from the ProtoInfo
+-- the snd [V] is from the DescriptorInfo.
 makeVertices :: ProtoInfo -> (V,[V])
-makeVertices pi =
-  let answer =  ( protoInfoV , map makeV (messages pi) )
-      protoInfoV = V { vMKey = pKey (protoMod pi)
-                     , vNeedsKeys = mempty
-                     , vKeysNeedsTypes = knt (extensionKeys pi)
-                     , vTypeNeedsTypes = mempty }
-      makeV di = V { vMKey = pKey (descName di)
-                   , vNeedsKeys = nk (knownKeys di)      -- might include self
-                   , vKeysNeedsTypes = knt (keys di)     -- might include self
-                   , vTypeNeedsTypes = tnt (fields di) } -- might include self
-      allVT = Set.fromList (map (pKey . descName) (messages pi))
-      allV = Set.fromList (pKey (protoMod pi) : map (pKey . descName) (messages pi))
-      knt :: Seq KeyInfo -> Set MKey
-      knt ks =
-        let (pns, fsL) = unzip (F.toList ks)
-            fnt :: [FieldInfo] -> Set MKey
-            fnt fs = Set.fromList $ (map pKey . mapMaybe typeName $ fs) ++ (map (pfKey . fieldName) fs)
-        in Set.intersection allVT $ Set.union (Set.fromList (map pKey pns)) (fnt fsL)
+makeVertices pi = answer where
+  answer =  ( protoInfoV , map makeV (messages pi) )
 
-      nk :: Seq FieldInfo -> Set MKey
-      nk fs = Set.intersection allV $ Set.fromList $ map (pfKey . fieldName) . F.toList $ fs
+  protoInfoV = V { vMKey = pKey (protoMod pi)
+                 , vNeedsKeys = mempty
+                 , vKeysNeedsTypes = knt (extensionKeys pi)
+                 , vTypeNeedsTypes = mempty }
 
-      tnt :: Seq FieldInfo -> Set MKey
-      tnt fs = Set.intersection allVT $ Set.fromList $ map pKey . mapMaybe typeName . F.toList $ fs
-  in answer
+  makeV di = V { vMKey = pKey (descName di)
+               , vNeedsKeys = nk (knownKeys di)
+               , vKeysNeedsTypes = knt (keys di)
+               , vTypeNeedsTypes = tnt (fields di) }
 
--- The only need for KeyTypeBoot and SplitKeyTypeBoot is to break
--- key-only import cycles.  'breakKeys' find and breaks these SSCs.
--- It will also mark files as TypeBoot if they improt foreign keys,
--- and add the reciprocal link to rIBoot.
+  allK = Set.fromList (pKey (protoMod pi) : map (pKey . descName) (messages pi))
+  allT = Set.fromList (map (pKey . descName) (messages pi))
+
+  tnt :: Seq FieldInfo -> Set MKey
+  tnt fs = Set.intersection allT $ Set.fromList $ map pKey . mapMaybe typeName . F.toList $ fs
+
+  knt :: Seq KeyInfo -> Set MKey
+  knt ks =
+    let (pns, fsL) = unzip (F.toList ks)
+        fnt :: [FieldInfo] -> Set MKey
+        fnt fs = Set.fromList $ (map pKey . mapMaybe typeName $ fs) ++ (map (pfKey . fieldName) fs)
+    in Set.intersection allT $ Set.union (Set.fromList (map pKey pns)) (fnt fsL)
+
+  nk :: Seq FieldInfo -> Set MKey
+  nk fs = Set.intersection allK $ Set.fromList $ map (pfKey . fieldName) . F.toList $ fs
+
+-- The only need for KeyTypeBoot (and SplitKeyTypeBoot) is to break
+-- key-only import cycles. 'breakKeys' finds and breaks these SSCs by
+-- marking files as KeyTypeBoot.  Since foreign keys implies a
+-- reciprocal type import, additional files can get changed to
+-- TypeBoot and some incoming links marked to use Source.
 breakKeys :: (V,[V]) -> Result
 breakKeys (pv,vsOther) =
   let vs = pv : vsOther
@@ -258,18 +271,13 @@ breakKeys (pv,vsOther) =
           where self = vMKey v
       -- For 'a'/='b': if 'a' needs key from 'b' then 'b' must need type from 'a'
       -- this recursion means 'a' cannot be Simple so change to TypeBoot
--- ZZZ      startingResult = Result { rKind = needTypeBoot, rIBoot = reversed }
--- ZZZZ      startingResult = Result { rKind = needTypeBoot, rIBoot = reversed, rIKey = mempty } -- ZZZ
-      startingResult = Result { rKind = needTypeBoot, rIBoot = mempty, rIKey = mempty } -- ZZZ
+      startingResult = Result { rKind = needTypeBoot, rIBoot = mempty, rIKey = mempty }
       needTypeBoot = Map.singleton (vMKey pv) TopProtoInfo `Map.union`
                      ( Map.fromList . map (\(_,L _ a,_) -> (a,TypeBoot))
                                     . filter (\(_,_,bLs) -> not (null bLs)) $ es )
-      -- module b import a SOURCE a'type
---      reversed = Set.fromList . concatMap (\(_,L _ a,bLs) -> [ (b,a) | L _ b <- bLs ]) $ es
       -- break always moves things to KeyTypeBoot from TypeBoot (not
       -- Simple) because they are in a Key-import SCC: this means they
-      -- are importing foreign keys and thus they are in needBoot with
-      -- TypeBoot
+      -- are importing foreign keys and thus they are in needTypeBoot
       breakSCCs :: Result -> SCCs -> Result
       breakSCCs r sccs = r `mappend` mconcat (map breakSCC sccs)
       breakSCC :: G -> Result
@@ -282,6 +290,7 @@ breakKeys (pv,vsOther) =
                                             , rIBoot = mempty
                                             , rIKey = ik } -- ZZZ
                      in breakSCCs newResult next'sccs
+      -- Init boot marks some incoming links to use SOURCE
       initBoot r = r { rIBoot = Set.fromList . concatMap withParts $ es }
         where withParts (_,L _ a,bLs) = [ withPart a b | L _ b <- bLs ]
               withPart a b = let p = getKey (getKind r b) in (b,p,a)
@@ -306,15 +315,10 @@ cycles = filter atLeastTwo . map flattenSCC . stronglyConnCompR
         atLeastTwo (_:_:_) = True
         atLeastTwo _ = False
 
--- pull out each element as candidate
+-- pull out each element as candidate and list without the element
 pullEach :: [a] -> [(a,[a])]
 pullEach = go id where go _ [] = []
                        go f (x:xs) = (x,f xs) : go (f . (x:)) xs
-
--- Build the graph using the vertices and the Result so far.
--- The vKind will be taken from the Result, not the vertices.
-makeG :: [V] -> Result -> G
-makeG vs r = concatMap (makeEdgesForV r) vs
 
 -- This builds an edge E from the vertex V and ensures that V has the
 -- right vKind from the Result.  This must make the same judgements as
@@ -348,177 +352,125 @@ makeEdgesForV r v =
        KeyTypeBoot      -> [standard,sourceKTB]
        SplitKeyTypeBoot -> [standardSKTB,keyfileSKTB,source]
 
-{-
-      sTypes p = Set.map (typeL p) . Set.delete me -- used to avoid "me"
-      notMe = Set.toList (Set.union
-                 (Set.map keyL . Set.delete me $ vNeedsKeys v) -- avoid "me"
-                 (sTypes p $ Set.union (vKeysNeedsTypes v) (vTypeNeedsTypes v)) ) -- avoid "me"
-      fromKTB p = Set.toList (sTypes p (vKeysNeedsTypes v)) -- avoid "me"
-      fromT = Set.toList (Set.union
-                 (Set.map keyL $ vNeedsKeys v) -- include "me"
-                 (sTypes (vTypeNeedsTypes v))) -- avoid "me"
-      fromK p = Set.toList (Set.map (typeL p) (vKeysNeedsTypes v)) -- include "me"
--}
-
 breakGraph ::  Result -> SCCs -> Result
-breakGraph r [] =  trace ("\nbreakGraph leaf answer\n"++displayResult r) $ r
+breakGraph r [] = trace ("\nbreakGraph leaf answer\n"++displayResult r) $ r
 breakGraph r sccs = trace ("\nbreakGraph\n"++displayResult r) $
-                    r `mappend` mconcat (map (breakCycle r) sccs)
+                    r `mappend` mconcat (map (breakCycle r) (rejoinVertices sccs))
+
+-- I wonder if there is any input which leads to a module having
+-- different parts in different SCCs.  Rather than try and
+-- over-analyze this wierd edge case this 'rejoinVertices' function
+-- will detect it and join the SCCs.
+rejoinVertices :: SCCs -> SCCs
+rejoinVertices [] = []
+rejoinVertices g@([_]) = g
+rejoinVertices gs = 
+  let vgs :: [(Set MKey,G)]
+      vgs = map (\ g -> (Set.fromList . map (vMKey . fst3) $ g,g)) gs
+      process [] = []
+      process ((_,g):[]) = [g]
+      process ((v,g):rest) = walk id rest where
+        walk p [] = g : process (p [])
+        walk p (x@(v',g'):rest') | Set.null (Set.intersection v v') = walk (p . (x:)) rest'
+                                 | otherwise = ecart msg $ process ((Set.union v v',g++g') : p [])
+          where
+            msg = unlines [ "! THIS FILE TASTES ODD."
+                          , "!"
+                          , "! Your proto file triggered interesting behavior in hprotoc's internals."
+                          , "! The author of hprotoc at <protobuf@personal.mightyreason.com> is curious about this."
+                          , "! Could you send him a copy of this or a similar proto file?"
+                          , "! ( Specifically, the code for handling of mutually recursive modules is quite tricky )"
+                          , "! This message may repeat several times.  Sorry about the extra noise."
+                          ] ++ showG g ++ " -- and -- " ++ showG g'
+  in process vgs
 
 {-
-
 breakCycle is a work in progress.  The ans' value tries to change
 incoming type links to the Source file, then ans'R. The ans'R tries to
-change outgoing links to point to Source files.
+change outgoing links to point to Source files.  The ans'TB changes
+from Simple/Normal to TypeBoot (adding a source file).  The ans'SKTB
+changes from KeyTypeBoot/Source to SplitKeyTypeBoot.
 
-(Simple,Normal) can then try to change to (TypeBoot,Normal and Source)
-XXX todo: need to add the extra vertex or recompute G!
-(KeyTypeBoot,Source) can try to change to (SplitKeyTypeBoot,KeyFile and Source)
-XXX todo: need to add the extra vertex or recompute G!
-
+The reason these changes are done in stages is to try and avoid ghc's
+warnings that a {-# SOURCE #-} import is not not needed.
 -}
 breakCycle :: Result -> G -> Result
 breakCycle oldR sccIn = 
-  let bits = map snd3 sccIn
-      toCompare = mapMaybe f (pullEach sccIn)
-        where allV = Set.fromList (map (vMKey . fst3) sccIn)
-              f :: (E,[E]) -> Maybe ((Int, Int), (Result, SCCs))
-              f (e@(v,L p me,_bLs), es) =
-                let ans = case (getKind oldR me,p) of
-                            (TopProtoInfo,Normal) -> ans'R
-                            (Simple,Normal) -> ans'R `mplus` ans'TB
-                            (TypeBoot,Normal) -> ans' `mplus` ans'R
-                            (TypeBoot,Source) -> imp $ "breakCycle.toCompare.f cannot have (TypeBoot,Source) in SCC!"
-                                                      ++ unlines (map show (e:es))
-                            (KeyTypeBoot,Normal) -> ans' `mplus` ans'R
-                            (KeyTypeBoot,Source) -> ans'R `mplus` ans'SKTB
-                            (SplitKeyTypeBoot,Normal) -> ans' `mplus` ans'R
-                            (SplitKeyTypeBoot,Source) -> imp $ "breakCycle.toCompare.f cannot have (SplitKeyTypeBoot,Source) in SCC!"
-                                                      ++ unlines (map show (e:es))
-                            (SplitKeyTypeBoot,KeyFile) -> ans'R
-                            _ -> imp $ "breakCycle.toCompare.f: impossible combination in SCC:"++ eMsg
-                    observe = case ans of
-                                Nothing -> "Nothing"
-                                Just (s,_) -> "Just "++show s
-                 in trace (">< picking:\n"++showE e++"\nfrom:"++show bits++"\nscore: "++show observe++"\n") $
-                    ans
-                where eMsg = '\n':unlines (map showE (e:es))
-                      newIBoot = Set.fromList $ do
-                                   (va,L pa a,_) <- es
-                                   iguard (Set.member a allV) $ "breakCycle.toCompare.newIBoot sanity check 083425 failed:"++eMsg
--- not applicable when used in newIBoot2 -- iguard (a /= me) $ "breakCycle.toCompare.newIBoot Simple vertex in SCC twice:"++eMsg
-                                   guard (((pa == Normal) &&
-                                           (Set.member me (vTypeNeedsTypes va))) ||
-                                          ((pa == getKey (getKind oldR a)) &&
-                                           (Set.member me (vKeysNeedsTypes va))))
-                                   let x=(a,pa,me)
-                                   guard (Set.notMember x (rIBoot oldR))  -- needed when used in newIBoot2
-                                   return x
-                      newIBootR = Set.fromList $ do
-                                    b <- Set.toList (Set.union (vTypeNeedsTypes v) (vKeysNeedsTypes v))
-                                    guard (Set.member b allV)
-                                    guard (Source == getType (getKind oldR b))
-                                    guard (me /= b || p == KeyFile)
-                                    let x = (me,p,b)
-                                    guard (Set.notMember x (rIBoot oldR))
-                                    return x
-                      newIBoot2 = Set.union newIBoot . Set.fromList $ 
-                                  (if Set.member me (vKeysNeedsTypes v) then ((me,KeyFile,me):) else id) $ do
-                                    b <- Set.toList (vKeysNeedsTypes v)
--- bad check, this should NOT be here -- guard (Set.member b allV)
-                                    guard (Set.member (me,Source,b) (rIBoot oldR))
-                                    let x = (me,KeyFile,b)
-                                    iguard (Set.notMember x (rIBoot oldR)) $ "breakCycle.toCompare.newIBoot2 KeyTypeBoot already had entries for KeyFile!:"++eMsg
-                                    return x
-                      ans',ans'R,ans'TB,ans'SKTB :: Maybe ((Int, Int), (Result, SCCs))
-                      ans' = if Set.null newIBoot
-                               then Nothing
-                               else go $ oldR `mappend` Result { rKind = mempty
-                                                               , rIBoot = newIBoot
-                                                               , rIKey = mempty }
-                      ans'R = if Set.null newIBootR
-                                then Nothing
-                                else go $ oldR `mappend` Result { rKind = mempty
-                                                                , rIBoot = newIBootR
-                                                                , rIKey = mempty }
-                      ans'TB = go $ oldR `mappend` Result { rKind = Map.singleton me TypeBoot
-                                                          , rIBoot = newIBoot
-                                                          , rIKey = mempty }
-                      ans'SKTB = go $ oldR `mappend` Result { rKind = Map.singleton me SplitKeyTypeBoot
-                                                            , rIBoot = newIBoot2
-                                                            , rIKey = Set.singleton (me,me) }
-                      go :: Result -> Maybe ((Int, Int), (Result, SCCs))
-                      go newR = let (s,sccs) = score (makeG (map fst3 (e:es)) newR)
-                                in Just (s,(newR,sccs))
+  let bits = map snd3 sccIn -- trace
+      -- toCompare should never be null.
+      toCompare = mapMaybe f (pullEach sccIn) where
+        allV = Set.fromList (map (vMKey . fst3) sccIn)
+        f :: (E,[E]) -> Maybe ((Int, Int), (Result, SCCs))
+        f (e@(v,L p me,_bLs), es) = trace (">< picking:\n"++showE e++
+                                           "\nfrom:"++show bits++
+                                           "\nscore: "++show observe++"\n") $
+                                    answer where
+          answer = case (getKind oldR me,p) of
+                     (TopProtoInfo,Normal)      -> ans'R
+                     (Simple,Normal)            -> ans'R `mplus` ans'TB
+                     (TypeBoot,Normal)          -> ans'  `mplus` ans'R
+                     (KeyTypeBoot,Normal)       -> ans'  `mplus` ans'R
+                     (KeyTypeBoot,Source)       -> ans'  `mplus` ans'R `mplus` ans'SKTB -- ans' may be redundant
+                     (SplitKeyTypeBoot,Normal)  -> ans'  `mplus` ans'R
+                     (SplitKeyTypeBoot,KeyFile) -> ans'  `mplus` ans'R -- ans' may be redundant
+                     (TypeBoot,Source) -> imp $
+                       "breakCycle.toCompare.f cannot have (TypeBoot,Source) in SCC!" ++ eMsg
+                     (SplitKeyTypeBoot,Source) -> imp $
+                       "breakCycle.toCompare.f cannot have (SplitKeyTypeBoot,Source) in SCC!" ++ eMsg
+                     _ -> imp $ "breakCycle.toCompare.f: impossible combination in SCC:"++ eMsg
+          observe = case answer of Nothing -> "Nothing"; Just (s,_) -> "Just "++show s  -- trace
+          eMsg = '\n':unlines (map showE (e:es))
+
+          newIBoot,newIBootR,newIBoot2 :: Set (MKey,Part,MKey)
+          newIBoot = Set.fromList $ do
+            (va,L pa a,_) <- es
+            iguard (Set.member a allV) $
+              "breakCycle.toCompare.newIBoot sanity check 083425 failed:"++eMsg
+            guard (((pa == Normal) &&
+                    (Set.member me (vTypeNeedsTypes va))) ||
+                   ((pa == getKey (getKind oldR a)) &&
+                    (Set.member me (vKeysNeedsTypes va))))
+            let x=(a,pa,me)
+            guard (Set.notMember x (rIBoot oldR))  -- needed when used in newIBoot2
+            return x
+          newIBootR = Set.fromList $ do
+            b <- Set.toList (Set.union (vTypeNeedsTypes v) (vKeysNeedsTypes v))
+            guard (Set.member b allV)
+            guard (Source == getType (getKind oldR b))
+            guard (me /= b || p == KeyFile)
+            let x = (me,p,b)
+            guard (Set.notMember x (rIBoot oldR))
+            return x
+          newIBoot2 = Set.union newIBoot . Set.fromList $ 
+            (if Set.member me (vKeysNeedsTypes v) then ((me,KeyFile,me):) else id) $ do
+              b <- Set.toList (vKeysNeedsTypes v)
+              guard (Set.member (me,Source,b) (rIBoot oldR))
+              let x = (me,KeyFile,b)
+              iguard (Set.notMember x (rIBoot oldR)) $
+                "breakCycle.toCompare.newIBoot2 KeyTypeBoot already had entries for KeyFile!:"++eMsg
+              return x
+
+          ans',ans'R,ans'TB,ans'SKTB :: Maybe ((Int, Int), (Result, SCCs))
+          ans' = if Set.null newIBoot then Nothing
+                   else go $ oldR `mappend` Result { rKind = mempty
+                                                   , rIBoot = newIBoot
+                                                   , rIKey = mempty }
+          ans'R = if Set.null newIBootR then Nothing
+                    else go $ oldR `mappend` Result { rKind = mempty
+                                                    , rIBoot = newIBootR
+                                                    , rIKey = mempty }
+          ans'TB = go $ oldR `mappend` Result { rKind = Map.singleton me TypeBoot
+                                              , rIBoot = newIBoot
+                                              , rIKey = mempty }
+          ans'SKTB = go $ oldR `mappend` Result { rKind = Map.singleton me SplitKeyTypeBoot
+                                                , rIBoot = newIBoot2
+                                                , rIKey = Set.singleton (me,me) }
+
+          go :: Result -> Maybe ((Int, Int), (Result, SCCs))
+          go newR = let (s,sccs) = score (makeG (map fst3 (e:es)) newR)
+                    in Just (s,(newR,sccs))
   in trace (">< breakCycle of "++show bits++"\n\n") $
      if null toCompare
        then imp $ "breakCycle: This SCC had no Simple or KeyTypeBoot nodes!\n"++ unlines (map show sccIn)
        else let (newR,next'sccs) = snd $ maximumBy (compare `on` fst) toCompare
             in breakGraph newR next'sccs
-
-{-
-addKeyfileIBoots :: Result -> Result
-addKeyfileIBoots rIn =
-  let sktbs = Set.fromDistinctAscList . map fst . filter (\(_k,v) -> v==SplitKeyTypeBoot) . Map.assocs . rKind $ rIn
-      self = Set.map (\k -> (keyFile k,k)) sktbs
-      new = Set.map (\(f,t) -> (keyFile f,t)) .
-            Set.filter (\(f,_t) -> Set.member f sktbs) . rIBoot $ rIn
-  in rIn { rIBoot = Set.unions [rIBoot rIn,new,self] }
-
-keyFile :: MKey -> MKey
-keyFile (FMName s) = FMName (s++"'Key")
--}
-
-{-
-
-reducing unneeded SOURCE annotations
-
-2/AB:
-
-A KeyTypeBoot
-B TypeBoot
-
-They are initially both tagged as TypeBoot.
-
-AB/AB/A.hs:7:0:
-    Warning: Unnecessary {-# SOURCE #-} in the import of module `AB.AB.B'
-Ok, modules loaded: AB.AB, AB.AB.A, AB.AB.A, AB.AB.B, AB.AB.B.
-
-./AB/AB/A.hs
-module AB.AB.A (A(..), akeyba) where
-import qualified AB.AB as AB (keyab, keyaa)
-import qualified AB.AB.B as AB.B (bkeyab)
-import {-# SOURCE #-} qualified AB.AB.B as AB (B)
-       ^^^^^^^^^^^^^^
-
-./AB/AB/A.hs-boot
-module AB.AB.A (A, akeyba) where
-import {-# SOURCE #-} qualified AB.AB.B as AB (B)
-
-./AB/AB/B.hs
-module AB.AB.B (B(..), bkeyab) where
-import qualified AB.AB as AB (keyba, keybb)
-import {-# SOURCE #-} qualified AB.AB.A as AB (A)
-import {-# SOURCE #-} qualified AB.AB.A as AB.A (akeyba)
-
-./AB/AB/B.hs-boot
-module AB.AB.B (B) where
-
-./AB/AB.hs
-module AB.AB (keyab, keyaa, keyba, keybb, protoInfo, fileDescriptorProto) where
-import Text.DescriptorProtos.FileDescriptorProto (FileDescriptorProto)
-import Text.ProtocolBuffers.Reflections (ProtoInfo)
-import qualified Text.ProtocolBuffers.WireMessage as P' (wireGet,getFromBS)
-import {-# SOURCE #-} qualified AB.AB.A as AB (A)
-import {-# SOURCE #-} qualified AB.AB.B as AB (B)
-
-Need to express that A.hs-boot should SOURCE import B but that A proper does not need to import with SOURCE.
-
-Why?  Everything aimed at a KeyTypeBoot can aim at its boot file, so
-nothing aims at the main file, so it can import normal stuff!
-
-Same thing applies to normal files for the SplitKeyTypeBoots.
-
-Special case importPN and importPFN that KeyTypeBoot _normal_ files never use 
-
--}

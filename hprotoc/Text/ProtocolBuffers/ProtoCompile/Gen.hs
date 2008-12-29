@@ -36,6 +36,8 @@ import System.FilePath(joinPath)
 
 import Debug.Trace(trace)
 
+ecart :: String -> a -> a
+ecart _ x = x
 
 default (Int)
 
@@ -125,7 +127,7 @@ importPN r selfMod@(ModuleName self) part pn =
       ans = if m1 == selfMod && part /= KeyFile then Nothing
               else Just $ ImportDecl src m1 True fromSource (Just m2)
                             (Just (False,[IAbs (Ident (mName (baseName pn)))]))
-  in trace (unlines . map (\ (a,b) -> a ++ " = "++b) $
+  in ecart (unlines . map (\ (a,b) -> a ++ " = "++b) $
                  [("selfMod",show selfMod)
                  ,("part",show part)
                  ,("pn",show pn)
@@ -153,7 +155,7 @@ importPFN r m@(ModuleName self) pfn =
 -- XXX bad line below
 --              TopProtoInfo -> imp $ "importPFN from the TopProtoInfo module"
                 _ -> ImportDecl src m1 qualified False (if qualified then Just m2 else Nothing) spec
-  in trace (unlines . map (\ (a,b) -> a ++ " = "++b) $
+  in ecart (unlines . map (\ (a,b) -> a ++ " = "++b) $
                 [("m",show m)
                 ,("pfn",show pfn)
                 ,("o",show o)
@@ -463,11 +465,13 @@ descriptorNormalModule result di
         myKind = getKind result (pKey protoName)
         sepKey = myKind == SplitKeyTypeBoot
         (extendees,myKeys) = unzip $ F.toList (keys di)
+        extendees' = if sepKey then [] else extendees
+        myKeys' = if sepKey then [] else myKeys
         m = ModuleName (fqMod protoName)
         exportKeys = map (EVar . unqualFName . fieldName) myKeys
         imports = (standardImports False (hasExt di) ++) . mergeImports . concat $
                     [ mapMaybe (importPN result m Normal) $
-                       extendees ++ mapMaybe typeName (myKeys ++ (F.toList (fields di)))
+                        extendees' ++ mapMaybe typeName (myKeys' ++ (F.toList (fields di)))
                     , mapMaybe (importPFN result m) (map fieldName (myKeys ++ F.toList (knownKeys di))) ]
         declKeys | sepKey = []
                  | otherwise = keysXTypeVal (descName di) (keys di)

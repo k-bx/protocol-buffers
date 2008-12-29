@@ -9,7 +9,7 @@ module Text.ProtocolBuffers.Basic
   , WireTag(..),FieldId(..),WireType(..),FieldType(..),EnumCode(..),WireSize
     -- * Some of the type classes implemented messages and fields
   , Mergeable(..),Default(..),Wire(..)
-  , isValidUTF8
+  , isValidUTF8, toUtf8
   ) where
 
 import Data.Binary.Put(Put)
@@ -33,16 +33,17 @@ import Data.ByteString.Lazy.UTF8 as U (toString,fromString)
 -- | 'Utf8' is used to mark 'ByteString' values that (should) contain
 -- valud utf8 encoded strings.  This type is used to represent
 -- 'TYPE_STRING' values.
-newtype Utf8 = Utf8 {utf8 :: ByteString}
-  deriving (Data,Typeable,Eq,Ord)
+newtype Utf8 = Utf8 ByteString deriving (Data,Typeable,Eq,Ord)
+
+utf8 :: Utf8 -> ByteString
+utf8 (Utf8 bs) = bs
 
 instance Read Utf8 where
-  readsPrec d xs =
-    let r :: Int -> ReadS String
-        r = readsPrec
-        f :: (String,String) -> (Utf8,String)
-        f (a,b) = (Utf8 (U.fromString a),b)
-    in map f . r d $ xs
+  readsPrec d xs = let r :: Int -> ReadS String
+                       r = readsPrec
+                       f :: (String,String) -> (Utf8,String)
+                       f (a,b) = (Utf8 (U.fromString a),b)
+                   in map f . r d $ xs
 
 instance Show Utf8 where
   showsPrec d (Utf8 bs) = let s :: Int -> String -> ShowS
@@ -218,3 +219,7 @@ isValidUTF8 ws = go 0 (L.unpack ws) 0 where
   high (x:xs) n | 128 <= x && x <= 143 = go 2 xs $! succ n
                 | otherwise = Just n
   high [] n = Just n
+
+toUtf8 :: ByteString -> Either Int Utf8
+toUtf8 b = maybe (Utf8 b) Left (isValidUTF8 b)
+
