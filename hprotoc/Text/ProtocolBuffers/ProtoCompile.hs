@@ -16,7 +16,7 @@ import qualified System.FilePath.Posix as Canon(takeBaseName)
 
 import Text.ProtocolBuffers.Basic(defaultValue)
 import Text.ProtocolBuffers.Identifiers(MName,checkDIString,mangle)
-import Text.ProtocolBuffers.Reflections(ProtoInfo(..),DescriptorInfo(..),EnumInfo(..))
+import Text.ProtocolBuffers.Reflections(ProtoInfo(..),EnumInfo(..))
 import Text.ProtocolBuffers.WireMessage (messagePut)
 
 import qualified Text.DescriptorProtos.FileDescriptorProto as D(FileDescriptorProto)
@@ -24,7 +24,7 @@ import qualified Text.DescriptorProtos.FileDescriptorProto as D.FileDescriptorPr
 import qualified Text.DescriptorProtos.FileDescriptorSet   as D(FileDescriptorSet)
 import qualified Text.DescriptorProtos.FileDescriptorSet   as D.FileDescriptorSet(FileDescriptorSet(..))
 
-import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(makeResult,displayResult)
+import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(makeResult)
 import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule)
 import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,makeNameMaps,getTLS
@@ -177,15 +177,14 @@ dump imports (Just (LocalFP dumpFile)) fdp fdps = do
 run :: Options -> IO ()
 run options = do
   (env,fdps) <- loadProto (optInclude options) (optProto options)
-  print "All proto files loaded"
+  putStrLn "All proto files loaded"
   let fdp = either error id . top'FDP . fst . getTLS $ env
   when (not (optDryRun options)) $ dump (optImports options) (optDesc options) fdp fdps
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
-  print "Haskell name mangling done"
+  putStrLn "Haskell name mangling done"
   let protoInfo = makeProtoInfo (optUnknownFields options) nameMap fdp
       result = makeResult protoInfo
-  putStrLn "Final Result"
-  putStrLn (displayResult result)
+  seq result (putStrLn "Recursive modules resolved")
   let produceMSG di = do
         when (not (optDryRun options)) $ do
           -- There might be several modules

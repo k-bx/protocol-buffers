@@ -15,7 +15,7 @@ With this understanding, there are FOUR renderings of a descriptor.
 Two renderings have non-separate Key-defs (or no Key-defs at all).
 Two renderings have separate Key-defs.
 
-The two non-sepatate Key-defs renderings are
+The two non-separate Key-defs renderings are:
 
 "simple" :
  *  normal file with the type-def and any Key-defs
@@ -24,7 +24,7 @@ The two non-sepatate Key-defs renderings are
  *  normal file with the type-def and any Key-defs
  -  hs-boot file declares the type-def
 
-The second pair do not care whether the Key-defs use the type:
+The other two have separate Key-defs, in ".hs-boot" or "'Key.hs" files:
 
 "key-type-boot" :
  +  normal file with the type-def and the Key-defs
@@ -36,17 +36,20 @@ The second pair do not care whether the Key-defs use the type:
  -  hs-boot file declares the type-def
 
 In general, all nodes without keys could be rendered as "type-boot"
-and all nodes with keys as "split-key,type-boot", which would break all
-SCCs. But that is wasteful: 2 or 3 files each (2 for root ProtoInfo file).
+and all nodes with keys as "split-key,type-boot", which would break
+all SCCs. But that is wasteful: 2 or 3 files each (2 for root
+ProtoInfo file).  And this waste will also lead to warnings from ghc
+nagging about unneeded {-# SOURCE #-} pragmas.
 
-Only the files marked with * have incoming and outgoing edges and need
-to be considered.  The + are just sources and - are just sinks.
+Only the files marked with * have incoming and outgoing edges and NEED
+to be considered.  With enough {-# SOURCE #-} pragmas, the + are
+just sources and - are just sinks.
 
 Initially all renderings are optimistically Simple.  Some are quickly
 changed into TypeBoot by observing the modules which import foreign
 keys and marking the reciprocal type imports as TypeBoot.
 
-The next task is to break the SCCs which arise just from the foriegn
+The next task is to break the SCCs which arise just from the foreign
 key imports.  The algorithm makes a graph of these and breaks all of
 them by changing the one with the best score from a TypeBoot node into
 a KeyTypeBoot node.
@@ -56,7 +59,7 @@ TopProtoInfo and never change.  The most that happens to the top
 protoInfo node is that its targets get changed and some imports get
 SOURCE pragmas.
 
-Now considering both type and key imports as links, some more SCCs
+Now considering both type and key imports as links, more SCCs
 might arise.  These are also scored. The thing to grasp is how
 changing a message's rending is allowed to happen:
 
@@ -82,6 +85,15 @@ should import the type defined in 'b' using a SOURCE pragma.  Keys
 from messages rendered as KeyTypeBoot should be imported using SOURCE
 pragmas.  Keys from messages rendered as SplitKeyTypeBoot should be
 imported from the auxiliary 'Key files.
+
+The code below is more complicated in order to reduce the SOURCE
+pragmas and avoid ghc's warnings.  All files are tracked and SOURCE
+pragmas are added in steps.  This is unlikely to be perfect — some
+extra SOURCE pragmas might be left over, but I do not have an example
+of this happening.  This also means a DescriptorInfo may have several
+file parts and these may end up in different SCCs.  To simplify
+processing these different SCCs which share a DescriptorInfo are
+merged by 'rejoinVertices'.
 
 -}
 
@@ -161,6 +173,7 @@ type SCCs = [G]
 data Result = Result { rKind :: Map MKey VertexKind
                      , rIBoot :: Set (MKey,Part,MKey)
                      , rIKey :: Set (MKey,MKey) }
+  deriving Eq
 
 displayResult :: Result -> String
 displayResult (Result {rKind = kv, rIBoot = ab, rIKey=ab'keys }) = unlines $
@@ -211,7 +224,7 @@ makeResult protoInfo =
   let pvs@(p,vs) = makeVertices protoInfo
       initResult = breakKeys pvs
       sccs = cycles (makeG (p:vs) initResult)
-      answer = breakGraph initResult sccs
+      answer = cull (p:vs) $ breakGraph initResult sccs
       finalGraph = makeG (p:vs) answer
       remainingProblems = cycles finalGraph
       msg = unlines [ "<!!!!!!!!!!!> KLAXON, RED SPINNING LIGHT, ETC."
@@ -353,8 +366,8 @@ makeEdgesForV r v =
        SplitKeyTypeBoot -> [standardSKTB,keyfileSKTB,source]
 
 breakGraph ::  Result -> SCCs -> Result
-breakGraph r [] = trace ("\nbreakGraph leaf answer\n"++displayResult r) $ r
-breakGraph r sccs = trace ("\nbreakGraph\n"++displayResult r) $
+breakGraph r [] = ecart ("\nbreakGraph leaf answer\n"++displayResult r) $ r
+breakGraph r sccs = ecart ("\nbreakGraph\n"++displayResult r) $
                     r `mappend` mconcat (map (breakCycle r) (rejoinVertices sccs))
 
 -- I wonder if there is any input which leads to a module having
@@ -372,16 +385,7 @@ rejoinVertices gs =
       process ((v,g):rest) = walk id rest where
         walk p [] = g : process (p [])
         walk p (x@(v',g'):rest') | Set.null (Set.intersection v v') = walk (p . (x:)) rest'
-                                 | otherwise = ecart msg $ process ((Set.union v v',g++g') : p [])
-          where
-            msg = unlines [ "! THIS FILE TASTES ODD."
-                          , "!"
-                          , "! Your proto file triggered interesting behavior in hprotoc's internals."
-                          , "! The author of hprotoc at <protobuf@personal.mightyreason.com> is curious about this."
-                          , "! Could you send him a copy of this or a similar proto file?"
-                          , "! ( Specifically, the code for handling of mutually recursive modules is quite tricky )"
-                          , "! This message may repeat several times.  Sorry about the extra noise."
-                          ] ++ showG g ++ " -- and -- " ++ showG g'
+                                 | otherwise = process ((Set.union v v',g++g') : p [])
   in process vgs
 
 {-
@@ -401,18 +405,18 @@ breakCycle oldR sccIn =
       toCompare = mapMaybe f (pullEach sccIn) where
         allV = Set.fromList (map (vMKey . fst3) sccIn)
         f :: (E,[E]) -> Maybe ((Int, Int), (Result, SCCs))
-        f (e@(v,L p me,_bLs), es) = trace (">< picking:\n"++showE e++
+        f (e@(v,L p me,_bLs), es) = ecart (">< picking:\n"++showE e++
                                            "\nfrom:"++show bits++
                                            "\nscore: "++show observe++"\n") $
                                     answer where
           answer = case (getKind oldR me,p) of
                      (TopProtoInfo,Normal)      -> ans'R
-                     (Simple,Normal)            -> ans'R `mplus` ans'TB
-                     (TypeBoot,Normal)          -> ans'  `mplus` ans'R
-                     (KeyTypeBoot,Normal)       -> ans'  `mplus` ans'R
-                     (KeyTypeBoot,Source)       -> ans'  `mplus` ans'R `mplus` ans'SKTB -- ans' may be redundant
-                     (SplitKeyTypeBoot,Normal)  -> ans'  `mplus` ans'R
-                     (SplitKeyTypeBoot,KeyFile) -> ans'  `mplus` ans'R -- ans' may be redundant
+                     (Simple,Normal)            -> ans'R  `mplus` ans'TB -- ans' is part of ans'TB
+                     (TypeBoot,Normal)          -> ans'   `mplus` ans'R
+                     (KeyTypeBoot,Normal)       -> ans'   `mplus` ans'R
+                     (KeyTypeBoot,Source)       -> ans'RK `mplus` ans'SKTB -- ans' may be redundant
+                     (SplitKeyTypeBoot,Normal)  -> ans'   `mplus` ans'R
+                     (SplitKeyTypeBoot,KeyFile) -> ans'RK -- ans' may be redundant
                      (TypeBoot,Source) -> imp $
                        "breakCycle.toCompare.f cannot have (TypeBoot,Source) in SCC!" ++ eMsg
                      (SplitKeyTypeBoot,Source) -> imp $
@@ -421,7 +425,27 @@ breakCycle oldR sccIn =
           observe = case answer of Nothing -> "Nothing"; Just (s,_) -> "Just "++show s  -- trace
           eMsg = '\n':unlines (map showE (e:es))
 
-          newIBoot,newIBootR,newIBoot2 :: Set (MKey,Part,MKey)
+          ans',ans'R,ans'TB,ans'SKTB :: Maybe ((Int, Int), (Result, SCCs))
+          ans' = if Set.null newIBoot then Nothing
+                   else go $ oldR `mappend` Result { rKind = mempty
+                                                   , rIBoot = newIBoot
+                                                   , rIKey = mempty }
+          ans'R = if Set.null newIBootR then Nothing
+                    else go $ oldR `mappend` Result { rKind = mempty
+                                                    , rIBoot = newIBootR
+                                                    , rIKey = mempty }
+          ans'RK = if Set.null newIBootRK then Nothing
+                     else go $ oldR `mappend` Result { rKind = mempty
+                                                     , rIBoot = newIBootRK
+                                                     , rIKey = mempty }
+          ans'TB = go $ oldR `mappend` Result { rKind = Map.singleton me TypeBoot
+                                              , rIBoot = newIBoot -- do (TypeBoot,Normal) -> ans'
+                                              , rIKey = mempty }
+          ans'SKTB = go $ oldR `mappend` Result { rKind = Map.singleton me SplitKeyTypeBoot
+                                                , rIBoot = newIBootSKTB
+                                                , rIKey = Set.singleton (me,me) }
+
+          newIBoot,newIBootR,newIBootRK,newIBootSKTB :: Set (MKey,Part,MKey)
           newIBoot = Set.fromList $ do
             (va,L pa a,_) <- es
             iguard (Set.member a allV) $
@@ -441,36 +465,39 @@ breakCycle oldR sccIn =
             let x = (me,p,b)
             guard (Set.notMember x (rIBoot oldR))
             return x
-          newIBoot2 = Set.union newIBoot . Set.fromList $ 
+          newIBootRK = Set.fromList $ do
+            b <- Set.toList (vKeysNeedsTypes v)
+            guard (Set.member b allV)
+            guard (Source == getType (getKind oldR b))
+            guard (me /= b || p == KeyFile)
+            let x = (me,p,b)
+            guard (Set.notMember x (rIBoot oldR))
+            return x
+          newIBootSKTB = Set.union newIBoot . Set.fromList $ 
             (if Set.member me (vKeysNeedsTypes v) then ((me,KeyFile,me):) else id) $ do
               b <- Set.toList (vKeysNeedsTypes v)
-              guard (Set.member (me,Source,b) (rIBoot oldR))
-              let x = (me,KeyFile,b)
+              guard (Set.member (me,Source,b) (rIBoot oldR)) -- copy from (me,Source,b)
+              let x = (me,KeyFile,b)                         -- copy to (me,KeyFile,b)
               iguard (Set.notMember x (rIBoot oldR)) $
                 "breakCycle.toCompare.newIBoot2 KeyTypeBoot already had entries for KeyFile!:"++eMsg
               return x
 
-          ans',ans'R,ans'TB,ans'SKTB :: Maybe ((Int, Int), (Result, SCCs))
-          ans' = if Set.null newIBoot then Nothing
-                   else go $ oldR `mappend` Result { rKind = mempty
-                                                   , rIBoot = newIBoot
-                                                   , rIKey = mempty }
-          ans'R = if Set.null newIBootR then Nothing
-                    else go $ oldR `mappend` Result { rKind = mempty
-                                                    , rIBoot = newIBootR
-                                                    , rIKey = mempty }
-          ans'TB = go $ oldR `mappend` Result { rKind = Map.singleton me TypeBoot
-                                              , rIBoot = newIBoot
-                                              , rIKey = mempty }
-          ans'SKTB = go $ oldR `mappend` Result { rKind = Map.singleton me SplitKeyTypeBoot
-                                                , rIBoot = newIBoot2
-                                                , rIKey = Set.singleton (me,me) }
-
           go :: Result -> Maybe ((Int, Int), (Result, SCCs))
           go newR = let (s,sccs) = score (makeG (map fst3 (e:es)) newR)
                     in Just (s,(newR,sccs))
-  in trace (">< breakCycle of "++show bits++"\n\n") $
+  in ecart (">< breakCycle of "++show bits++"\n\n") $
      if null toCompare
        then imp $ "breakCycle: This SCC had no Simple or KeyTypeBoot nodes!\n"++ unlines (map show sccIn)
        else let (newR,next'sccs) = snd $ maximumBy (compare `on` fst) toCompare
             in breakGraph newR next'sccs
+
+-- 'cull' tries to remove all the extra {-# SOURCE #-} pragmas.  I am
+-- not certain that repeating the 'cull' will make any difference.
+cull :: [V] -> Result -> Result
+cull vs rIn =
+  let trial :: Result -> (MKey,Part,MKey) -> Result
+      trial old x = let new = old { rIBoot = Set.delete x (rIBoot old) }
+                    in if null (cycles (makeG vs new)) then new else old
+      rOut = foldl' trial rIn (Set.toList (rIBoot rIn))
+  in if rOut == rIn then rOut else cull vs rOut
+
