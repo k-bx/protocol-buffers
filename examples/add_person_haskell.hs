@@ -2,6 +2,7 @@ module Main where
 
 import Control.Monad
 import Text.ProtocolBuffers(messageGet,messagePut,Utf8(..),defaultValue)
+import Text.ProtocolBuffers.Header(Utf8(..))
 import qualified Data.ByteString.Lazy as L(readFile,writeFile,null)
 import System
 import Data.Char
