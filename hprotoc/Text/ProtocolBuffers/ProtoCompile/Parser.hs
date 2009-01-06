@@ -52,7 +52,7 @@ import Text.ProtocolBuffers.Header(ByteString,Int32,Int64,Word32,Word64
 import Text.ProtocolBuffers.ProtoCompile.Lexer(Lexed(..),alexScanTokens,getLinePos)
 import Text.ProtocolBuffers.ProtoCompile.Instances(parseLabel,parseType)
 
-import Control.Monad(when,liftM2,liftM3,replicateM)
+import Control.Monad(when,liftM2,liftM3)
 import qualified Data.ByteString.Lazy.Char8 as LC(notElem,head)
 import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.Char(isUpper,toLower)

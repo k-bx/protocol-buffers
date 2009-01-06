@@ -36,14 +36,14 @@ module Text.ProtocolBuffers.WireMessage
     ) where
 
 import Control.Monad(when)
-import Control.Monad.Error.Class(throwError,catchError)
+import Control.Monad.Error.Class(throwError)
 import Control.Monad.ST
 import Data.Array.ST
 import Data.Bits (Bits(..))
 import qualified Data.ByteString.Lazy as BS (length)
 import qualified Data.Foldable as F(foldl',forM_)
 import Data.List (genericLength)
-import qualified Data.Set as Set(delete,null,notMember)
+import qualified Data.Set as Set(delete,null)
 import Data.Typeable (Typeable(..))
 -- GHC internals for getting at Double and Float representation as Word64 and Word32
 -- This has been superceded by the ST array trick (ugly, but promised to work)

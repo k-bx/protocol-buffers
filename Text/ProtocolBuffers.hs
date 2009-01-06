@@ -5,7 +5,7 @@ other modules in protocol-buffers.  The exposed parts are:
 
 @
 import Text.ProtocolBuffers.Basic
-  ( Seq,toUtf8,Utf8(utf8),Int32,Int64,Word32,Word64
+  ( Seq,isValidUTF8,toUtf8,utf8,Utf8(Utf8),Int32,Int64,Word32,Word64
   , WireTag,FieldId,WireType,FieldType,EnumCode,WireSize
   , Mergeable(mergeEmpty,mergeAppend,mergeConcat),Default(defaultValue),Wire)
 import Text.ProtocolBuffers.Default()
@@ -49,7 +49,7 @@ module Text.ProtocolBuffers(
   ) where
 
 import Text.ProtocolBuffers.Basic
-  ( Seq,isValidUTF8,toUtf8,Utf8(utf8),Int32,Int64,Word32,Word64
+  ( Seq,isValidUTF8,toUtf8,utf8,Utf8(Utf8),Int32,Int64,Word32,Word64
   , WireTag,FieldId,WireType,FieldType,EnumCode,WireSize
   , Mergeable(mergeEmpty,mergeAppend,mergeConcat),Default(defaultValue),Wire)
 import Text.ProtocolBuffers.Default()

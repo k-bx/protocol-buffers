@@ -122,8 +122,7 @@ importPN r selfMod@(ModuleName self) part pn =
   let o = pKey pn
       m1 = ModuleName (joinMod (haskellPrefix pn ++ parentModule pn ++ [baseName pn]))
       m2 = ModuleName (joinMod (parentModule pn))
--- ZZZ      fromSource = canSource && S.member (FMName self,o) (rIBoot r)
-      fromSource = S.member (FMName self,part,o) (rIBoot r) -- ZZZ
+      fromSource = S.member (FMName self,part,o) (rIBoot r)
       ans = if m1 == selfMod && part /= KeyFile then Nothing
               else Just $ ImportDecl src m1 True fromSource (Just m2)
                             (Just (False,[IAbs (Ident (mName (baseName pn)))]))
@@ -138,23 +137,23 @@ importPN r selfMod@(ModuleName self) part pn =
                  ,("ans",show ans)]) $
      ans
 
--- ZZZ below
 importPFN :: Result -> ModuleName -> ProtoFName -> Maybe ImportDecl
 importPFN r m@(ModuleName self) pfn =
   let o@(FMName _other) = pfKey pfn
       m1@(ModuleName m1') = ModuleName (joinMod (haskellPrefix' pfn ++ parentModule' pfn))
       m2 = ModuleName (joinMod (parentModule' pfn))
-      qualified = (m1 /= m2) && (m1 /= m)
       spec = Just (False,[IVar (Ident (fName (baseName' pfn)))])
       kind = getKind r o
       fromAlt = S.member (FMName self,FMName m1') (rIKey r)
-      ans = if m1 == m && kind /= SplitKeyTypeBoot then Nothing else Just $
-              case kind of
-                KeyTypeBoot -> ImportDecl src m1 qualified fromAlt (if qualified then Just m2 else Nothing) spec
-                SplitKeyTypeBoot | fromAlt -> ImportDecl src (keyFile m1) qualified False (if qualified then Just m2 else Nothing) spec
--- XXX bad line below
---              TopProtoInfo -> imp $ "importPFN from the TopProtoInfo module"
-                _ -> ImportDecl src m1 qualified False (if qualified then Just m2 else Nothing) spec
+      m1key = if kind == SplitKeyTypeBoot && fromAlt
+                then keyFile m1
+                else m1
+      qualifiedFlag = (m1 /= m)
+      qualifiedName | qualifiedFlag = if m2/=m1key then Just m2 else Nothing
+                    | otherwise = Nothing
+      sourceFlag = (kind == KeyTypeBoot) && fromAlt
+      ans = if not qualifiedFlag && kind /= SplitKeyTypeBoot then Nothing else Just $
+              ImportDecl src m1key qualifiedFlag sourceFlag qualifiedName spec
   in ecart (unlines . map (\ (a,b) -> a ++ " = "++b) $
                 [("m",show m)
                 ,("pfn",show pfn)
@@ -164,7 +163,6 @@ importPFN r m@(ModuleName self) pfn =
                 ,("kind",show kind)
                 ,("ans",show ans)]) $
      ans
-
 
 -- Several items might be taken from the same module, combine these statements
 mergeImports :: [ImportDecl] -> [ImportDecl]
@@ -458,7 +456,7 @@ standardImports isEnumMod ext =
   [ ImportDecl src (ModuleName "Prelude") False False Nothing (Just (False,ops))
   , ImportDecl src (ModuleName "Prelude") True False (Just (ModuleName "P'")) Nothing
   , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False (Just (ModuleName "P'")) Nothing ]
- where ops | ext = map (IVar . Symbol) $ base ++ ["==","<=","&&"," || "]
+ where ops | ext = map (IVar . Symbol) $ base ++ ["==","<=","&&"]
            | otherwise = map (IVar . Symbol) base
        base | isEnumMod = ["+","."]
             | otherwise = ["+"]
