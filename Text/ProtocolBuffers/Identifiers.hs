@@ -74,7 +74,7 @@ max_prec = 11
 
 {-# INLINE readIt #-}
 readIt :: (Read a) => (a -> a1) -> String -> Int -> String -> [(a1, String)]
-readIt con name d  = readParen (d > app_prec) (\r -> [(con m,t) | (name',s) <- lex r, name==name', (m,t) <- readsPrec (max_prec) s])
+readIt con name d  = readParen (d > app_prec) (\r -> [(con m,t) | (name',s) <- lex r, name==name', (m,t) <- readsPrec max_prec s])
 
 {-# INLINE showIt #-}
 showIt :: (Show a) => Int -> [Char] -> a -> String -> String

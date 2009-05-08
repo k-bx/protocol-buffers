@@ -43,6 +43,7 @@ import Data.Bits (Bits(..))
 import qualified Data.ByteString.Lazy as BS (length)
 import qualified Data.Foldable as F(foldl',forM_)
 import Data.List (genericLength)
+import Data.Maybe(fromMaybe)
 import qualified Data.Set as Set(delete,null)
 import Data.Typeable (Typeable(..))
 -- GHC internals for getting at Double and Float representation as Word64 and Word32
@@ -123,7 +124,7 @@ messageAsFieldPutM fi msg = let wireTag = toWireTag fi 11
 --
 -- This is 'runGetOnLazy' applied to 'messageGetM'.
 messageGet :: (ReflectDescriptor msg, Wire msg) => ByteString -> Either String (msg,ByteString)
-messageGet bs = runGetOnLazy (messageGetM) bs
+messageGet bs = runGetOnLazy messageGetM bs
 
 -- | This 'runGetOnLazy' applied to 'messageWithLengthGetM'.
 --
@@ -131,7 +132,7 @@ messageGet bs = runGetOnLazy (messageGetM) bs
 -- succeed when it has consumed precisely this many additional bytes.
 -- The 'ByteString' after this point will be returned.
 messageWithLengthGet :: (ReflectDescriptor msg, Wire msg) => ByteString -> Either String (msg,ByteString)
-messageWithLengthGet bs = runGetOnLazy (messageWithLengthGetM) bs
+messageWithLengthGet bs = runGetOnLazy messageWithLengthGetM bs
 
 -- | This reads the tagged message fields until the stop tag or the
 -- end of input is reached.
@@ -486,7 +487,7 @@ wireGetEnum toMaybe'Enum = do
     Nothing -> throwError (msg ++ show int)
  where msg = "Bad wireGet of Enum "++show (typeOf (undefined `asTypeOf` typeHack toMaybe'Enum))++", unrecognized Int value is "
        typeHack :: (Int -> Maybe e) -> e
-       typeHack f = maybe undefined id (f undefined)
+       typeHack f = fromMaybe undefined (f undefined)
 
 -- This will have to examine the value of positive numbers to get the size
 {-# INLINE size'Varint #-}

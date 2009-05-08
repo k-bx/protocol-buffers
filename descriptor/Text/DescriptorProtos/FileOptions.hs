@@ -1,5 +1,5 @@
 module Text.DescriptorProtos.FileOptions (FileOptions(..)) where
-import Prelude ((+), (==), (<=), (&&), ( || ))
+import Prelude ((+), (==), (<=), (&&))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FileOptions.OptimizeMode as DescriptorProtos.FileOptions (OptimizeMode)
@@ -49,10 +49,9 @@ instance P'.Wire FileOptions where
   wirePut ft' self'@(FileOptions x'1 x'2 x'3 x'4 x'5 x'6 x'7)
    = case ft' of
        10 -> put'Fields
-       11
-        -> do
-             P'.putSize (P'.wireSize 10 self')
-             put'Fields
+       11 -> do
+               P'.putSize (P'.wireSize 10 self')
+               put'Fields
        _ -> P'.wirePutErr ft' self'
     where
         put'Fields
@@ -76,9 +75,8 @@ instance P'.Wire FileOptions where
              8 -> P'.fmap (\ new'Field -> old'Self{java_outer_classname = P'.Just new'Field}) (P'.wireGet 9)
              10 -> P'.fmap (\ new'Field -> old'Self{java_multiple_files = P'.Just new'Field}) (P'.wireGet 8)
              9 -> P'.fmap (\ new'Field -> old'Self{optimize_for = P'.Just new'Field}) (P'.wireGet 14)
-             999
-              -> P'.fmap (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
-                  (P'.wireGet 11)
+             999 -> P'.fmap (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
+                     (P'.wireGet 11)
              _ -> P'.unknownField old'Self field'Number
         allowed'wire'Tags = P'.fromDistinctAscList [10, 66, 72, 80, 7994]
         check'allowed wire'Tag field'Number wire'Type old'Self

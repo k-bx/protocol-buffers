@@ -1,5 +1,5 @@
 module Text.DescriptorProtos.MethodOptions (MethodOptions(..)) where
-import Prelude ((+), (==), (<=), (&&), ( || ))
+import Prelude ((+), (==), (<=), (&&))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
@@ -36,10 +36,9 @@ instance P'.Wire MethodOptions where
   wirePut ft' self'@(MethodOptions x'1 x'2 x'3)
    = case ft' of
        10 -> put'Fields
-       11
-        -> do
-             P'.putSize (P'.wireSize 10 self')
-             put'Fields
+       11 -> do
+               P'.putSize (P'.wireSize 10 self')
+               put'Fields
        _ -> P'.wirePutErr ft' self'
     where
         put'Fields
@@ -55,9 +54,8 @@ instance P'.Wire MethodOptions where
     where
         update'Self field'Number old'Self
          = case field'Number of
-             999
-              -> P'.fmap (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
-                  (P'.wireGet 11)
+             999 -> P'.fmap (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
+                     (P'.wireGet 11)
              _ -> P'.unknownField old'Self field'Number
         allowed'wire'Tags = P'.fromDistinctAscList [7994]
         check'allowed wire'Tag field'Number wire'Type old'Self

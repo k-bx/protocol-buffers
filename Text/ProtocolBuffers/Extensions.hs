@@ -32,7 +32,7 @@ import qualified Data.Foldable as F
 import Data.Generics
 import Data.Map(Map)
 import qualified Data.Map as M
-import Data.Maybe(fromMaybe)
+import Data.Maybe(fromMaybe,isJust)
 import Data.Monoid(mappend)
 import Data.Sequence(Seq,(|>))
 import qualified Data.Sequence as Seq
@@ -612,7 +612,7 @@ class MessageAPI msg a b | msg a -> b where
 
 instance (Default msg,Default a) => MessageAPI msg (msg -> Maybe a) a where
   getVal m f = fromMaybe (fromMaybe defaultValue (f defaultValue)) (f m)
-  isSet m f = maybe False (const True) (f m)
+  isSet m f = isJust (f m)
 
 instance MessageAPI msg (msg -> (Seq a)) (Seq a) where
   getVal m f = f m

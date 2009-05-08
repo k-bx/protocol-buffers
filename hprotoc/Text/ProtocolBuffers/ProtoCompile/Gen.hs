@@ -96,7 +96,7 @@ patvar :: String -> Pat
 patvar t = PVar (Ident t)
 
 match :: String -> [Pat] -> Exp -> Match
-match s p r = Match src (Ident s) p (UnGuardedRhs r) noWhere
+match s p r = Match src (Ident s) p Nothing (UnGuardedRhs r) noWhere
 
 inst :: String -> [Pat] -> Exp -> InstDecl
 inst s p r  = InsDecl $ FunBind [match s p r]
@@ -357,13 +357,13 @@ protoModule result pri fdpBS
 embed'ProtoInfo :: ProtoInfo -> [Decl]
 embed'ProtoInfo pri = [ myType, myValue ]
   where myType = TypeSig src [ Ident "protoInfo" ] (TyCon (local "ProtoInfo"))
-        myValue = PatBind src (PApp (local "protoInfo") []) (UnGuardedRhs $
+        myValue = PatBind src (PApp (local "protoInfo") []) Nothing (UnGuardedRhs $
                     pvar "read" $$ litStr (show pri)) noWhere
 
 embed'fdpBS :: ByteString -> [Decl]
 embed'fdpBS bs = [ myType, myValue ]
   where myType = TypeSig src [ Ident "fileDescriptorProto" ] (TyCon (local "FileDescriptorProto"))
-        myValue = PatBind src (PApp (local "fileDescriptorProto") []) (UnGuardedRhs $
+        myValue = PatBind src (PApp (local "fileDescriptorProto") []) Nothing (UnGuardedRhs $
                     pvar "getFromBS" $$
                       Paren (pvar "wireGet" $$ litInt 11) $$ 
                       Paren (pvar "pack" $$ litStr (LC.unpack bs))) noWhere
@@ -487,7 +487,7 @@ makeKeyType self (extendee,f) = keyType
 makeKeyVal :: ProtoName -> KeyInfo -> Decl
 makeKeyVal _self (_extendee,f) = keyVal
   where typeNumber = getFieldType . typeCode $ f
-        keyVal = PatBind src (PApp (unqualFName . fieldName $ f) []) (UnGuardedRhs
+        keyVal = PatBind src (PApp (unqualFName . fieldName $ f) []) Nothing (UnGuardedRhs
                    (pvar "Key" $$ litInt (getFieldId (fieldNumber f))
                                $$ litInt typeNumber
                                $$ maybe (pvar "Nothing")
@@ -702,7 +702,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                unknownBranch =args (pvar "unknown")
                args x = x $$ lvar "field'Number" $$ lvar "wire'Type" $$ lvar "old'Self"
         isAllowedExt x = pvar "or" $$ List ranges where
-          (<=!) = mkOp "<="; (&&!) = mkOp "&&"; (==!) = mkOp ("==")
+          (<=!) = mkOp "<="; (&&!) = mkOp "&&"; (==!) = mkOp "=="
           ranges = map (\ (FieldId lo,FieldId hi) -> if hi < maxHi
                                                        then if lo == hi
                                                               then (x ==! litInt lo)
@@ -738,9 +738,9 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         -- that are not right-biased replacements.  The "append" uses
         -- knowledge of how all repeated fields get merged.
     in InstDecl src [] (private "Wire") [TyCon me] . map InsDecl $
-        [ FunBind [Match src (Ident "wireSize") [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] sizeCases whereCalcSize]
-        , FunBind [Match src (Ident "wirePut")  [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] putCases wherePutFields]
-        , FunBind [Match src (Ident "wireGet") [patvar "ft'"] getCases whereDecls]
+        [ FunBind [Match src (Ident "wireSize") [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] Nothing sizeCases whereCalcSize]
+        , FunBind [Match src (Ident "wirePut")  [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] Nothing putCases wherePutFields]
+        , FunBind [Match src (Ident "wireGet") [patvar "ft'"] Nothing getCases whereDecls]
         ]
 
 instanceReflectDescriptor :: DescriptorInfo -> Decl
@@ -761,9 +761,9 @@ instanceReflectDescriptor di
 
 ------------------------------------------------------------------
 
-derives,derivesEnum :: [QName]
-derives = map private ["Show","Eq","Ord","Typeable"]
-derivesEnum = map private ["Read","Show","Eq","Ord","Typeable"]
+derives,derivesEnum :: [Deriving]
+derives = map (\ x -> (private x,[])) ["Show","Eq","Ord","Typeable"]
+derivesEnum = map (\ x -> (private x,[])) ["Read","Show","Eq","Ord","Typeable"]
 
 useType :: Int -> Maybe String
 useType  1 = Just "Double"

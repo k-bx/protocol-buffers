@@ -1,28 +1,26 @@
 name:           protocol-buffers
-version:        1.2.3
-cabal-version:  >= 1.2
+version:        1.4.0
+cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
 license-file:   LICENSE
 copyright:      (c) 2008 Christopher Edward Kuklewicz
 author:         Christopher Edward Kuklewicz
 maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
-stability:      Experimental
+stability:      Beta
 homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
 package-url:    http://darcs.haskell.org/packages/protocol-buffers2/
 synopsis:       Parse Google Protocol Buffer specifications
 description:    Parse proto files and generate Haskell code.
 category:       Text
-Tested-With:    GHC ==6.8.3
+Tested-With:    GHC ==6.10.1
 --data-files:     
 extra-source-files: Setup.hs
-                    doc.txt
                     TODO
                     README
-                    Skeleton.hs-boot
-                    descriptor.proto
                     google/protobuf/unittest.proto
                     google/protobuf/unittest_import.proto
+                    google/protobuf/unittest_custom_options.proto
 -- extra-tmp-files:
 
 flag small_base
@@ -42,27 +40,19 @@ Library
                    Text.ProtocolBuffers.WireMessage
                    Text.ProtocolBuffers.Identifiers
 
+  build-depends: containers,
+                 bytestring,
+                 array,
+                 filepath,
+                 directory,
+                 mtl,
+                 binary, parsec, utf8-string, haskell-src,
+                 QuickCheck
+
   if flag(small_base)
-    build-depends: base == 4.*,
-                   containers,
-                   bytestring,
-                   array,
-                   filepath,
-                   directory,
-                   mtl,
-                   QuickCheck,
-                   binary, parsec, utf8-string, haskell-src,
-                   syb
+    build-depends: base == 4.*, syb
   else
-    build-depends: base == 3.*,
-                   containers,
-                   bytestring,
-                   array,
-                   filepath,
-                   directory,
-                   mtl,
-                   binary, parsec, utf8-string, haskell-src,
-                   QuickCheck
+    build-depends: base == 3.*
 
 -- Most of these are needed for protocol-buffers (Get and WireMessage.hs)
   extensions:      DeriveDataTypeable,

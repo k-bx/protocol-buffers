@@ -29,10 +29,9 @@ instance P'.Wire ExtensionRange where
   wirePut ft' self'@(ExtensionRange x'1 x'2 x'3)
    = case ft' of
        10 -> put'Fields
-       11
-        -> do
-             P'.putSize (P'.wireSize 10 self')
-             put'Fields
+       11 -> do
+               P'.putSize (P'.wireSize 10 self')
+               put'Fields
        _ -> P'.wirePutErr ft' self'
     where
         put'Fields

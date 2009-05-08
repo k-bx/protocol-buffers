@@ -11,32 +11,30 @@
     needed to make the tests below type-check, though they could have
     been used in 'test4', test5', and 'test7'.
 
-@
-import Text.DescriptorProtos.Options
-import Text.DescriptorProtos(fileDescriptorProto)
-
-test1 :: D.FileOptions
-test1 = options fileDescriptorProto
-
-test2 :: Maybe D.MessageOptions
-test2 = return fileDescriptorProto >>= descend "FieldDescriptorProto" >>= return . options
-
-test3 :: Maybe D.EnumOptions
-test3 = return fileDescriptorProto >>= toDP "FieldDescriptorProto" >>= descend "Type" >>= return . options
-
-test4 :: Maybe D.EnumValueOptions
-test4 = return fileDescriptorProto >>= toDP "FieldDescriptorProto" >>= toEP "Type" >>= descend "TYPE_DOUBLE" >>= return . options
-
-test5 :: Maybe D.FieldOptions
-test5 = return fileDescriptorProto >>= toDP "DescriptorProto" >>= toDP "ExtensionRange" >>= descend "start" >>= return . options
-
-test6 :: Maybe D.ServiceOptions
-test6 = return fileDescriptorProto >>= descend "ImaginaryService" >>= return . options
-
-test7 :: Maybe D.MethodOptions
-test7 = return fileDescriptorProto >>= toSP "ImaginaryService" >>= descend "ImaginaryMethod" >>= return . options
-@
-|-}
+> import Text.DescriptorProtos.Options
+> import Text.DescriptorProtos(fileDescriptorProto)
+> 
+> test1 :: D.FileOptions
+> test1 = options fileDescriptorProto
+> 
+> test2 :: Maybe D.MessageOptions
+> test2 = return fileDescriptorProto >>= descend "FieldDescriptorProto" >>= return . options
+> 
+> test3 :: Maybe D.EnumOptions
+> test3 = return fileDescriptorProto >>= toDP "FieldDescriptorProto" >>= descend "Type" >>= return . options
+> 
+> test4 :: Maybe D.EnumValueOptions
+> test4 = return fileDescriptorProto >>= toDP "FieldDescriptorProto" >>= toEP "Type" >>= descend "TYPE_DOUBLE" >>= return . options
+> 
+> test5 :: Maybe D.FieldOptions
+> test5 = return fileDescriptorProto >>= toDP "DescriptorProto" >>= toDP "ExtensionRange" >>= descend "start" >>= return . options
+> 
+> test6 :: Maybe D.ServiceOptions
+> test6 = return fileDescriptorProto >>= descend "ImaginaryService" >>= return . options
+> 
+> test7 :: Maybe D.MethodOptions
+> test7 = return fileDescriptorProto >>= toSP "ImaginaryService" >>= descend "ImaginaryMethod" >>= return . options
+-}
 module Text.DescriptorProtos.Options(name,options,descend',descend,descendKey',descendKey
                                     ,toDP,toEP,toSP,toFP,toEVP,toMP
                                     ,NameAndOptions,DescendClass,DescendKey

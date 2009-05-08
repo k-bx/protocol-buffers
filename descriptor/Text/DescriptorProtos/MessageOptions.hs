@@ -1,5 +1,5 @@
 module Text.DescriptorProtos.MessageOptions (MessageOptions(..)) where
-import Prelude ((+), (==), (<=), (&&), ( || ))
+import Prelude ((+), (==), (<=), (&&))
 import qualified Prelude as P'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
@@ -37,10 +37,9 @@ instance P'.Wire MessageOptions where
   wirePut ft' self'@(MessageOptions x'1 x'2 x'3 x'4)
    = case ft' of
        10 -> put'Fields
-       11
-        -> do
-             P'.putSize (P'.wireSize 10 self')
-             put'Fields
+       11 -> do
+               P'.putSize (P'.wireSize 10 self')
+               put'Fields
        _ -> P'.wirePutErr ft' self'
     where
         put'Fields
@@ -58,9 +57,8 @@ instance P'.Wire MessageOptions where
         update'Self field'Number old'Self
          = case field'Number of
              1 -> P'.fmap (\ new'Field -> old'Self{message_set_wire_format = P'.Just new'Field}) (P'.wireGet 8)
-             999
-              -> P'.fmap (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
-                  (P'.wireGet 11)
+             999 -> P'.fmap (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
+                     (P'.wireGet 11)
              _ -> P'.unknownField old'Self field'Number
         allowed'wire'Tags = P'.fromDistinctAscList [8, 7994]
         check'allowed wire'Tag field'Number wire'Type old'Self

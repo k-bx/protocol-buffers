@@ -58,7 +58,7 @@ module Text.ProtocolBuffers.Get
 -- import qualified Data.Binary.Strict.Class as P(BinaryParser(..))
 -- The Get monad is an instance of all of these library classes:
 import Control.Applicative(Applicative(pure,(<*>)),Alternative(empty,(<|>)))
-import Control.Monad(MonadPlus(mzero,mplus))
+import Control.Monad(MonadPlus(mzero,mplus),when)
 import Control.Monad.Error.Class(MonadError(throwError,catchError),Error(strMsg))
 -- It can be a MonadCont, but the semantics are too broken without a ton of work.
 
@@ -163,7 +163,7 @@ lookAheadM :: Get (Maybe a) -> Get (Maybe a)
 lookAheadM todo = do
   setCheckpoint
   a <- todo
-  maybe useCheckpoint (\_ -> clearCheckpoint) a
+  maybe useCheckpoint (const clearCheckpoint) a
   return a
 
 -- | 'lookAheadE' runs the @todo@ action. If the action returns 'Left' then the 
@@ -176,7 +176,7 @@ lookAheadE :: Get (Either a b) -> Get (Either a b)
 lookAheadE todo = do
   setCheckpoint
   a <- todo
-  either (\_ -> useCheckpoint) (\_ -> clearCheckpoint) a
+  either (const useCheckpoint) (const clearCheckpoint) a
   return a
 
 -- 'collect' is used by 'putCheckpoint' and 'throwError'
@@ -249,8 +249,7 @@ putFull s = Get $ \ sc _s pc -> sc () s pc
 suspendUntilComplete :: Get ()
 suspendUntilComplete = do
   continue <- suspend
-  if continue then suspendUntilComplete
-    else return ()
+  when continue suspendUntilComplete
 
 -- | Call suspend and throw and error with the provided @msg@ if
 -- Nothing has been passed to the 'Partial' continuation.  Otherwise
@@ -541,7 +540,7 @@ instance Monad Get where
   {-# INLINE return #-}
   m >>= k  = Get (\sc -> unGet m (\a -> unGet (k a) sc))
   {-# INLINE (>>=) #-}
-  fail msg = throwError (strMsg msg)
+  fail = throwError . strMsg
 
 instance MonadError String Get where
   throwError msg = Get $ \_sc  s pcIn ->

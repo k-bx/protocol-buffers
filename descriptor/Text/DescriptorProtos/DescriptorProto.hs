@@ -50,10 +50,9 @@ instance P'.Wire DescriptorProto where
   wirePut ft' self'@(DescriptorProto x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8)
    = case ft' of
        10 -> put'Fields
-       11
-        -> do
-             P'.putSize (P'.wireSize 10 self')
-             put'Fields
+       11 -> do
+               P'.putSize (P'.wireSize 10 self')
+               put'Fields
        _ -> P'.wirePutErr ft' self'
     where
         put'Fields
@@ -79,8 +78,8 @@ instance P'.Wire DescriptorProto where
              6 -> P'.fmap (\ new'Field -> old'Self{extension = P'.append (extension old'Self) new'Field}) (P'.wireGet 11)
              3 -> P'.fmap (\ new'Field -> old'Self{nested_type = P'.append (nested_type old'Self) new'Field}) (P'.wireGet 11)
              4 -> P'.fmap (\ new'Field -> old'Self{enum_type = P'.append (enum_type old'Self) new'Field}) (P'.wireGet 11)
-             5
-              -> P'.fmap (\ new'Field -> old'Self{extension_range = P'.append (extension_range old'Self) new'Field}) (P'.wireGet 11)
+             5 -> P'.fmap (\ new'Field -> old'Self{extension_range = P'.append (extension_range old'Self) new'Field})
+                   (P'.wireGet 11)
              7 -> P'.fmap (\ new'Field -> old'Self{options = P'.mergeAppend (options old'Self) (P'.Just new'Field)}) (P'.wireGet 11)
              _ -> P'.unknownField old'Self field'Number
         allowed'wire'Tags = P'.fromDistinctAscList [10, 18, 26, 34, 42, 50, 58]
