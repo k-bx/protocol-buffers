@@ -31,13 +31,15 @@ import qualified Text.DescriptorProtos.FieldDescriptorProto.Label     as D.Field
 import           Text.DescriptorProtos.FieldDescriptorProto.Label     as D.FieldDescriptorProto.Label(Label(..))
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto(Type)
 import           Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto.Type(Type(..))
+import qualified Text.DescriptorProtos.FieldOptions                   as D(FieldOptions(FieldOptions))
+import qualified Text.DescriptorProtos.FieldOptions                   as D.FieldOptions(FieldOptions(..))
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D(FileDescriptorProto(FileDescriptorProto)) 
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D.FileDescriptorProto(FileDescriptorProto(..)) 
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections
-import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag,runPut)
+import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag,toPackedWireTag,runPut)
 import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..))
 
 import qualified Data.Foldable as F(foldr,toList)
@@ -156,19 +158,25 @@ toFieldInfo' reMap parent
                  , D.FieldDescriptorProto.label = Just label
                  , D.FieldDescriptorProto.type' = Just type'
                  , D.FieldDescriptorProto.type_name = mayTypeName
-                 , D.FieldDescriptorProto.default_value = mayRawDef })
+                 , D.FieldDescriptorProto.default_value = mayRawDef
+                 , D.FieldDescriptorProto.options = mayOpt })
     = fieldInfo
   where mayDef = parseDefaultValue f
         fieldInfo = let (ProtoName x a b c) = toHaskell reMap $ fqAppend parent [IName name]
                         protoFName = ProtoFName x a b (mangle c)
                         fieldId = (FieldId (fromIntegral number))
                         fieldType = (FieldType (fromEnum type'))
-                        wt = toWireTag fieldId fieldType
+                        wt | packedOption = toPackedWireTag fieldId
+                           | otherwise = toWireTag fieldId fieldType
                         wtLength = size'Varint (getWireTag wt)
+                        packedOption = case mayOpt of
+                                         Just (D.FieldOptions { D.FieldOptions.packed = Just True }) -> True
+                                         _ -> False
                     in FieldInfo protoFName
                                  fieldId
                                  wt
                                  wtLength
+                                 packedOption
                                  (label == LABEL_REQUIRED)
                                  (label == LABEL_REPEATED)
                                  fieldType

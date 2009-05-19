@@ -1,10 +1,10 @@
 -- | This modules colelct utility routines related to the different
 -- incarnations of identifiers in the code.  The basic identifier is
--- always ASCII, but because of the self gereneted DescriptorProto
+-- always ASCII, but because of the self generated DescriptorProto
 -- data structures it is stored in 'Utf8' tagged lazy bytestrings.
 --
 -- An 'identifier' is a non-empty ASCII string made of [a-zA-Z0-9_]
--- where the first cahracter is never in [0-9].
+-- where the first character is never in [0-9].
 --
 -- A 'field' is a mangled identifer that is a valid Haskell name that
 -- begins with lower case, and which may have a single quote at the
@@ -13,7 +13,7 @@
 --
 -- A 'module' is a mangled identifier that is a valid Haskell name
 -- that begins with upper case.  These never have a single quote.  A
--- leading _ is replaced with a leading U'_ to make a valid
+-- leading '_' is replaced with a leading "U'_" to make a valid
 -- identifier.
 module Text.ProtocolBuffers.Identifiers
   ( unull,toString,fromString

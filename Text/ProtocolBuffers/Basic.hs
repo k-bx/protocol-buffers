@@ -12,6 +12,7 @@ module Text.ProtocolBuffers.Basic
   , isValidUTF8, toUtf8, utf8
   ) where
 
+import Control.Monad.Error.Class(throwError)
 import Data.Binary.Put(Put)
 import Data.Bits(Bits)
 import Data.ByteString.Lazy(ByteString)
@@ -167,7 +168,8 @@ class Mergeable a where
   mergeAppend _a b = b
 
   -- | 'mergeConcat' is @ F.foldl mergeAppend mergeEmpty @ and this
-  -- default definition is not overrring in any of the code.
+  -- default definition is not overridden in any of the code except
+  -- for the (Seq a) instance.
   mergeConcat :: F.Foldable t => t a -> a
   mergeConcat = F.foldl mergeAppend mergeEmpty
 
@@ -200,6 +202,11 @@ class Wire b where
   wirePut :: FieldType -> b -> Put
   {-# INLINE wireGet #-}
   wireGet :: FieldType -> Get b
+  {-# INLINE wireGetPacked #-}
+  wireGetPacked :: FieldType -> Get (Seq b)
+  wireGetPacked ft = throwError ("Text.ProtocolBuffers.ProtoCompile.Basic: wireGetPacked default:"
+                                 ++ "\n  There is no way to get a packed FieldType of "++show ft
+                                 ++ ".\n  Either there is a bug in this library or the wire format is has been updated.")
 
 -- Returns Nothing if valid, and the position of the error if invalid
 isValidUTF8 :: ByteString -> Maybe Int

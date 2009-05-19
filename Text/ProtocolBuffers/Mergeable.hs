@@ -3,6 +3,7 @@ module Text.ProtocolBuffers.Mergeable() where
 
 import Text.ProtocolBuffers.Basic
 import Data.Monoid(mempty,mappend)
+import Data.Sequence(empty,(><))
 
 -- Base types are not very mergeable, but their Maybe and Seq versions are:
 instance Mergeable a => Mergeable (Maybe a) where
@@ -10,8 +11,8 @@ instance Mergeable a => Mergeable (Maybe a) where
     mergeAppend = mayMerge
 
 instance Mergeable (Seq a) where
-    mergeEmpty = mempty
-    mergeAppend = mappend
+    mergeEmpty = empty
+    mergeAppend = (><)
 
 -- These all have errors as mergeEmpty and use the second paramater for mergeAppend
 instance Mergeable Bool

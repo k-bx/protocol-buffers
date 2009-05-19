@@ -96,6 +96,7 @@ data FieldInfo = FieldInfo { fieldName     :: ProtoFName
                            , fieldNumber   :: FieldId
                            , wireTag       :: WireTag
                            , wireTagLength :: WireSize         -- ^ Bytes required in the Varint formatted wireTag
+                           , isPacked      :: Bool
                            , isRequired    :: Bool
                            , canRepeat     :: Bool
                            , typeCode      :: FieldType        -- ^ fromEnum of Text.DescriptorProtos.FieldDescriptorProto.Type

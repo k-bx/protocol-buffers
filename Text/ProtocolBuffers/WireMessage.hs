@@ -15,7 +15,8 @@ module Text.ProtocolBuffers.WireMessage
     ( -- * User API functions
       -- ** Main encoding and decoding operations (non-delimited message encoding)
       messageSize,messagePut,messageGet,messagePutM,messageGetM
-      -- **  The author's home brewed encoding (length written first to delimit message)
+      -- ** These should agree with the length delimited message format of protobuf-2.10, where the
+      -- message size preceeds the data.
     , messageWithLengthSize,messageWithLengthPut,messageWithLengthGet,messageWithLengthPutM,messageWithLengthGetM
       -- ** Encoding to write or read a single message field (good for delimited messages or incremental use)
     , messageAsFieldSize,messageAsFieldPutM,messageAsFieldGetM
@@ -24,12 +25,12 @@ module Text.ProtocolBuffers.WireMessage
       -- * The Wire monad itself.  Users should beware that passing an incompatible 'FieldType' is a runtime error or fail
     , Wire(..)
       -- * The internal exports, for use by generated code and the "Text.ProtcolBuffer.Extensions" module
-    , size'Varint,toWireType,toWireTag,mkWireTag
+    , size'Varint,toWireType,toWireTag,toPackedWireTag,mkWireTag
     , prependMessageSize,putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag
-    , wireSizeReq,wireSizeOpt,wireSizeRep
-    , wirePutReq,wirePutOpt,wirePutRep
+    , wireSizeReq,wireSizeOpt,wireSizeRep,wireSizePacked
+    , wirePutReq,wirePutOpt,wirePutRep,wirePutPacked
     , wireSizeErr,wirePutErr,wireGetErr
-    , getMessageWith,getBareMessageWith,wireGetEnum
+    , getMessageWith,getBareMessageWith,wireGetEnum,wireGetPackedEnum
     , unknownField,unknown,wireGetFromWire
     , castWord64ToDouble,castWord32ToFloat,castDoubleToWord64,castFloatToWord32
     , zzEncode64,zzEncode32,zzDecode64,zzDecode32
@@ -44,6 +45,8 @@ import qualified Data.ByteString.Lazy as BS (length)
 import qualified Data.Foldable as F(foldl',forM_)
 import Data.List (genericLength)
 import Data.Maybe(fromMaybe)
+import Data.Sequence ((|>))
+import qualified Data.Sequence as Seq(length,empty)
 import qualified Data.Set as Set(delete,null)
 import Data.Typeable (Typeable(..))
 -- GHC internals for getting at Double and Float representation as Word64 and Word32
@@ -188,57 +191,115 @@ prependMessageSize n = n + size'Varint n
 
 {-# INLINE wirePutReq #-}
 -- | Used in generated code.
-wirePutReq :: Wire b => WireTag -> FieldType -> b -> Put
-wirePutReq wireTag 10 b = let startTag = getWireTag wireTag
+wirePutReq :: Wire v => WireTag -> FieldType -> v -> Put
+wirePutReq wireTag 10 v = let startTag = getWireTag wireTag
                               endTag = succ startTag
-                          in putVarUInt startTag >> wirePut 10 b >> putVarUInt endTag
-wirePutReq wireTag fieldType b = putVarUInt (getWireTag wireTag) >> wirePut fieldType b
+                          in putVarUInt startTag >> wirePut 10 v >> putVarUInt endTag
+wirePutReq wireTag fieldType v = putVarUInt (getWireTag wireTag) >> wirePut fieldType v
 
 {-# INLINE wirePutOpt #-}
 -- | Used in generated code.
-wirePutOpt :: Wire b => WireTag -> FieldType -> Maybe b -> Put
+wirePutOpt :: Wire v => WireTag -> FieldType -> Maybe v -> Put
 wirePutOpt _wireTag _fieldType Nothing = return ()
-wirePutOpt wireTag fieldType (Just b) = wirePutReq wireTag fieldType b 
+wirePutOpt wireTag fieldType (Just v) = wirePutReq wireTag fieldType v
 
 {-# INLINE wirePutRep #-}
 -- | Used in generated code.
-wirePutRep :: Wire b => WireTag -> FieldType -> Seq b -> Put
-wirePutRep wireTag fieldType bs = F.forM_ bs (\b -> wirePutReq wireTag fieldType b)
+wirePutRep :: Wire v => WireTag -> FieldType -> Seq v -> Put
+wirePutRep wireTag fieldType vs = F.forM_ vs (\v -> wirePutReq wireTag fieldType v)
+
+{-# INLINE wirePutPacked #-}
+-- | Used in generated code.
+wirePutPacked :: Wire v => WireTag -> FieldType -> Seq v -> Put
+wirePutPacked wireTag fieldType vs = do
+  putVarUInt (getWireTag wireTag)
+  let size = F.foldl' (\n v -> n + wireSize fieldType v) 0 vs
+  putSize size
+  F.forM_ vs (\v -> wirePut fieldType v)
 
 {-# INLINE wireSizeReq #-}
 -- | Used in generated code.
-wireSizeReq :: Wire b => Int64 -> FieldType -> b -> Int64
+wireSizeReq :: Wire v => Int64 -> FieldType -> v -> Int64
 wireSizeReq tagSize 10 v = tagSize + wireSize 10 v + tagSize
-wireSizeReq tagSize  i v = tagSize + wireSize i v
+wireSizeReq tagSize fieldType v = tagSize + wireSize fieldType v
 
 {-# INLINE wireSizeOpt #-}
 -- | Used in generated code.
-wireSizeOpt :: Wire b => Int64 -> FieldType -> Maybe b -> Int64
+wireSizeOpt :: Wire v => Int64 -> FieldType -> Maybe v -> Int64
 wireSizeOpt _tagSize _i Nothing = 0
 wireSizeOpt tagSize i (Just v) = wireSizeReq tagSize i v
 
 {-# INLINE wireSizeRep #-}
 -- | Used in generated code.
-wireSizeRep :: Wire b => Int64 -> FieldType -> Seq b -> Int64
-wireSizeRep tagSize i s = F.foldl' (\n v -> n + wireSizeReq tagSize i v) 0 s
+wireSizeRep :: Wire v => Int64 -> FieldType -> Seq v -> Int64
+wireSizeRep tagSize i vs = F.foldl' (\n v -> n + wireSizeReq tagSize i v) 0 vs
+
+{-# INLINE wireSizePacked #-}
+-- | Used in generated code.
+wireSizePacked :: Wire v => Int64 -> FieldType -> Seq v -> Int64
+wireSizePacked tagSize i vs = tagSize + prependMessageSize (F.foldl' (\n v -> n + wireSize i v) 0 vs)
 
 -- | Used in generated code.
 putSize :: WireSize -> Put
 putSize = putVarUInt
 
+toPackedWireTag :: FieldId -> WireTag
+toPackedWireTag fieldId = mkWireTag fieldId 2 {- packed always uses Length delimited and has wire type of 2 -}
+
 toWireTag :: FieldId -> FieldType -> WireTag
 toWireTag fieldId fieldType
-    = ((fromIntegral . getFieldId $ fieldId) `shiftL` 3) .|. (fromIntegral . getWireType . toWireType $ fieldType)
+    = mkWireTag fieldId (toWireType fieldType)
 
 mkWireTag :: FieldId -> WireType -> WireTag
-mkWireTag fieldId fieldType
-    = ((fromIntegral . getFieldId $ fieldId) `shiftL` 3) .|. (fromIntegral . getWireType $ fieldType)
+mkWireTag fieldId wireType
+    = ((fromIntegral . getFieldId $ fieldId) `shiftL` 3) .|. (fromIntegral . getWireType $ wireType)
 
 splitWireTag :: WireTag -> (FieldId,WireType)
 splitWireTag (WireTag wireTag) = ( FieldId . fromIntegral $ wireTag `shiftR` 3
                                  , WireType . fromIntegral $ wireTag .&. 7 )
 
+{-# INLINE wireGetPackedEnum #-}
+wireGetPackedEnum :: (Typeable e,Enum e) => (Int -> Maybe e) -> Get (Seq e)
+wireGetPackedEnum toMaybe'Enum = do
+  packedLength <- getVarInt
+  start <- bytesRead
+  let stop = packedLength+start
+      next soFar = do
+        here <- bytesRead
+        case compare stop here of
+          EQ -> return soFar
+          LT -> tooMuchData packedLength soFar start here
+          GT -> do
+            value <- wireGetEnum toMaybe'Enum
+            next $! soFar |> value
+  next Seq.empty
+ where
+  Just e = undefined `asTypeOf` (toMaybe'Enum undefined)
+  tooMuchData packedLength soFar start here =
+      throwError ("Text.ProtocolBuffers.WireMessage.wireGetPackedEnum: overran expected length."
+                  ++ "\n  The type and count of values so far is " ++ show (typeOf (undefined `asTypeOf` e),Seq.length soFar)
+                  ++ "\n  at (packedLength,start,here) == " ++ show (packedLength,start,here))
 
+{-# INLINE genericPacked #-}
+genericPacked :: Wire a => FieldType -> Get (Seq a)
+genericPacked ft = do
+  packedLength <- getVarInt
+  start <- bytesRead
+  let stop = packedLength+start
+      next soFar = do
+        here <- bytesRead
+        case compare stop here of
+          EQ -> return soFar
+          LT -> tooMuchData packedLength soFar start here
+          GT -> do
+            value <- wireGet ft
+            next $! soFar |> value
+  next Seq.empty
+ where
+  tooMuchData packedLength soFar start here =
+      throwError ("Text.ProtocolBuffers.WireMessage.genericPacked: overran expected length."
+                  ++ "\n  The FieldType and count of values so far are " ++ show (ft,Seq.length soFar)
+                  ++ "\n  at (packedLength,start,here) == " ++ show (packedLength,start,here))
 
 -- getMessageWith assumes the wireTag for the message, if it existed, has already been read.
 -- getMessageWith assumes that it still needs to read the Varint encoded length of the message.
@@ -277,11 +338,11 @@ getMessageWith updater = do
   notEnoughData messageLength start =
       throwError ("Text.ProtocolBuffers.WireMessage.getMessageWith: Required fields missing when processing "
                   ++ (show . descName . reflectDescriptorInfo $ initialMessage)
-                  ++ " at (messageLength,start) == " ++ show (messageLength,start))
+                  ++ "\n  at (messageLength,start) == " ++ show (messageLength,start))
   tooMuchData messageLength start here =
       throwError ("Text.ProtocolBuffers.WireMessage.getMessageWith: overran expected length when processing"
                   ++ (show . descName . reflectDescriptorInfo $ initialMessage)
-                  ++ " at  (messageLength,start,here) == " ++ show (messageLength,start,here))
+                  ++ "\n  at  (messageLength,start,here) == " ++ show (messageLength,start,here))
 
 -- | Used by generated code
 -- getBareMessageWith assumes the wireTag for the message, if it existed, has already been read.
@@ -328,8 +389,9 @@ unknown :: (Typeable a,ReflectDescriptor a) => FieldId -> WireType -> a -> Get a
 unknown fieldId wireType initialMessage = do
   here <- bytesRead
   throwError ("Text.ProtocolBuffers.WireMessage.unknown: Unknown field found or failure parsing field (e.g. unexpected Enum value):"
-              ++ "(message type name,field id number,wire type code,bytes read) == "
-              ++ show (typeOf initialMessage,fieldId,wireType,here) ++ " when processing "
+              ++ "\n  (message type name,field id number,wire type code,bytes read) == "
+              ++ show (typeOf initialMessage,fieldId,wireType,here)
+              ++ "\n  when processing "
               ++ (show . descName . reflectDescriptorInfo $ initialMessage))
 
 {-# INLINE castWord32ToFloat #-}
@@ -372,6 +434,8 @@ instance Wire Double where
   wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_DOUBLE   -} 1        = fmap castWord64ToDouble getWord64le
   wireGet ft = wireGetErr ft
+  wireGetPacked 1 = genericPacked 1
+  wireGetPacked ft = wireGetErr ft
 
 instance Wire Float where
   wireSize {- TYPE_FLOAT    -} 2      _ = 4
@@ -380,6 +444,8 @@ instance Wire Float where
   wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_FLOAT    -} 2        = fmap castWord32ToFloat getWord32le
   wireGet ft = wireGetErr ft
+  wireGetPacked 2 = genericPacked 2
+  wireGetPacked ft = wireGetErr ft
 
 instance Wire Int64 where
   wireSize {- TYPE_INT64    -} 3      x = size'Varint x
@@ -394,6 +460,10 @@ instance Wire Int64 where
   wireGet  {- TYPE_SINT64   -} 18       = fmap zzDecode64 getVarInt
   wireGet  {- TYPE_SFIXED64 -} 16       = fmap fromIntegral getWord64le
   wireGet ft = wireGetErr ft
+  wireGetPacked 3 = genericPacked 3
+  wireGetPacked 18 = genericPacked 18
+  wireGetPacked 16 = genericPacked 16
+  wireGetPacked ft = wireGetErr ft
 
 instance Wire Int32 where
   wireSize {- TYPE_INT32    -} 5      x = size'Varint x
@@ -408,6 +478,10 @@ instance Wire Int32 where
   wireGet  {- TYPE_SINT32   -} 17       = fmap zzDecode32 getVarInt
   wireGet  {- TYPE_SFIXED32 -} 15       = fmap fromIntegral getWord32le
   wireGet ft = wireGetErr ft
+  wireGetPacked 5 = genericPacked 5
+  wireGetPacked 17 = genericPacked 17
+  wireGetPacked 15 = genericPacked 15
+  wireGetPacked ft = wireGetErr ft
 
 instance Wire Word64 where
   wireSize {- TYPE_UINT64   -} 4      x = size'Varint x
@@ -419,6 +493,9 @@ instance Wire Word64 where
   wireGet  {- TYPE_FIXED64  -} 6        = getWord64le
   wireGet  {- TYPE_UINT64   -} 4        = getVarInt
   wireGet ft = wireGetErr ft
+  wireGetPacked 6 = genericPacked 6
+  wireGetPacked 4 = genericPacked 4
+  wireGetPacked ft = wireGetErr ft
 
 instance Wire Word32 where
   wireSize {- TYPE_UINT32   -} 13     x = size'Varint x
@@ -430,6 +507,9 @@ instance Wire Word32 where
   wireGet  {- TYPE_UINT32   -} 13       = getVarInt
   wireGet  {- TYPE_FIXED32  -} 7        = getWord32le
   wireGet ft = wireGetErr ft
+  wireGetPacked 13 = genericPacked 13
+  wireGetPacked 7 = genericPacked 7
+  wireGetPacked ft = wireGetErr ft
 
 instance Wire Bool where
   wireSize {- TYPE_BOOL     -} 8      _ = 1
@@ -444,6 +524,8 @@ instance Wire Bool where
       x' | x' < 128 -> return True
       _ -> throwError ("TYPE_BOOL read failure : " ++ show x)
   wireGet ft = wireGetErr ft
+  wireGetPacked 8 = genericPacked 8
+  wireGetPacked ft = wireGetErr ft
 
 instance Wire Utf8 where
 -- items of TYPE_STRING is already in a UTF8 encoded Data.ByteString.Lazy
@@ -471,6 +553,8 @@ instance Wire Int where
   wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_ENUM    -} 14        = getVarInt
   wireGet ft = wireGetErr ft
+  wireGetPacked 14 = genericPacked 14 -- Should actually be used, see wireGetPackedEnum
+  wireGetPacked ft = wireGetErr ft
 
 {-# INLINE verifyUtf8 #-}
 verifyUtf8 :: ByteString -> Get Utf8
@@ -481,7 +565,7 @@ verifyUtf8 bs = case isValidUTF8 bs of
 {-# INLINE wireGetEnum #-}
 wireGetEnum :: (Typeable e, Enum e) => (Int -> Maybe e) -> Get e
 wireGetEnum toMaybe'Enum = do
-  int <- wireGet 14
+  int <- wireGet 14 -- uses the "instance Wire Int" defined above
   case toMaybe'Enum int of
     Just v -> return v
     Nothing -> throwError (msg ++ show int)

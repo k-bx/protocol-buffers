@@ -37,11 +37,15 @@ showsType TYPE_SFIXED64 s = "sfixed64" ++ s
 showsType TYPE_SINT32 s = "sint32" ++ s
 showsType TYPE_SINT64 s = "sint64" ++ s
 
+-- | parseType returns Nothing when the String is user-defined.  This means it could be either a
+-- Message or an Enum or a syntax error. The Nothing return is fixed up in
+-- Text.ProtocolBuffers.ProtoCompile.Resolve.fqField
 parseType :: String -> Maybe Type
 parseType s = case readP_to_S readType s of
                 [(val,[])] -> Just val
                 _ -> Nothing
 
+-- | parseLabel recognizes optional, required, and repeated.  All other strings result in Nothing
 parseLabel :: String -> Maybe Label
 parseLabel s = case readP_to_S readLabel s of
                 [(val,[])] -> Just val
@@ -53,6 +57,8 @@ readLabel = choice [ return LABEL_OPTIONAL << string "optional"
                    , return LABEL_REPEATED << string "repeated"
                    ]
 
+-- readType interprets the string in the proto file, but there is no way to know if an unknown
+-- string refers to a Message or to an Enum
 readType :: ReadP Type
 readType = choice [ return TYPE_DOUBLE << string "double"
                   , return TYPE_FLOAT << string "float"

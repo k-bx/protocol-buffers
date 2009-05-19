@@ -22,6 +22,7 @@ import qualified Text.DescriptorProtos.EnumValueOptions               as D(EnumV
 import qualified Text.DescriptorProtos.EnumValueOptions               as D.EnumValueOptions(EnumValueOptions(..))
 import qualified Text.DescriptorProtos.FieldDescriptorProto           as D(FieldDescriptorProto)
 import qualified Text.DescriptorProtos.FieldDescriptorProto           as D.FieldDescriptorProto(FieldDescriptorProto(..))
+import           Text.DescriptorProtos.FieldDescriptorProto.Label
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto(Type)
 import           Text.DescriptorProtos.FieldDescriptorProto.Type         (Type(..))
 import qualified Text.DescriptorProtos.FieldOptions                   as D(FieldOptions)
@@ -324,6 +325,7 @@ field upGroup maybeExtendee = do
   sLabel <- choice . map (pName . U.fromString) $ allowedLabels
   theLabel <- maybe (fail ("not a valid Label :"++show sLabel)) return (parseLabel (utf8ToString sLabel))
   sType <- ident
+  -- parseType may return Nothing, this is fixed up in Text.ProtocolBuffers.ProtoCompile.Resolve.fqField
   let (maybeTypeCode,maybeTypeName) = case parseType (utf8ToString sType) of
                                         Just t -> (Just t,Nothing)
                                         Nothing -> (Nothing, Just sType)
@@ -344,12 +346,15 @@ field upGroup maybeExtendee = do
                 v = v1 { D.FieldDescriptorProto.name = fieldName
                        , D.FieldDescriptorProto.type_name = Just name }
             return v
-    else (eol >> return v1) <|> (subParser (pChar '[' >> subField maybeTypeCode) v1)
+    else (eol >> return v1) <|> (subParser (pChar '[' >> subField theLabel maybeTypeCode) v1)
              
-subField,defaultConstant :: Maybe Type -> P D.FieldDescriptorProto ()
-subField mt = (defaultConstant mt <|> fieldOption mt) >> ( (pChar ']' >> eol) <|> (pChar ',' >> subField mt) )
+subField,defaultConstant :: Label -> Maybe Type -> P D.FieldDescriptorProto ()
+subField label mt = do
+  defaultConstant label mt <|> fieldOption label mt
+  (pChar ']' >> eol) <|> (pChar ',' >> subField label mt)
 
-defaultConstant mt = do
+defaultConstant LABEL_REPEATED _ = pName (U.fromString "default") >> fail "Repeated fields cannot have a default value"
+defaultConstant _ mt = do
   pName (U.fromString "default")
   maybeDefault <- pChar '=' >> fmap Just (constant mt)
   -- XXX Hack: we lie about Utf8 for the default_value below
@@ -398,8 +403,8 @@ constant (Just t) =
                       (fail $ "default integer value "++show i++" is out of range for type "++show t)
                  return' (U.fromString . show $ i)
 
-fieldOption :: Maybe Type -> P D.FieldDescriptorProto ()
-fieldOption mt = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where
+fieldOption :: Label -> Maybe Type -> P D.FieldDescriptorProto ()
+fieldOption label mt = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where
   getOld = fmap (fromMaybe mergeEmpty . D.FieldDescriptorProto.options) getState
   setNew p = update' (\s -> s { D.FieldDescriptorProto.options = Just p })
   setOption (Left uno,old) =
@@ -408,9 +413,26 @@ fieldOption mt = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where
     case optName of
       "ctype" | (Just TYPE_STRING) == mt -> do
         enumLit >>= \p -> return' (old {D.FieldOptions.ctype=Just p})
+              | otherwise -> unexpected $ "field option cyte is only defined for string fields"
       "experimental_map_key" | Nothing == mt -> do
         strLit >>= \p -> return' (old {D.FieldOptions.experimental_map_key=Just p})
+                             | otherwise -> unexpected $ "field option experimental_map_key is only defined for messages"
+      "packed" | isValidPacked label mt -> do
+        boolLit >>= \p -> return' (old {D.FieldOptions.packed=Just p})
+               | otherwise -> unexpected $ "field option packed is not defined for this kind of field"
       _ -> unexpected $ "FieldOptions has no option named "++optName
+
+isValidPacked :: Label -> Maybe Type -> Bool
+isValidPacked LABEL_REPEATED Nothing = True -- provisional, okay if Enum but wrong if Message, checked in Resolve.fqField
+isValidPacked LABEL_REPEATED (Just typeCode) =
+  case typeCode of
+    TYPE_STRING -> False
+    TYPE_GROUP -> False
+    TYPE_BYTES -> False
+    TYPE_MESSAGE -> False -- Impossible value for typeCode from parseType, but here for completeness
+    TYPE_ENUM -> True     -- Impossible value for typeCode from parseType, but here for completeness
+    _ -> True
+isValidPacked _ _ = False
 
 enum :: (D.EnumDescriptorProto -> P s ()) -> P s ()
 enum up = pName (U.fromString "enum") >> do

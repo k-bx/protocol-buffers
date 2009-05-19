@@ -1,3 +1,10 @@
+{-  fixing resolution 
+  entityField uses resolveMGE instead of expectMGE and resolveEnv : this should allow field types to resolve just to MGE insteadof other field names.
+
+  what about keys 'extendee' resolution to Message names only? expectM in entityField
+
+-}
+
 -- | This huge module handles the loading and name resolution.  The
 -- loadProto command recursively gets all the imported proto files.
 -- The makeNameMaps command makes the translator from proto name to
@@ -14,8 +21,9 @@ import qualified Text.DescriptorProtos.EnumDescriptorProto            as D(EnumD
 import qualified Text.DescriptorProtos.EnumDescriptorProto            as D.EnumDescriptorProto(EnumDescriptorProto(..))
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D(EnumValueDescriptorProto)
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D.EnumValueDescriptorProto(EnumValueDescriptorProto(..))
-import qualified Text.DescriptorProtos.FieldDescriptorProto           as D(FieldDescriptorProto)
+import qualified Text.DescriptorProtos.FieldDescriptorProto           as D(FieldDescriptorProto(FieldDescriptorProto))
 import qualified Text.DescriptorProtos.FieldDescriptorProto           as D.FieldDescriptorProto(FieldDescriptorProto(..))
+import           Text.DescriptorProtos.FieldDescriptorProto.Label
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type      as D(Type)
 import           Text.DescriptorProtos.FieldDescriptorProto.Type      as D.Type(Type(..))
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D(FileDescriptorProto)
@@ -32,8 +40,8 @@ import qualified Text.DescriptorProtos.EnumOptions      as D(EnumOptions)
 import qualified Text.DescriptorProtos.EnumOptions      as D.EnumOptions(EnumOptions(uninterpreted_option))
 import qualified Text.DescriptorProtos.EnumValueOptions as D(EnumValueOptions)
 import qualified Text.DescriptorProtos.EnumValueOptions as D.EnumValueOptions(EnumValueOptions(uninterpreted_option))
-import qualified Text.DescriptorProtos.FieldOptions     as D(FieldOptions)
-import qualified Text.DescriptorProtos.FieldOptions     as D.FieldOptions(FieldOptions(uninterpreted_option))
+import qualified Text.DescriptorProtos.FieldOptions     as D(FieldOptions(FieldOptions))
+import qualified Text.DescriptorProtos.FieldOptions     as D.FieldOptions(FieldOptions(packed,uninterpreted_option))
 import qualified Text.DescriptorProtos.FileOptions      as D(FileOptions)
 import qualified Text.DescriptorProtos.FileOptions      as D.FileOptions(FileOptions(..))
 import qualified Text.DescriptorProtos.MessageOptions   as D(MessageOptions)
@@ -84,7 +92,7 @@ ishow :: Show a => a -> String
 ishow = indent . show
 
 errMsg :: String -> String
-errMsg s = "Text.ProtocolBuffers.Resolve fatal error encountered, message:\n"++indent s
+errMsg s = "Text.ProtocolBuffers.ProtoCompile.Resolve fatal error encountered, message:\n"++indent s
 
 err :: forall b. String -> b
 err = error . errMsg 
@@ -93,7 +101,7 @@ throw :: (Error e, MonadError e m) =>  String -> m a
 throw s = throwError (strMsg (errMsg s))
 
 annErr :: (MonadError String m) => String -> m a -> m a
-annErr s act = catchError act (\e -> throwError ("annErr: "++s++'\n':indent e))
+annErr s act = catchError act (\e -> throwError ("Text.ProtocolBuffers.ProtoCompile.Resolve annErr: "++s++'\n':indent e))
 
 getJust :: (Error e,MonadError e m, Typeable a) => String -> Maybe a -> m a
 {-#  INLINE getJust #-}
@@ -231,6 +239,7 @@ resolveHere parent nameU = do
                    Nothing -> rFail ("because there is no such name here:  "++show (eName parent))
     Nothing -> rFail ("because environment has no local names:\n"++ishow (eName parent))
 
+{-
 -- | 'resolveEnv' is the query operation for the Env namespace.  It
 -- recorgnizes names beginning with a '.' as already being
 -- fully-qualified names. This is called from the different monads via
@@ -247,10 +256,57 @@ resolveEnv nameU envIn = do
                                  , "allowed: "++show (allowed envIn)]
     Just (E'Error s _es) -> throw s
     Just e -> return e
+-}
+
+resolveEnv :: Utf8 -> Env -> Either ErrStr Entity
+resolveEnv = resolvePredEnv "Any item" (const True)
+
+-- | 'resolvePred Env' is the query operation for the Env namespace.  It recognizes names beginning
+-- with a '.' as already being fully-qualified names. This is called from the different monads via
+-- resolveMGE and resolveM
+resolvePredEnv :: String -> (Entity -> Bool) -> Utf8 -> Env -> Either ErrStr Entity
+resolvePredEnv userMessage accept nameU envIn = do
+  (isGlobal,xs) <- checkDIUtf8 nameU
+  let mResult = if isGlobal then lookupEnv (map iToString xs) (toGlobal envIn)
+                            else lookupEnv (map iToString xs) envIn
+  case mResult of
+    Nothing -> throw . unlines $ [ "resolvePredEnv: Could not lookup "++show nameU
+                                 , "which parses as "++show (isGlobal,xs)
+                                 , "in environment: "++(whereEnv envIn)
+                                 , "looking for: "++userMessage
+                                 , "allowed: "++show (allowed envIn)]
+    Just (E'Error s _es) -> throw s
+    Just e -> return e
+ where
+  lookupEnv :: [IName String] -> Env -> Maybe Entity
+  lookupEnv xs (Global tl tls) = lookupTopLevel xs tl <|> msum (map (lookupTopLevel xs) tls)
+  lookupEnv _xs (Local e@(E'Error {}) _env) = return e
+  lookupEnv xs (Local entity env) = case get'mVals entity of
+                                      Just vals -> filteredLookup vals xs <|> lookupEnv xs env
+                                      Nothing -> Nothing
+
+  lookupTopLevel :: [IName String] -> TopLevel -> Maybe Entity
+  lookupTopLevel xs tl =
+    filteredLookup (top'mVals tl) xs <|> (stripPrefix (top'Package tl) xs >>= filteredLookup (top'mVals tl))
+
+  filteredLookup valsIn namesIn =
+    let lookupVals :: EMap -> [IName String] -> Maybe Entity
+        lookupVals _vals [] = Nothing
+        lookupVals vals [x] = M.lookup x vals
+        lookupVals vals (x:xs) = do
+          entity <-  M.lookup x vals
+          case get'mVals entity of
+            Just vals' -> lookupVals vals' xs
+            Nothing -> Nothing
+        m'x = lookupVals valsIn namesIn
+    in case m'x of
+         Just entity | accept entity -> m'x
+         _ -> Nothing
 
 resolveRE :: Utf8 -> RE Entity
 resolveRE nameU = lift . (resolveEnv nameU) =<< ask
 
+-- All uses of this then apply expectMGE or expectM, so provide predicate 'skip' support.
 resolveSE :: Utf8 -> SE (Either ErrStr Entity)
 resolveSE nameU = fmap (resolveEnv nameU) (asks my'Env)
 
@@ -263,6 +319,13 @@ getType s f a = do
     Nothing -> do ee <- resolveSE typeU
                   return (Just (expectMGE ee))
 
+resolveMGE :: Utf8 -> SE (Either ErrStr Entity)
+resolveMGE nameU = fmap (resolvePredEnv "Message or Group or Enum" isMGE nameU) (asks my'Env)
+  where isMGE e' = case e' of E'Message {} -> True
+                              E'Group {} -> True
+                              E'Enum {} -> True
+                              _ -> False
+
 -- | 'expectMGE' is used by getType and 'entityField'
 expectMGE :: Either ErrStr Entity -> Either ErrStr Entity
 expectMGE ee@(Left {}) = ee
@@ -273,13 +336,21 @@ expectMGE ee@(Right e) = if isMGE e then ee
                               E'Enum {} -> True
                               _ -> False
 
+{-
+-- To be used for key extendee name resolution, but not part of the official protobuf-2.1.0 update
+resolveM :: Utf8 -> SE (Either ErrStr Entity)
+resolveM nameU = fmap (resolvePredEnv "Message" isM nameU) (asks my'Env)
+  where isM e' = case e' of E'Message {} -> True
+                            _ -> False
+-}
+
 -- | 'expectM' is used by 'entityField'
 expectM :: Either ErrStr Entity -> Either ErrStr Entity
 expectM ee@(Left {}) = ee
-expectM ee@(Right e) = if isMGE e then ee
-                         else Left $ "expectMGE: Name resolution failed to find a Message, Group, or Enum:\n"++ishow (eName e) -- cannot show all of "e" because this will loop and hang the hprotoc program
-  where isMGE e' = case e' of E'Message {} -> True
-                              _ -> False
+expectM ee@(Right e) = if isM e then ee
+                         else Left $ "expectM: Name resolution failed to find a Message:\n"++ishow (eName e) -- cannot show all of "e" because this will loop and hang the hprotoc program
+  where isM e' = case e' of E'Message {} -> True
+                            _ -> False
 
 expectFK :: Entity -> RE Entity
 expectFK e = if isFK e then return e
@@ -288,11 +359,12 @@ expectFK e = if isFK e then return e
                              E'Key {} -> True
                              _ -> False
 
--- | This is a helper for resolveEnv for error messages
+-- | This is a helper for resolveEnv and (Show SEnv) for error messages
 whereEnv :: Env -> String
 whereEnv (Local entity env) = fiName (joinDot (eName entity)) ++ " in "++show (top'Path . getTL $ env)
 whereEnv (Global tl _) = fiName (joinDot (top'Package tl)) ++ " in " ++ show (top'Path tl)
 
+{-
 -- | lookupEnv is used only by resolveEnv
 lookupEnv :: [IName String] -> Env -> Maybe Entity
 lookupEnv xs (Global tl tls) = lookupTopLevel xs tl <|> msum (map (lookupTopLevel xs) tls)
@@ -301,7 +373,7 @@ lookupEnv xs (Local entity env) = case get'mVals entity of
                                     Just vals -> lookupVals vals xs <|> lookupEnv xs env
                                     Nothing -> Nothing
 
--- | lookupTopLeve is used only by lookupEnv
+-- | lookupTopLevel is used only by lookupEnv
 lookupTopLevel :: [IName String] -> TopLevel -> Maybe Entity
 lookupTopLevel xs tl =
   lookupVals (top'mVals tl) xs <|> (stripPrefix (top'Package tl) xs >>= lookupVals (top'mVals tl))
@@ -314,6 +386,7 @@ lookupVals vals (x:xs) = do entity <-  M.lookup x vals
                             case get'mVals entity of
                               Just vals' -> lookupVals vals' xs
                               Nothing -> Nothing
+-}
 
 -- | 'partEither' separates the Left errors and Right success in the obvious way.
 partEither :: [Either a b] -> ([a],[b])
@@ -491,7 +564,7 @@ are reported by hopefully sensible (Left String) messages.
  *** -}
 
 entityMsg :: (IName String -> Bool) -> D.DescriptorProto -> SE (IName String,Entity)
-entityMsg isGroup dp = annErr ("entityMsg "++show (D.DescriptorProto.name dp)) $ mdo
+entityMsg isGroup dp = annErr ("entityMsg DescriptorProto name is "++show (D.DescriptorProto.name dp)) $ mdo
   (self,names) <- getNames "entityMsg.name" D.DescriptorProto.name dp
   numbers <- fmap Set.fromList . mapM (getJust "entityMsg.field.number" . D.FieldDescriptorProto.number) . F.toList . D.DescriptorProto.field $ dp
   when (Set.size numbers /= Seq.length (D.DescriptorProto.field dp)) $
@@ -514,15 +587,19 @@ entityMsg isGroup dp = annErr ("entityMsg "++show (D.DescriptorProto.name dp)) $
     return entity'
   return (self,entity)
 
+-- Among other things, this is where ambiguous type names in the proto file are resolved into a
+-- Message or a Group or an Error.
+{- old: Tracking error flow: if the expectMGE fails then the 'mVal' in the E'Field is a (Just (Left _)).  This triggers a thrown error if accessed in 'fqField'. -}
 entityField :: Bool -> D.FieldDescriptorProto -> SE (IName String,Entity)
-entityField isKey fdp = annErr ("entityField "++show (D.FieldDescriptorProto.name fdp)) $ do
+entityField isKey fdp = annErr ("entityField FieldDescriptorProto name is "++show (D.FieldDescriptorProto.name fdp)) $ do
   (self,names) <- getNames "entityField.name" D.FieldDescriptorProto.name fdp
   let isKey' = maybe False (const True) (D.FieldDescriptorProto.extendee fdp)
   when (isKey/=isKey') $
     throwError $ "entityField: Impossible? Expected key and got field or vice-versa:\n"++ishow ((isKey,isKey'),names,fdp)
   number <- getJust "entityField.name" . D.FieldDescriptorProto.number $ fdp
   let mType = D.FieldDescriptorProto.type' fdp
-  typeName <- maybeM (fmap expectMGE . resolveSE) (D.FieldDescriptorProto.type_name fdp)
+--  typeName <- maybeM (fmap expectMGE . resolveSE) (D.FieldDescriptorProto.type_name fdp)
+  typeName <- maybeM resolveMGE (D.FieldDescriptorProto.type_name fdp)
   if isKey then do extendee <- fmap expectM . resolveSE =<< getJust "entityField.extendee" (D.FieldDescriptorProto.extendee fdp)
                    return (self,E'Key names extendee (FieldId number) mType typeName)
            else return (self,E'Field names (FieldId number) mType typeName)
@@ -551,7 +628,7 @@ entityEnumValue evdp = do -- Merely use getNames to add mangled self to ReMap st
   return ()
 
 entityService :: D.ServiceDescriptorProto -> SE (IName String,Entity)
-entityService sdp = annErr ("entityService "++show (D.ServiceDescriptorProto.name sdp)) $ mdo
+entityService sdp = annErr ("entityService ServiceDescriptorProto name is "++show (D.ServiceDescriptorProto.name sdp)) $ mdo
   (self,names) <- getNames "entityService.name" D.ServiceDescriptorProto.name sdp
   let entity = E'Service names (M.fromListWithKey unique methods)
   (badMethods,methods) <- descend names entity $
@@ -603,7 +680,7 @@ fqFileDP fdp = do
                    , D.FileDescriptorProto.extension    = newKeys }
 
 fqMessage :: D.DescriptorProto -> RE D.DescriptorProto
-fqMessage dp = annErr ("fqMessage "++show (D.DescriptorProto.name dp)) $ do
+fqMessage dp = annErr ("fqMessage DescriptorProto name is "++show (D.DescriptorProto.name dp)) $ do
   entity <- resolveRE =<< getJust "fqMessage.name" (D.DescriptorProto.name dp)
   case entity of
     E'Message {} -> return ()
@@ -620,7 +697,7 @@ fqMessage dp = annErr ("fqMessage "++show (D.DescriptorProto.name dp)) $ do
                     , D.DescriptorProto.enum_type   = newEnums }
 
 fqService :: D.ServiceDescriptorProto -> RE D.ServiceDescriptorProto
-fqService sdp =  annErr ("fqService "++show (D.ServiceDescriptorProto.name sdp)) $ do
+fqService sdp =  annErr ("fqService ServiceDescriptorProto name is "++show (D.ServiceDescriptorProto.name sdp)) $ do
   entity <- resolveRE =<< getJust "fqService.name" (D.ServiceDescriptorProto.name sdp)
   case entity of
     E'Service {} -> do newMethods <- local (Local entity) $ T.mapM fqMethod (D.ServiceDescriptorProto.method sdp)
@@ -648,7 +725,7 @@ fqMethod mdp = do
 -- TYPE_ENUM, and if it is the latter then any default value string is
 -- checked for validity.
 fqField :: Bool -> D.FieldDescriptorProto -> RE D.FieldDescriptorProto
-fqField isKey fdp = annErr ("fqField "++show (D.FieldDescriptorProto.name fdp)) $ do
+fqField isKey fdp = annErr ("fqField FieldDescriptorProto name is "++show (D.FieldDescriptorProto.name fdp)) $ do
   let isKey' = maybe False (const True) (D.FieldDescriptorProto.extendee fdp)
   when (isKey/=isKey') $
     ask >>= \env -> throwError $ "fqField.isKey: Expected key and got field or vice-versa:\n"++ishow ((isKey,isKey'),whereEnv env,fdp)
@@ -664,14 +741,22 @@ fqField isKey fdp = annErr ("fqField "++show (D.FieldDescriptorProto.name fdp)) 
                       fmap (Just . fiName . fqName) . lift . eMsg $ entity
                    (False,E'Field {}) -> return Nothing
                    _ -> fqFail "fqField.entity: did not resolve to expected E'Key or E'Field:" fdp entity
-  mTypeName <- maybeM lift (mVal entity) -- "Just (Left _)" triggers a throwError here
+  mTypeName <- maybeM lift (mVal entity) -- "Just (Left _)" triggers a throwError here (see comment for entityField)
   -- Finally fully determine D.Type, (type'==Nothing) meant ambiguously TYPE_MESSAGE or TYPE_ENUM from Parser.hs
+  -- This has gotten more verbose with the addition of verifying packed is being used properly.
   actualType <- case (fType entity,mTypeName) of
-                  (Just TYPE_GROUP, Just (E'Group {})) -> return TYPE_GROUP
-                  (Nothing, Just (E'Message {})) -> return TYPE_MESSAGE
-                  (Nothing, Just (E'Enum {})) -> return TYPE_ENUM
+                  (Just TYPE_GROUP, Just (E'Group {})) | isNotPacked fdp -> return TYPE_GROUP
+                                                       | otherwise -> 
+                    fqFail ("fqField.actualType : This Group is invalid, you cannot pack a group field.") fdp entity
+                  (Nothing, Just (E'Message {})) | isNotPacked fdp -> return TYPE_MESSAGE
+                                                 | otherwise ->
+                    fqFail ("fqField.actualType : This Message is invalid, you cannot pack a message field.") fdp entity
+                  (Nothing, Just (E'Enum {})) | isNotPacked fdp -> return TYPE_ENUM
+                                              | isRepeated fdp -> return TYPE_ENUM
+                                              | otherwise ->
+                    fqFail ("fqField.actualType : This Enum is invalid, you cannot pack a non-repeated field.") fdp entity
                   (Just t, Nothing) -> return t
-                  (mt,me) -> fqFail ("fqField.actualType: "++show mt++" and "++show (fmap eName me)++" is invalid") fdp entity
+                  (mt,me) -> fqFail ("fqField.actualType: "++show mt++" and "++show (fmap eName me)++" is invalid.") fdp entity
   -- Check that a default value of an TYPE_ENUM is valid
   case (mTypeName,D.FieldDescriptorProto.default_value fdp) of
     (Just ee@(E'Enum {eVals = enumVals}),Just enumVal) ->
@@ -690,6 +775,14 @@ fqField isKey fdp = annErr ("fqField "++show (D.FieldDescriptorProto.name fdp)) 
                        , D.FieldDescriptorProto.type_name = fmap (fiName . fqName) mTypeName })
              else (fdp { D.FieldDescriptorProto.type'     = Just actualType
                        , D.FieldDescriptorProto.type_name = fmap (fiName . fqName) mTypeName })
+
+isNotPacked :: D.FieldDescriptorProto -> Bool
+isNotPacked (D.FieldDescriptorProto { D.FieldDescriptorProto.options = Just (D.FieldOptions { D.FieldOptions.packed = Just isPacked }) }) = not isPacked
+isNotPacked _ = True
+
+isRepeated :: D.FieldDescriptorProto -> Bool
+isRepeated (D.FieldDescriptorProto { D.FieldDescriptorProto.label = Just LABEL_REPEATED } ) = True
+isRepeated _ = False
 
 fqEnum :: D.EnumDescriptorProto -> RE D.EnumDescriptorProto
 fqEnum edp = do
@@ -966,7 +1059,7 @@ loadProto protoDirs protoFile = goState (load Set.empty protoFile) where
             parsed'fdp <- either (loadFailed toRead . show) return $
                           (parseProto (unCanonFP relpath) protoContents)
             packageName <- either (loadFailed toRead . show) (return . map iToString . snd) $
-                           (checkDIUtf8 =<< getJust "makeTopLevel.packageName" (D.FileDescriptorProto.package parsed'fdp))
+                           (checkDIUtf8 =<< getJust "makeTopLevel.packageName: you need a pacakge declaration in your proto file" (D.FileDescriptorProto.package parsed'fdp))
             let parents = Set.insert file parentsIn
                 importList = map (fpCanonToLocal . CanonFP . toString) . F.toList . D.FileDescriptorProto.dependency $ parsed'fdp
             imports <- mapM (fmap getTL . load parents) importList

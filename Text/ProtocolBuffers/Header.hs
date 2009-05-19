@@ -2,7 +2,8 @@
 -- compile.  This and the Prelude will both be imported qualified as
 -- P', the prime ensuring no name conflicts are possible.
 module Text.ProtocolBuffers.Header
-    ( emptyBS, pack, append, fromMaybe, ap
+    ( append, emptyBS
+    , pack, fromMaybe, ap
     , fromDistinctAscList, member
     , throwError,catchError
     , module Data.Generics
@@ -29,7 +30,7 @@ import Text.ProtocolBuffers.Basic -- all
 import Text.ProtocolBuffers.Default()
 import Text.ProtocolBuffers.Extensions
   ( wireSizeExtField,wirePutExtField,loadExtension,notExtension
-  , GPB,Key(..),ExtField,ExtendMessage(..),MessageAPI(..),ExtKey(wireGetKey) )
+  , GPB,Key(..),ExtField,ExtendMessage(..),MessageAPI(..),ExtKey(wireGetKey),PackedSeq )
 import Text.ProtocolBuffers.Identifiers(FIName(..),MName(..),FName(..))
 import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections
@@ -41,12 +42,14 @@ import Text.ProtocolBuffers.WireMessage
   ( prependMessageSize,putSize
   , wireSizeReq,wireSizeOpt,wireSizeRep
   , wirePutReq,wirePutOpt,wirePutRep
-  , getMessageWith,getBareMessageWith,wireGetEnum
+  , getMessageWith,getBareMessageWith,wireGetEnum,wireGetPackedEnum
   , wireSizeErr,wirePutErr,wireGetErr
   , unknown,unknownField)
 
+{-# INLINE append #-}
 append :: Seq a -> a -> Seq a
 append = (|>)
 
+{-# INLINE emptyBS #-}
 emptyBS :: ByteString
 emptyBS = Data.ByteString.Lazy.empty

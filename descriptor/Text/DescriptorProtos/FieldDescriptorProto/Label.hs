@@ -42,6 +42,8 @@ instance P'.Wire Label where
   wirePut ft' enum = P'.wirePut ft' (P'.fromEnum enum)
   wireGet 14 = P'.wireGetEnum toMaybe'Enum
   wireGet ft' = P'.wireGetErr ft'
+  wireGetPacked 14 = P'.wireGetPackedEnum toMaybe'Enum
+  wireGetPacked ft' = P'.wireGetErr ft'
  
 instance P'.GPB Label
  

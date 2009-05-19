@@ -295,13 +295,17 @@ instanceEnum ei
 instanceWireEnum :: EnumInfo -> Decl
 instanceWireEnum ei
     = InstDecl src [] (private "Wire") [TyCon (unqualName (enumName ei))]
-        [ withName "wireSize", withName "wirePut", withGet, withGetErr ]
+        [ withName "wireSize", withName "wirePut", withGet, withGetErr,withGetPacked,withGetPackedErr ]
   where withName foo = inst foo [patvar "ft'",patvar "enum"] rhs
           where rhs = pvar foo $$ lvar "ft'" $$
                         (Paren $ pvar "fromEnum" $$ lvar "enum")
         withGet = inst "wireGet" [litIntP 14] rhs
           where rhs = pvar "wireGetEnum" $$ lvar "toMaybe'Enum"
         withGetErr = inst "wireGet" [patvar "ft'"] rhs
+          where rhs = pvar "wireGetErr" $$ lvar "ft'"
+        withGetPacked = inst "wireGetPacked" [litIntP 14] rhs
+          where rhs = pvar "wireGetPackedEnum" $$ lvar "toMaybe'Enum"
+        withGetPackedErr = inst "wireGetPacked" [patvar "ft'"] rhs
           where rhs = pvar "wireGetErr" $$ lvar "ft'"
 
 instanceGPB :: ProtoName -> Decl
@@ -473,7 +477,8 @@ makeKeyType self (extendee,f) = keyType
                     [ private "Key", private labeled
                     , if extendee /= self then qualName extendee else unqualName extendee
                     , typeQName ])
-        labeled | canRepeat f = "Seq"
+        labeled | isPacked f = "PackedSeq"
+                | canRepeat f = "Seq"
                 | otherwise = "Maybe"
         typeNumber = getFieldType . typeCode $ f
         typeQName :: QName
@@ -628,13 +633,13 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
 
         -- first case is for Group behavior, second case is for Message behavior, last is error handler
         cases g m e = Case (lvar "ft'") [ Alt src (litIntP 10) (UnGuardedAlt g) noWhere
-                                          , Alt src (litIntP 11) (UnGuardedAlt m) noWhere
-                                          , Alt src PWildCard  (UnGuardedAlt e) noWhere
-                                          ]
+                                        , Alt src (litIntP 11) (UnGuardedAlt m) noWhere
+                                        , Alt src PWildCard  (UnGuardedAlt e) noWhere
+                                        ]
 
         sizeCases = UnGuardedRhs $ cases (lvar "calc'Size") 
-                                           (pvar "prependMessageSize" $$ lvar "calc'Size")
-                                           (pvar "wireSizeErr" $$ lvar "ft'" $$ lvar "self'")
+                                         (pvar "prependMessageSize" $$ lvar "calc'Size")
+                                         (pvar "wireSizeErr" $$ lvar "ft'" $$ lvar "self'")
         whereCalcSize = BDecls [defun "calc'Size" [] sizes]
         sizes | null sizesList = Lit (Hse.Int 0)
               | otherwise = Paren (foldl1' (+!) sizesList)
@@ -644,9 +649,10 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                 sizesListExt | Just v <- mExt = sizesListFields ++ [ pvar "wireSizeExtField" $$ v ] 
                              | otherwise = sizesListFields
                 sizesListFields =  zipWith toSize vars . F.toList $ fieldInfos
-        toSize var fi = let f = if isRequired fi then "wireSizeReq"
-                                  else if canRepeat fi then "wireSizeRep"
-                                      else "wireSizeOpt"
+        toSize var fi = let f = if isPacked fi then "wireSizePacked"
+                                  else if isRequired fi then "wireSizeReq"
+                                         else if canRepeat fi then "wireSizeRep"
+                                                else "wireSizeOpt"
                         in foldl' App (pvar f) [ litInt (wireTagLength fi)
                                                  , litInt (getFieldType (typeCode fi))
                                                  , var]
@@ -670,9 +676,10 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                      . zip (map fieldNumber . F.toList $ fieldInfos)  -- add number as fst
                                      $ putStmtsList
                 putStmtsList = zipWith toPut vars . F.toList $ fieldInfos
-        toPut var fi = let f = if isRequired fi then "wirePutReq"
-                                 else if canRepeat fi then "wirePutRep"
-                                     else "wirePutOpt"
+        toPut var fi = let f = if isPacked fi then "wirePutPacked"
+                                 else if isRequired fi then "wirePutReq"
+                                        else if canRepeat fi then "wirePutRep"
+                                               else "wirePutOpt"
                        in Qualifier $
                           foldl' App (pvar f) [ litInt (getWireTag (wireTag fi))
                                                 , litInt (getFieldType (typeCode fi))
@@ -722,10 +729,15 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                           RecUpdate (lvar "old'Self")
                                                     [FieldUpdate (unqualFName . fieldName $ fi)
                                                                  (labelUpdate fi)])
-                                    $$ (Paren (pvar "wireGet" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
-        labelUpdate fi | canRepeat fi = pvar "append" $$ Paren ((Var . unqualFName . fieldName $ fi)
-                                                                  $$ lvar "old'Self")
-                                                      $$ lvar "new'Field"
+                                    $$ (Paren (pvar wireGet'Name $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
+          where wireGet'Name | isPacked fi = "wireGetPacked"
+                             | otherwise = "wireGet"
+        labelUpdate fi | isPacked fi = pvar "mergeAppend" $$ Paren ((Var . unqualFName . fieldName $ fi)
+                                                                    $$ lvar "old'Self")
+                                                          $$ lvar "new'Field"
+                       | canRepeat fi = pvar "append" $$ Paren ((Var . unqualFName . fieldName $ fi)
+                                                                     $$ lvar "old'Self")
+                                                           $$ lvar "new'Field"
                        | isRequired fi = qMerge (lvar "new'Field")
                        | otherwise = qMerge (pcon "Just" $$ lvar "new'Field")
             where qMerge x | fromIntegral (getFieldType (typeCode fi)) `elem` [10,11] =
@@ -735,7 +747,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                            | otherwise = x
         -- in the above, the [10,11] check optimizes using the
         -- knowledge that only TYPE_MESSAGE and TYPE_GROUP have merges
-        -- that are not right-biased replacements.  The "append" uses
+        -- that are not right-biased replacements.  The "mergeAppend" uses
         -- knowledge of how all repeated fields get merged.
     in InstDecl src [] (private "Wire") [TyCon me] . map InsDecl $
         [ FunBind [Match src (Ident "wireSize") [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] Nothing sizeCases whereCalcSize]
