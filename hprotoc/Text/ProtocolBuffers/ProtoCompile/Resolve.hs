@@ -326,6 +326,7 @@ resolveMGE nameU = fmap (resolvePredEnv "Message or Group or Enum" isMGE nameU) 
                               E'Enum {} -> True
                               _ -> False
 
+
 -- | 'expectMGE' is used by getType and 'entityField'
 expectMGE :: Either ErrStr Entity -> Either ErrStr Entity
 expectMGE ee@(Left {}) = ee
@@ -336,14 +337,14 @@ expectMGE ee@(Right e) = if isMGE e then ee
                               E'Enum {} -> True
                               _ -> False
 
-{-
+
 -- To be used for key extendee name resolution, but not part of the official protobuf-2.1.0 update
 resolveM :: Utf8 -> SE (Either ErrStr Entity)
 resolveM nameU = fmap (resolvePredEnv "Message" isM nameU) (asks my'Env)
   where isM e' = case e' of E'Message {} -> True
                             _ -> False
--}
 
+{-
 -- | 'expectM' is used by 'entityField'
 expectM :: Either ErrStr Entity -> Either ErrStr Entity
 expectM ee@(Left {}) = ee
@@ -351,6 +352,7 @@ expectM ee@(Right e) = if isM e then ee
                          else Left $ "expectM: Name resolution failed to find a Message:\n"++ishow (eName e) -- cannot show all of "e" because this will loop and hang the hprotoc program
   where isM e' = case e' of E'Message {} -> True
                             _ -> False
+-}
 
 expectFK :: Entity -> RE Entity
 expectFK e = if isFK e then return e
@@ -600,7 +602,7 @@ entityField isKey fdp = annErr ("entityField FieldDescriptorProto name is "++sho
   let mType = D.FieldDescriptorProto.type' fdp
 --  typeName <- maybeM (fmap expectMGE . resolveSE) (D.FieldDescriptorProto.type_name fdp)
   typeName <- maybeM resolveMGE (D.FieldDescriptorProto.type_name fdp)
-  if isKey then do extendee <- fmap expectM . resolveSE =<< getJust "entityField.extendee" (D.FieldDescriptorProto.extendee fdp)
+  if isKey then do extendee <- resolveM =<< getJust "entityField.extendee" (D.FieldDescriptorProto.extendee fdp)
                    return (self,E'Key names extendee (FieldId number) mType typeName)
            else return (self,E'Field names (FieldId number) mType typeName)
 

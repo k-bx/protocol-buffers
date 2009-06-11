@@ -2,7 +2,7 @@
 module Text.ProtocolBuffers.Mergeable() where
 
 import Text.ProtocolBuffers.Basic
-import Data.Monoid(mempty,mappend)
+-- import Data.Monoid(mempty,mappend)
 import Data.Sequence(empty,(><))
 
 -- Base types are not very mergeable, but their Maybe and Seq versions are:
