@@ -211,7 +211,7 @@ parseDefaultValue f@(D.FieldDescriptorProto.FieldDescriptorProto
                    TYPE_STRING  -> Just parseDefString
                    _            -> Just parseDefInteger
          case todo (utf8 bs) of
-           Nothing -> error $ "Could not parse as type "++ show t ++"the default value "++ show mayRawDef ++" for field "++show f
+           Nothing -> error $ "Could not parse as type "++ show t ++" the default value (raw) is "++ show mayRawDef ++" for field "++show f
            Just value -> return value
 
 --- From here down is code used to parse the format of the default values in the .proto files
@@ -244,8 +244,8 @@ parseDefBytes bs = Just (HsDef'ByteString bs)
 parseDefInteger :: ByteString -> Maybe HsDefault
 parseDefInteger bs = fmap HsDef'Integer . mayRead checkSign . U.toString $ bs
     where checkSign = readSigned' checkBase
-          checkBase ('0':'x':xs) = readHex xs
-          checkBase ('0':xs) = readOct xs
+          checkBase ('0':'x':xs@(_:_)) = readHex xs
+          checkBase ('0':xs@(_:_)) = readOct xs
           checkBase xs = readDec xs
 
 parseDefBool :: ByteString -> Maybe HsDefault

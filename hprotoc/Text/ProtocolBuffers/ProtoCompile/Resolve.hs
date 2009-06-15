@@ -66,7 +66,7 @@ import Control.Monad.Writer
 import Data.Char
 import Data.Ratio
 import Data.Ix(inRange)
-import Data.List(foldl',stripPrefix,lookup,isPrefixOf)
+import Data.List(foldl',stripPrefix,lookup,isPrefixOf,isSuffixOf)
 import Data.Map(Map)
 import Data.Maybe(mapMaybe)
 import Data.Monoid(Monoid(..))
@@ -107,6 +107,40 @@ getJust :: (Error e,MonadError e m, Typeable a) => String -> Maybe a -> m a
 {-#  INLINE getJust #-}
 getJust s ma@Nothing = throw $ "Impossible? Expected Just of type "++show (typeOf ma)++" but got nothing:\n"++indent s
 getJust _s (Just a) = return a
+
+defaultPackageName :: Utf8
+defaultPackageName = Utf8 (LC.pack "proto")
+
+getPackage :: D.FileDescriptorProto -> Utf8
+getPackage fdp = case D.FileDescriptorProto.package fdp of
+                   Just a -> a
+                   Nothing -> case D.FileDescriptorProto.name fdp of
+                                Nothing -> defaultPackageName
+                                Just filename -> case convertFileToPackage filename of
+                                                   Nothing -> defaultPackageName
+                                                   Just name -> name
+
+-- | 'convertFileToPackage' mimics what I observe protoc --java_out do to convert the file name to a
+-- class name.
+convertFileToPackage :: Utf8 -> Maybe Utf8
+convertFileToPackage filename =
+  let full = toString filename
+      suffix = ".proto"
+      noproto = if suffix `isSuffixOf` full then take (length full - length suffix) full else full
+      convert :: Bool -> String -> String
+      convert _ [] = []
+      convert toUp (x:xs) | inRange ('a','z') x = if toUp
+                                                    then toUpper x : convert False xs
+                                                    else x : convert False xs
+                          | inRange ('A','Z') x = x : convert False xs
+                          | inRange ('0','9') x = x : convert True xs
+                          | '_' == x = x : convert True xs
+                          | otherwise = convert True xs
+      converted = convert True noproto
+      leading = case converted of
+                  (x:_) | inRange ('0','9') x -> "Proto_" ++ converted
+                  _ -> converted
+  in if null leading then Nothing else (Just (fromString leading))
 
 -- This adds a leading dot if the input is non-empty
 joinDot :: [IName String] -> FIName String
@@ -439,14 +473,13 @@ makeNameMap hPrefix fdpIn = -- trace (show ("getPrefix",D.FileDescriptorProto.na
 --  makeOne :: D.FileDescriptorProto -> WriterT [(FIName Utf8,ProtoName)] (Either ErrStr) ()
   makeOne fdp = do
     -- Create 'template' :: ProtoName using "Text.ProtocolBuffers.Identifiers"
-    rawPackage <- getJust "makeNameMap.makeOne: D.FileDescriptorProto.package"
-                  (D.FileDescriptorProto.package fdp)
+    let rawPackage = getPackage fdp
     lift (checkDIUtf8 rawPackage) -- guard-like effect
     let packageName = difi (DIName rawPackage)
     rawParent <- getJust "makeNameMap.makeOne: " . msum $
         [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options fdp)
         , D.FileOptions.java_package =<< (D.FileDescriptorProto.options fdp)
-        , D.FileDescriptorProto.package fdp]
+        , Just (getPackage fdp)]
     diParent <- getJust ("makeNameMap.makeOne: invalid character in: "++show rawParent)
                   (validDI rawParent)
     let hParent = map (mangle :: IName Utf8 -> MName String) . splitDI $ diParent
@@ -1061,7 +1094,7 @@ loadProto protoDirs protoFile = goState (load Set.empty protoFile) where
             parsed'fdp <- either (loadFailed toRead . show) return $
                           (parseProto (unCanonFP relpath) protoContents)
             packageName <- either (loadFailed toRead . show) (return . map iToString . snd) $
-                           (checkDIUtf8 =<< getJust "makeTopLevel.packageName: you need a pacakge declaration in your proto file" (D.FileDescriptorProto.package parsed'fdp))
+                           (checkDIUtf8 (getPackage parsed'fdp)) -- =<< getJust "makeTopLevel.packageName: you need a pacakge declaration in your proto file" (D.FileDescriptorProto.package parsed'fdp))
             let parents = Set.insert file parentsIn
                 importList = map (fpCanonToLocal . CanonFP . toString) . F.toList . D.FileDescriptorProto.dependency $ parsed'fdp
             imports <- mapM (fmap getTL . load parents) importList
