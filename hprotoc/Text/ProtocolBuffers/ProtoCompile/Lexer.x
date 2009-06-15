@@ -13,7 +13,7 @@ import Numeric(readHex,readOct,readDec,readSigned,readFloat)
 
 %wrapper "posn-bytestring"
 
-@inComment = ([^\*] | $white)+ | ([\*]+ [^\/])
+@inComment = ([^\*] | $white)+ | ([\*]+ ([\x00-\xff] # [\/]))
 @comment = [\/] [\*] (@inComment)* [\*]+ [\/] | "//".* | "#".*
 
 $d = [0-9]
@@ -24,7 +24,7 @@ $d = [0-9]
 
 @ident1 = [A-Za-z_][A-Za-z0-9_]*
 @ident = [\.]?@ident1([\.]@ident1)*
-@notChar = [^A-Za-z0-9_]
+@notChar = [\x00-\xff] # [A-Za-z0-9_]
 
 @hexEscape = \\[Xx][A-Fa-f0-9]{1,2}
 @octEscape = \\0?[0-7]{1,3}

@@ -1,8 +1,17 @@
 This the README file for protocol-buffers, protocol-buffers-descriptors, and hprotoc.
 These are three interdependent Haskell packages by Chris Kuklewicz.
-This README was updated most recently to reflect version 1.4.0
+This README was updated most recently to reflect version 1.5.0
+This code should be compatible with Google protobuf version 2.1.0
 
 Questions and answers:
+
+What is new in 1.5.0 ?
+
+  The "packed" repeated fields should work on the wire, "deprecated" fields are parsed properly but
+  not nothing is otherwise done about this flag.  The parser should disambiguate references to
+  messages/groups/enums by ignoring fields with the same name (for types of normal fields and
+  extension fields).  The Lexar has had a few fixes courtesy of George van den Driessche (newlines
+  after numeric literals in proto files should now be handled).
 
 What is this for?  What does it do?  Why?
 
@@ -56,11 +65,11 @@ And what are the examples and tests sub-directories?
 
 What do I need to compile the code?
 
-  I use ghc (version 6.10.1, previously version 6.8.3) and cabal (version 1.6.0.1, previously version 1.2.4.0).
+  I use ghc (version 6.10.3) and cabal (version 1.6.0.3).
 
-  The dependencies are listed in the .cabal files, and these currently require you to go to hackage.haskell.org and get packages "binary" (I use version 0.4.4, previously version 0.4.2) and "utf8-string" (I use version 0.3.3, previously version 0.3.1.1) and hprotoc needs haskell-src-exts (exactly the "latest" version 4.8.0, upgrades tend to break compilation until (easily) patched).
+  The dependencies are listed in the .cabal files, and these currently require you to go to hackage.haskell.org and get packages "binary" (I use version 0.5.0.1) and "utf8-string" (I use version 0.3.5) and hprotoc needs haskell-src-exts (exactly version 0.4.8 at the moment).
 
-  The hprotoc Lexer.hs is produced from Lexer.x by the alex program (I use version 2.2) which can be downloaded from http://www.haskell.org/alex/ if you edit Lexer.x and need to regenerate Lexer.hs.
+  The hprotoc Lexer.hs is produced from Lexer.x by the alex program (I use version 2.3.1) which can be downloaded from http://www.haskell.org/alex/ if you edit Lexer.x and need to regenerate Lexer.hs.
 
   The usual cabal configure/buid/install works for the protocol-buffers library (and haddock for API docs):
     runhaskell Setup.hs configure 
@@ -92,7 +101,7 @@ How stable is the API?
 
 Where is the API documentation?
 
-  These file should be able to have cabal run the haddock generation.  I am using Haddock version 2.2.2 at the moment.  The imports of Text.ProtocolBuffers are the public API.  The generated code's API is Text.ProtocolBuffers.Header.  The only usage examples are in the examples sub-directory and the tests sub-directory.  Since the messages are simply Haskell data types most of the manipulation should be easy.
+  These file should be able to have cabal run the haddock generation.  I am using Haddock version 2.4.2 at the moment.  The imports of Text.ProtocolBuffers are the public API.  The generated code's API is Text.ProtocolBuffers.Header.  The only usage examples are in the examples sub-directory and the tests sub-directory.  Since the messages are simply Haskell data types most of the manipulation should be easy.
 
   The main thing that is weird is that messages with extension ranges get an ExtField record field that holds ... an internal data structure.  This is currently a Map from field number to a rather complicated existential + GADT combination that should really only be touched by the ExtKey and MessageAPI type class methods.  The ExtField data constructor is not hidden, though it could be and probably ought to be.
 

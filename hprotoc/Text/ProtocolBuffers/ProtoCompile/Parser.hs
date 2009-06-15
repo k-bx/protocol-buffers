@@ -420,6 +420,7 @@ fieldOption label mt = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where
       "packed" | isValidPacked label mt -> do
         boolLit >>= \p -> return' (old {D.FieldOptions.packed=Just p})
                | otherwise -> unexpected $ "field option packed is not defined for this kind of field"
+      "deprecated" -> boolLit >>= \p -> return' (old {D.FieldOptions.deprecated=Just p})
       _ -> unexpected $ "FieldOptions has no option named "++optName
 
 isValidPacked :: Label -> Maybe Type -> Bool

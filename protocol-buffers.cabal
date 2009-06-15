@@ -18,9 +18,6 @@ Tested-With:    GHC ==6.10.1
 extra-source-files: Setup.hs
                     TODO
                     README
-                    google/protobuf/unittest.proto
-                    google/protobuf/unittest_import.proto
-                    google/protobuf/unittest_custom_options.proto
 -- extra-tmp-files:
 
 flag small_base
