@@ -6,7 +6,7 @@
 --
 -- The internals have been updated to handle Google's protobuf version
 -- 2.0.3 formats, including EnumValueOptions.
-module Text.ProtocolBuffers.ProtoCompile.Parser(parseProto) where
+module Text.ProtocolBuffers.ProtoCompile.Parser(parseProto,isValidPacked) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
@@ -52,6 +52,7 @@ import Text.ProtocolBuffers.Header(ByteString,Int32,Int64,Word32,Word64
                                   ,ReflectEnum(reflectEnumInfo),enumName)
 import Text.ProtocolBuffers.ProtoCompile.Lexer(Lexed(..),alexScanTokens,getLinePos)
 import Text.ProtocolBuffers.ProtoCompile.Instances(parseLabel,parseType)
+import Text.ProtocolBuffers.Reflections(HsDefault(..),SomeRealFloat(..))
 
 import Control.Monad(when,liftM2,liftM3)
 import qualified Data.ByteString.Lazy.Char8 as LC(notElem,head)
@@ -149,7 +150,18 @@ enumInt = tok (\l-> case l of L_Integer _ x | inRange validRange x -> return (fr
 doubleLit :: P s Double
 doubleLit = tok (\l-> case l of L_Double _ x -> return x
                                 L_Integer _ x -> return (fromInteger x)
-                                _ -> Nothing) <?> "double (or integer) literal"
+                                L_Name _ s | s == U.fromString "inf" -> return (1/0)
+                                           | s == U.fromString "-inf" -> return (-1/0)
+                                           | s == U.fromString "nan" -> return (0/0)
+                                _ -> Nothing) <?> "double (or integer) literal or nan, inf, -inf"
+
+floatLit :: P s Float
+floatLit = tok (\l-> case l of L_Double _ x -> return . fromRational . toRational $ x
+                               L_Integer _ x -> return (fromInteger x)
+                               L_Name _ s | s == U.fromString "inf" -> return (1/0)
+                                          | s == U.fromString "-inf" -> return (-1/0)
+                                          | s == U.fromString "nan" -> return (0/0)
+                               _ -> Nothing) <?> "float (or integer) literal or nan, inf, -inf"
 
 ident,ident1,ident_package :: P s Utf8
 ident = tok (\l-> case l of L_Name _ x -> return (Utf8 x)
@@ -347,7 +359,7 @@ field upGroup maybeExtendee = do
                        , D.FieldDescriptorProto.type_name = Just name }
             return v
     else (eol >> return v1) <|> (subParser (pChar '[' >> subField theLabel maybeTypeCode) v1)
-             
+
 subField,defaultConstant :: Label -> Maybe Type -> P D.FieldDescriptorProto ()
 subField label mt = do
   defaultConstant label mt <|> fieldOption label mt
@@ -371,15 +383,19 @@ constant Nothing = fmap utf8 ident1 -- hopefully a matching enum; forget about U
 constant (Just t) =
   case t of
     TYPE_DOUBLE  -> do d <- doubleLit
-                       when (isNaN d || isInfinite d)
-                            (fail $ "default floating point literal "++show d++" is out of range for type "++show t)
-                       return' (U.fromString . show $ d)
-    TYPE_FLOAT   -> do d <- doubleLit
+--                       when (isNaN d || isInfinite d)
+--                            (fail $ "default floating point literal "++show d++" is out of range for type "++show t)
+                       return' (U.fromString . showRF $ d)
+    TYPE_FLOAT   -> do f <- floatLit
+{-
                        let fl :: Float
                            fl = read (show d)
-                       when (isNaN fl || isInfinite fl || (d==0) /= (fl==0))
+--                       when (isNaN fl || isInfinite fl || (d==0) /= (fl==0))
+--                            (fail $ "default floating point literal "++show d++" is out of range for type "++show t)
+                       when (isNaN fl /= isNaN d || isInfinite fl /= isInfinite d  || (d==0) /= (fl==0))
                             (fail $ "default floating point literal "++show d++" is out of range for type "++show t)
-                       return' (U.fromString . show $ d)
+-}
+                       return' (U.fromString . showRF $ f)
     TYPE_BOOL    -> boolLit >>= \b -> return' $ if b then true else false
     TYPE_STRING  -> strLit >>= return . utf8
     TYPE_BYTES   -> bsLit
@@ -476,8 +492,9 @@ enumValueOption = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where
 
 extensions = pName (U.fromString "extensions") >> do
   start <- fieldInt
-  pName (U.fromString "to")
-  end <- fieldInt <|> (pName (U.fromString "max") >> return (getFieldId maxBound))
+  let noEnd = eol >> return (succ start)
+      toEnd = pName (U.fromString "to") >> (fieldInt <|> (pName (U.fromString "max") >> return (getFieldId maxBound)))
+  end <- choice [ noEnd, toEnd ]
   let e = defaultValue { D.ExtensionRange.start = Just start
                        , D.ExtensionRange.end = Just (succ end) }  -- One _past_ the end!
   update' (\s -> s {D.DescriptorProto.extension_range=D.DescriptorProto.extension_range s |> e})
@@ -505,8 +522,8 @@ rpc = pName (U.fromString "rpc") >> do
   pName (U.fromString "returns")
   output <- between (pChar '(') (pChar ')') ident1
   let m1 = defaultValue { D.MethodDescriptorProto.name=Just name
-                      , D.MethodDescriptorProto.input_type=Just input
-                      , D.MethodDescriptorProto.output_type=Just output }
+                        , D.MethodDescriptorProto.input_type=Just input
+                        , D.MethodDescriptorProto.output_type=Just output }
   m <- (eol >> return m1) <|> subParser (pChar '{' >> subRpc) m1
   update' (\s -> s {D.ServiceDescriptorProto.method=D.ServiceDescriptorProto.method s |> m})
 
@@ -544,3 +561,8 @@ cEncode = concatMap one where
         | otherwise = '\\':(showOct x "")
   sl c = ['\\',c]
 -}
+
+showRF :: (RealFloat a) => a -> String
+showRF x | isNaN x = "nan"
+         | isInfinite x = if 0 < x then "inf" else "-inf"
+         | otherwise = show x

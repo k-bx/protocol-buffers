@@ -44,7 +44,8 @@ import Text.ProtocolBuffers.WireMessage
   , wirePutReq,wirePutOpt,wirePutRep
   , getMessageWith,getBareMessageWith,wireGetEnum,wireGetPackedEnum
   , wireSizeErr,wirePutErr,wireGetErr
-  , unknown,unknownField)
+  , unknown,unknownField
+  , fieldIdOf)
 
 {-# INLINE append #-}
 append :: Seq a -> a -> Seq a

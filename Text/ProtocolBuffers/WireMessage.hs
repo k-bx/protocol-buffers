@@ -26,7 +26,7 @@ module Text.ProtocolBuffers.WireMessage
     , Wire(..)
       -- * The internal exports, for use by generated code and the "Text.ProtcolBuffer.Extensions" module
     , size'Varint,toWireType,toWireTag,toPackedWireTag,mkWireTag
-    , prependMessageSize,putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag
+    , prependMessageSize,putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag,fieldIdOf
     , wireSizeReq,wireSizeOpt,wireSizeRep,wireSizePacked
     , wirePutReq,wirePutOpt,wirePutRep,wirePutPacked
     , wireSizeErr,wirePutErr,wireGetErr
@@ -257,6 +257,9 @@ mkWireTag fieldId wireType
 splitWireTag :: WireTag -> (FieldId,WireType)
 splitWireTag (WireTag wireTag) = ( FieldId . fromIntegral $ wireTag `shiftR` 3
                                  , WireType . fromIntegral $ wireTag .&. 7 )
+
+fieldIdOf :: WireTag -> FieldId
+fieldIdOf = fst . splitWireTag
 
 {-# INLINE wireGetPackedEnum #-}
 wireGetPackedEnum :: (Typeable e,Enum e) => (Int -> Maybe e) -> Get (Seq e)

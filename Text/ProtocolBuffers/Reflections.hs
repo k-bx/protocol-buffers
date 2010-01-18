@@ -12,9 +12,9 @@
 -- is put into the top level module created by hprotoc.
 module Text.ProtocolBuffers.Reflections
   ( ProtoName(..),ProtoFName(..),ProtoInfo(..),DescriptorInfo(..),FieldInfo(..),KeyInfo
-  , HsDefault(..),EnumInfo(..),EnumInfoApp
+  , HsDefault(..),SomeRealFloat(..),EnumInfo(..),EnumInfoApp
   , ReflectDescriptor(..),ReflectEnum(..),GetMessageInfo(..)
-  , makePNF
+  , makePNF, toRF, fromRF
   ) where
 
 import Text.ProtocolBuffers.Basic
@@ -94,11 +94,13 @@ type KeyInfo = (ProtoName,FieldInfo) -- Extendee and FieldInfo
 
 data FieldInfo = FieldInfo { fieldName     :: ProtoFName
                            , fieldNumber   :: FieldId
-                           , wireTag       :: WireTag
+                           , wireTag       :: WireTag          -- ^ Used for writing and reading if packedTag is Nothing
+                           , packedTag     :: Maybe (WireTag,WireTag) -- ^ used for reading when Just {} instead of wireTag
                            , wireTagLength :: WireSize         -- ^ Bytes required in the Varint formatted wireTag
                            , isPacked      :: Bool
                            , isRequired    :: Bool
-                           , canRepeat     :: Bool
+                           , canRepeat     :: Bool             -- ^ True if repeated is the field type
+                           , mightPack     :: Bool             -- ^ True if packed would be valid for this field type
                            , typeCode      :: FieldType        -- ^ fromEnum of Text.DescriptorProtos.FieldDescriptorProto.Type
                            , typeName      :: Maybe ProtoName  -- ^ Set for Messages,Groups,and Enums
                            , hsRawDefault  :: Maybe ByteString -- ^ crappy, but not escaped, thing
@@ -114,10 +116,26 @@ data FieldInfo = FieldInfo { fieldName     :: ProtoFName
 -- 'ByteString' here as this is sufficient for code generation.
 data HsDefault = HsDef'Bool Bool
                | HsDef'ByteString ByteString
-               | HsDef'Rational Rational
+               | HsDef'RealFloat SomeRealFloat
                | HsDef'Integer Integer
                | HsDef'Enum String
   deriving (Show,Read,Eq,Ord,Data,Typeable)
+
+-- | 'SomeRealFloat' projects Double/Float to Rational or a special IEEE type.
+-- This is needed to track protobuf-2.3.0 which allows nan and inf and -inf default values.
+data SomeRealFloat = SRF'Rational Rational | SRF'nan | SRF'ninf | SRF'inf
+  deriving (Show,Read,Eq,Ord,Data,Typeable)
+
+toRF :: (RealFloat a, Fractional a) => SomeRealFloat -> a
+toRF (SRF'Rational r) = fromRational r
+toRF SRF'nan = (0/0)
+toRF SRF'ninf = (-1/0)
+toRF SRF'inf = (1/0)
+
+fromRF :: (RealFloat a, Fractional a) => a -> SomeRealFloat
+fromRF x | isNaN x = SRF'nan
+         | isInfinite x = if 0 < x then SRF'inf else SRF'ninf
+         | otherwise = SRF'Rational (toRational x)
 
 data EnumInfo = EnumInfo { enumName :: ProtoName
                          , enumFilePath :: [FilePath]

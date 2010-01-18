@@ -166,19 +166,30 @@ toFieldInfo' reMap parent
                         protoFName = ProtoFName x a b (mangle c)
                         fieldId = (FieldId (fromIntegral number))
                         fieldType = (FieldType (fromEnum type'))
+{- removed to update 1.5.5 to be compatible with protobuf-2.3.0
                         wt | packedOption = toPackedWireTag fieldId
                            | otherwise = toWireTag fieldId fieldType
+-}
+                        wt | packedOption = toPackedWireTag fieldId                -- write packed
+                           | otherwise = toWireTag fieldId fieldType               -- write unpacked
+                             
+                        wt2 | validPacked = Just (toWireTag fieldId fieldType      -- read unpacked
+                                                 ,toPackedWireTag fieldId)         -- read packed
+                            | otherwise = Nothing
                         wtLength = size'Varint (getWireTag wt)
                         packedOption = case mayOpt of
                                          Just (D.FieldOptions { D.FieldOptions.packed = Just True }) -> True
                                          _ -> False
+                        validPacked = isValidPacked label fieldType
                     in FieldInfo protoFName
                                  fieldId
                                  wt
+                                 wt2
                                  wtLength
                                  packedOption
                                  (label == LABEL_REQUIRED)
                                  (label == LABEL_REPEATED)
+                                 validPacked
                                  fieldType
                                  (fmap (toHaskell reMap . FIName) mayTypeName)
                                  (fmap utf8 mayRawDef)
@@ -224,16 +235,38 @@ mayRead :: ReadS a -> String -> Maybe a
 mayRead f s = case f s of [(a,"")] -> Just a; _ -> Nothing
 
 parseDefDouble :: ByteString -> Maybe HsDefault
-parseDefDouble bs = fmap (HsDef'Rational . toRational) 
-                    . mayRead reads' . U.toString $ bs
+parseDefDouble bs = case (U.toString bs) of
+                      "nan" -> Just (HsDef'RealFloat SRF'nan)
+                      "-inf" -> Just (HsDef'RealFloat SRF'ninf)
+                      "inf" -> Just (HsDef'RealFloat SRF'inf)
+                      s -> fmap (HsDef'RealFloat . SRF'Rational . toRational) . mayRead reads'$ s
   where reads' :: ReadS Double
         reads' = readSigned' reads
 
+{-
+parseDefDouble :: ByteString -> Maybe HsDefault
+parseDefDouble bs | 
+                  | otherwise = fmap (HsDef'Rational . toRational) 
+                                . mayRead reads' . U.toString $ bs
+-}
+
+
+parseDefFloat :: ByteString -> Maybe HsDefault
+parseDefFloat bs = case (U.toString bs) of
+                      "nan" -> Just (HsDef'RealFloat SRF'nan)
+                      "-inf" -> Just (HsDef'RealFloat SRF'ninf)
+                      "inf" -> Just (HsDef'RealFloat SRF'inf)
+                      s -> fmap (HsDef'RealFloat . SRF'Rational . toRational) . mayRead reads'$ s
+  where reads' :: ReadS Float
+        reads' = readSigned' reads
+
+{-
 parseDefFloat :: ByteString -> Maybe HsDefault
 parseDefFloat bs = fmap  (HsDef'Rational . toRational) 
                    . mayRead reads' . U.toString $ bs
   where reads' :: ReadS Float
         reads' = readSigned' reads
+-}
 
 parseDefString :: ByteString -> Maybe HsDefault
 parseDefString bs = Just (HsDef'ByteString bs)
@@ -258,3 +291,14 @@ readSigned' :: (Num a) => ([Char] -> [(a, t)]) -> [Char] -> [(a, t)]
 readSigned' f ('-':xs) = map (\(v,s) -> (-v,s)) . f $ xs
 readSigned' f ('+':xs) = f xs
 readSigned' f xs = f xs
+
+-- Must keep synchronized with Parser.isValidPacked
+isValidPacked :: Label -> FieldType -> Bool
+isValidPacked LABEL_REPEATED fieldType =
+  case fieldType of
+    9 -> False
+    10 -> False
+    11 -> False -- Impossible value for typeCode from parseType, but here for completeness
+    12 -> False
+    _ -> True
+isValidPacked _ _ = False

@@ -436,7 +436,7 @@ instance ExtKey Maybe where
                 Left errMsg -> fail $ "wireGetKey Maybe: Could not parseWireExtMaybe: "++show k++"\n"++errMsg
                 Right (_,ExtOptional t' (GPDyn GPWitness vOld)) | t/=t' ->
                   fail $ "wireGetKey Maybe: Key mismatch! found wrong field type: "++show (k,t,t')
-                                                         | otherwise ->
+                                                                | otherwise ->
                   case cast vOld of
                     Nothing -> fail $ "wireGetKey Maybe: previous Maybe value case failed: "++show (k,typeOf vOld)
                     Just vOld' -> return $ ExtOptional t (GPDyn GPWitness (mergeAppend vOld' v))
@@ -528,7 +528,8 @@ instance ExtKey Seq where
                     Just s' -> return $ ExtRepeated t (GPDynSeq GPWitness (s' |> v))
                 wtf -> fail $ "wireGetKey Seq: Weird parseWireExtSeq return value: "++show (k,wtf)
             Just wtf@(ExtOptional {}) -> fail $ "wireGetKey Seq: ExtOptional found when ExtRepeated expected: "++show (k,wtf)
-            Just wtf@(ExtPacked {}) -> fail $ "wireGetKey Seq: ExtPacked found when ExtRepeated expected: "++show (k,wtf)
+-- XXX XXX XXX 2.3.0 need to add handling to the next line?
+           Just wtf@(ExtPacked {}) -> fail $ "wireGetKey Seq: ExtPacked found when ExtRepeated expected: "++show (k,wtf)
     let ef' = M.insert i v' ef
     seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
 
@@ -598,6 +599,7 @@ instance ExtKey PackedSeq where
                     Just s' -> return $ ExtRepeated t (GPDynSeq GPWitness (s' >< vv))
                 wtf -> fail $ "wireGetKey PackedSeq: Weird parseWireExtPackedSeq return value: "++show (k,wtf)
             Just wtf@(ExtOptional {}) -> fail $ "wireGetKey PackedSeq: ExtOptional found when ExtPacked expected: "++show (k,wtf)
+-- XXX XXX XXX 2.3.0 need to add handling to the next line?
             Just wtf@(ExtRepeated {}) -> fail $ "wireGetKey PackedSeq: ExtRepeated found when ExtPacked expected: "++show (k,wtf)
     let ef' = M.insert i v' ef
     seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
@@ -642,10 +644,10 @@ wirePutExtField (ExtField m) = mapM_ aPut (M.assocs m) where
 notExtension :: (ReflectDescriptor a, ExtendMessage a,Typeable a) => FieldId -> WireType -> a -> Get a
 notExtension fieldId _wireType msg = throwError ("Field id "++show fieldId++" is not a valid extension field id for "++show (typeOf (undefined `asTypeOf` msg)))
 
--- | get a value from the wire into the message's ExtField. This is
--- used by 'getMessageExt' and 'getBareMessageExt' above.
+-- | get a value from the wire into the message's ExtField. This is used by generated code for
+-- extensions that were not known at compile time.
 loadExtension :: (ReflectDescriptor a, ExtendMessage a) => FieldId -> WireType -> a -> Get a
---loadExtension fieldId wireType msg | isValidExt fieldId msg = do -- XXX
+--loadExtension fieldId wireType msg | isValidExt fieldId msg = do -- XXX check moved to generated code
 --loadExtension fieldId wireType msg = unknown fieldId wireType msg -- XXX
 loadExtension fieldId wireType msg = do
   let (ExtField ef) = getExtField msg

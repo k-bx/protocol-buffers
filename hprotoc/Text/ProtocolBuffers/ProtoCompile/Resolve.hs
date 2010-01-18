@@ -138,7 +138,7 @@ convertFileToPackage filename =
                           | otherwise = convert True xs
       converted = convert True noproto
       leading = case converted of
-                  (x:_) | inRange ('0','9') x -> "Proto_" ++ converted
+                  (x:_) | inRange ('0','9') x -> "proto_" ++ converted
                   _ -> converted
   in if null leading then Nothing else (Just (fromString leading))
 

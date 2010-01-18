@@ -34,6 +34,8 @@ $d = [0-9]
 
 $special    = [=\(\)\,\;\[\]\{\}\.]
 
+@ninf = [\-][i][n][f]
+
 :-
 
   $white+  ;
@@ -48,6 +50,7 @@ $special    = [=\(\)\,\;\[\]\{\}\.]
   @doubleLit            { dieAt "floating followed by invalid character" }
   @strLit               { parseStr }
   @ident                { parseName }
+  @ninf                 { parseNinf }
   $special              { parseChar }
   .                     { wtfAt }
 
@@ -97,6 +100,9 @@ parseDouble pos s = maybe (errAt pos "Impossible? parseDouble failed")
 parseStr pos s = let middle = ByteString.init . ByteString.tail $ s
                  in either (errAt pos) (L_String (line pos) middle . L.pack)
                     . sDecode . ByteString.unpack $ middle
+
+-- Here s is always "-inf" matched by @ninf
+parseNinf pos s = L_Name (line pos) s
 
 parseName pos s = L_Name (line pos) s
 parseChar pos s = L (line pos) (ByteString.head s)

@@ -17,7 +17,7 @@ module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumM
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
-import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),DescriptorInfo(..),ProtoInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..))
+import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),DescriptorInfo(..),ProtoInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..))
 
 import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(Result(..),VertexKind(..),pKey,pfKey,getKind,Part(..))
 
@@ -506,10 +506,14 @@ defToSyntax tc x =
     HsDef'Bool b -> pcon (show b)
     HsDef'ByteString bs -> (if tc == 9 then (\ xx -> Paren (pvar "Utf8" $$ xx)) else id) $
                            (Paren $ pvar "pack" $$ litStr (LC.unpack bs))
-    HsDef'Rational r | r < 0 -> Paren $ Lit (Frac r)
-                     | otherwise -> Lit (Frac r)
-    HsDef'Integer i -> litInt i 
+    HsDef'RealFloat (SRF'Rational r) | r < 0 -> Paren $ Lit (Frac r)
+                                     | otherwise -> Lit (Frac r)
+    HsDef'RealFloat SRF'nan  -> litInt   0  /! litInt 0
+    HsDef'RealFloat SRF'ninf -> litInt   1  /! litInt 0
+    HsDef'RealFloat SRF'inf  -> litInt (-1) /! litInt 0
+    HsDef'Integer i -> litInt i
     HsDef'Enum s -> Paren $ pvar "read" $$ litStr s
+ where (/!) a b = Paren (mkOp "/" a b)
 
 descriptorX :: DescriptorInfo -> Decl
 descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] derives
@@ -691,8 +695,11 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
           (pvar "wireGetErr" $$ lvar "ft'")
         whereDecls = BDecls [whereUpdateSelf,whereAllowed,whereCheckAllowed]
         whereAllowed = defun "allowed'wire'Tags" [] (pvar "fromDistinctAscList" $$ List (map litInt allowed))
-        allowed = sort $ [ getWireTag (wireTag f) | f <- F.toList (fields di)] ++
-                         [ getWireTag (wireTag f) | f <- F.toList (knownKeys di)]
+--        allowed = sort $ [ getWireTag (wireTag fi) | fi <- F.toList (fields di)] ++
+        allowed = sort . concat $ [ allowedList fi | fi <- F.toList (fields di)] ++
+                                  [ allowedList fi | fi <- F.toList (knownKeys di)]
+          where allowedList fi | Just (wt1,wt2) <- packedTag fi = [getWireTag wt1,getWireTag wt2]
+                               | otherwise = [getWireTag (wireTag fi)]
         locals = ["wire'Tag","field'Number","wire'Type","old'Self"]
         whereCheckAllowed = defun "check'allowed" (map patvar locals) process
          where process = if storeUnknown di then catchUn updateBranch else updateBranch
@@ -700,14 +707,16 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                  $$ Paren (Lambda src [PWildCard] (args (pvar "loadUnknown")))
                updateBranch | null allowed = extBranch
                             | otherwise = If (pvar "member" $$ lvar "wire'Tag" $$ lvar "allowed'wire'Tags")
-                                               (lvar "update'Self" $$ lvar "field'Number" $$ lvar "old'Self")
-                                               extBranch
+--                                           (lvar "update'Self" $$ lvar "field'Number" $$ lvar "old'Self")
+                                             (lvar "update'Self" $$ lvar "wire'Tag" $$ lvar "old'Self")
+                                             extBranch
                extBranch | extensible = If (isAllowedExt (lvar "field'Number"))
-                                             (args (pvar "loadExtension"))
-                                             unknownBranch
+                                           (args (pvar "loadExtension"))
+                                           unknownBranch
                          | otherwise = unknownBranch
-               unknownBranch =args (pvar "unknown")
-               args x = x $$ lvar "field'Number" $$ lvar "wire'Type" $$ lvar "old'Self"
+               unknownBranch = args (pvar "unknown")
+               args x = x $$ field'Number $$ lvar "wire'Type" $$ lvar "old'Self"
+        field'Number = Paren (pvar "fieldIdOf" $$ lvar "wire'Tag")
         isAllowedExt x = pvar "or" $$ List ranges where
           (<=!) = mkOp "<="; (&&!) = mkOp "&&"; (==!) = mkOp "=="
           ranges = map (\ (FieldId lo,FieldId hi) -> if hi < maxHi
@@ -716,6 +725,50 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                               else (litInt lo <=! x) &&! (x <=! litInt hi)
                                                        else litInt lo <=! x) allowedExts
              where FieldId maxHi = maxBound
+
+-- New for 1.5.6 on way to compatibility with protobuf-2.3.0
+        whereUpdateSelf = defun "update'Self" [patvar "wire'Tag", patvar "old'Self"]
+                          (Case (lvar "wire'Tag") updateAlts)
+        updateAlts = concatMap toUpdate (F.toList fieldInfos)
+                     ++ (if extensible && (not (Seq.null fieldExts)) then map toUpdateExt (F.toList fieldExts) else [])
+                     ++ [Alt src PWildCard (UnGuardedAlt $
+                           pvar "unknownField" $$ (lvar "old'Self") $$ field'Number) noWhere]
+
+        toUpdateExt fi = Alt src (litIntP . getFieldId . fieldNumber $ fi) (UnGuardedAlt $
+                           pvar "wireGetKey" $$ Var (mayQualName protoName (fieldName fi)) $$ lvar "old'Self") noWhere
+
+        toUpdate fi | Just (wt1,wt2) <- packedTag fi = [toUpdateUnpacked wt1 fi, toUpdatePacked wt2 fi]
+                    | otherwise                      = [toUpdateUnpacked (wireTag fi) fi]
+        toUpdateUnpacked wt1 fi =
+          Alt src (litIntP . getWireTag $ wt1) (UnGuardedAlt $ 
+            pvar "fmap" $$ (Paren $ Lambda src [patvar "new'Field"] $
+                              RecUpdate (lvar "old'Self")
+                                        [FieldUpdate (unqualFName . fieldName $ fi)
+                                                     (labelUpdateUnpacked fi)])
+                        $$ (Paren (pvar "wireGet" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
+        labelUpdateUnpacked fi | canRepeat fi = pvar "append" $$ Paren ((Var . unqualFName . fieldName $ fi)
+                                                                             $$ lvar "old'Self")
+                                                              $$ lvar "new'Field"
+                               | isRequired fi = qMerge (lvar "new'Field")
+                               | otherwise = qMerge (pcon "Just" $$ lvar "new'Field")
+            where qMerge x | fromIntegral (getFieldType (typeCode fi)) `elem` [10,11] =
+                               pvar "mergeAppend" $$ Paren ( (Var . unqualFName . fieldName $ fi)
+                                                               $$ lvar "old'Self" )
+                                                  $$ Paren x
+                           | otherwise = x
+        toUpdatePacked wt2 fi =
+          Alt src (litIntP . getWireTag $ wt2) (UnGuardedAlt $ 
+            pvar "fmap" $$ (Paren $ Lambda src [patvar "new'Field"] $
+                              RecUpdate (lvar "old'Self")
+                                        [FieldUpdate (unqualFName . fieldName $ fi)
+                                                     (labelUpdatePacked fi)])
+                        $$ (Paren (pvar "wireGetPacked" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
+        labelUpdatePacked fi = pvar "mergeAppend" $$ Paren ((Var . unqualFName . fieldName $ fi)
+                                                                 $$ lvar "old'Self")
+                                                  $$ lvar "new'Field"
+
+-- removed after version 1.5.5 to make compatible with protobuf-2.3.0
+{-
         whereUpdateSelf = defun "update'Self" [patvar "field'Number", patvar "old'Self"]
                             (Case (lvar "field'Number") updateAlts)
         updateAlts = map toUpdate (F.toList fieldInfos)
@@ -745,10 +798,12 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                                $$ lvar "old'Self" )
                                                   $$ Paren x
                            | otherwise = x
+-}
         -- in the above, the [10,11] check optimizes using the
         -- knowledge that only TYPE_MESSAGE and TYPE_GROUP have merges
         -- that are not right-biased replacements.  The "mergeAppend" uses
         -- knowledge of how all repeated fields get merged.
+
     in InstDecl src [] (private "Wire") [TyCon me] . map InsDecl $
         [ FunBind [Match src (Ident "wireSize") [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] Nothing sizeCases whereCalcSize]
         , FunBind [Match src (Ident "wirePut")  [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] Nothing putCases wherePutFields]
@@ -766,10 +821,12 @@ instanceReflectDescriptor di
         gmi,reqId,allId :: Exp
         gmi = pcon "GetMessageInfo" $$ Paren reqId $$ Paren allId
         reqId = pvar "fromDistinctAscList" $$
-                List (map litInt . sort $ [ getWireTag (wireTag f) | f <- F.toList (fields di), isRequired f])
+                List (map litInt . sort . concat $ [ allowedList fi | fi <- F.toList (fields di), isRequired fi])
         allId = pvar "fromDistinctAscList" $$
-                List (map litInt . sort $ [ getWireTag (wireTag f) | f <- F.toList (fields di)] ++
-                                            [ getWireTag (wireTag f) | f <- F.toList (knownKeys di)])
+                List (map litInt . sort . concat $ [ allowedList fi | fi <- F.toList (fields di)] ++
+                                                   [ allowedList fi | fi <- F.toList (knownKeys di)])
+        allowedList fi | Just (wt1,wt2) <- packedTag fi = [getWireTag wt1,getWireTag wt2]
+                       | otherwise = [getWireTag (wireTag fi)]
 
 ------------------------------------------------------------------
 
