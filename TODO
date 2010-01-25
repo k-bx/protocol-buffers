@@ -15,6 +15,7 @@ Reflection:
  note that FieldInfo.wireTagLength is the same for both
 
 Above may work except for loading previously unknown packed extensions 
+Need to change Unknown.loadUnknown to tolerate the same field'Number with different wire types
 
 MakeReflections:
  toFieldInfo'

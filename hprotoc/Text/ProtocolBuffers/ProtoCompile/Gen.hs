@@ -688,6 +688,70 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                           foldl' App (pvar f) [ litInt (getWireTag (wireTag fi))
                                                 , litInt (getFieldType (typeCode fi))
                                                 , var]
+-- new for 1.5.7, rewriting this a great deal!
+        getCases = let param = if storeUnknown di
+                                 then Paren (pvar "catch'Unknown" $$ lvar "check'allowed")
+                                 else lvar "check'allowed"
+                   in UnGuardedRhs $ cases (pvar "getBareMessageWith" $$ param)
+                                           (pvar "getMessageWith" $$ param)
+                                           (pvar "wireGetErr" $$ lvar "ft'")
+        whereDecls = BDecls [whereUpdateSelf]
+        whereUpdateSelf = defun "update'Self" [patvar "wire'Tag", patvar "old'Self"]
+                                (Case (lvar "wire'Tag") updateAlts)
+        -- update cases are all normal fields then all known extensions then wildcard
+        updateAlts = concatMap toUpdate (F.toList fieldInfos)
+                     ++ (if extensible then concatMap toUpdateExt (F.toList fieldExts) else [])
+                     ++ [Alt src PWildCard (UnGuardedAlt wildcardAlt) noWhere]
+        -- the wildcard alternative handles new extensions and 
+        wildcardAlt = letPair extBranch
+          where letPair = Let (BDecls [PatBind src (PTuple [patvar "field'Number",patvar "wire'Type"]) Nothing
+                                         (UnGuardedRhs (pvar "splitWireTag" $$ lvar "wire'Tag")) (BDecls [])])
+                extBranch | extensible = If (isAllowedExt (lvar "field'Number"))
+                                            (argPair (pvar "loadExtension"))
+                                            unknownBranch
+                          | otherwise = unknownBranch
+                unknownBranch = argPair (pvar "unknown")
+                argPair x = x $$ lvar "field'Number" $$ lvar "wire'Type" $$ lvar "old'Self"
+        isAllowedExt x = pvar "or" $$ List ranges where
+          (<=!) = mkOp "<="; (&&!) = mkOp "&&"; (==!) = mkOp "=="; (FieldId maxHi) = maxBound
+          ranges = map (\ (FieldId lo,FieldId hi) ->
+                            if hi < maxHi
+                              then if lo == hi
+                                     then (x ==! litInt lo)
+                                     else (litInt lo <=! x) &&! (x <=! litInt hi)
+                              else litInt lo <=! x )
+                       allowedExts
+        toUpdate fi | Just (wt1,wt2) <- packedTag fi = [toUpdateUnpacked wt1 fi, toUpdatePacked wt2 fi]
+                    | otherwise                      = [toUpdateUnpacked (wireTag fi) fi]
+        toUpdateUnpacked wt1 fi =
+          Alt src (litIntP . getWireTag $ wt1) (UnGuardedAlt $ 
+            pvar "fmap" $$ (Paren $ Lambda src [patvar "new'Field"] $
+                              RecUpdate (lvar "old'Self")
+                                        [FieldUpdate (unqualFName . fieldName $ fi)
+                                                     (labelUpdateUnpacked fi)])
+                        $$ (Paren (pvar "wireGet" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
+        labelUpdateUnpacked fi | canRepeat fi = pvar "append" $$ Paren ((Var . unqualFName . fieldName $ fi)
+                                                                             $$ lvar "old'Self")
+                                                              $$ lvar "new'Field"
+                               | isRequired fi = qMerge (lvar "new'Field")
+                               | otherwise = qMerge (pcon "Just" $$ lvar "new'Field")
+            where qMerge x | fromIntegral (getFieldType (typeCode fi)) `elem` [10,11] =
+                               pvar "mergeAppend" $$ Paren ( (Var . unqualFName . fieldName $ fi)
+                                                               $$ lvar "old'Self" )
+                                                  $$ Paren x
+                           | otherwise = x
+        toUpdatePacked wt2 fi =
+          Alt src (litIntP . getWireTag $ wt2) (UnGuardedAlt $ 
+            pvar "fmap" $$ (Paren $ Lambda src [patvar "new'Field"] $
+                              RecUpdate (lvar "old'Self")
+                                        [FieldUpdate (unqualFName . fieldName $ fi)
+                                                     (labelUpdatePacked fi)])
+                        $$ (Paren (pvar "wireGetPacked" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
+        labelUpdatePacked fi = pvar "mergeAppend" $$ Paren ((Var . unqualFName . fieldName $ fi)
+                                                                 $$ lvar "old'Self")
+                                                  $$ lvar "new'Field"
+
+
 
         getCases = UnGuardedRhs $ cases
           (pvar "getBareMessageWith" $$ lvar "check'allowed")
@@ -725,6 +789,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                               else (litInt lo <=! x) &&! (x <=! litInt hi)
                                                        else litInt lo <=! x) allowedExts
              where FieldId maxHi = maxBound
+
 
 -- New for 1.5.6 on way to compatibility with protobuf-2.3.0
         whereUpdateSelf = defun "update'Self" [patvar "wire'Tag", patvar "old'Self"]

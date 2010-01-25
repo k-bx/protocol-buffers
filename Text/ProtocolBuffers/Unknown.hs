@@ -84,7 +84,7 @@ loadUnknown fieldId wireType msg = do
           uf' = M.insert fieldId v' uf
       seq v' $ seq uf' $ return $ putUnknownField (UnknownField uf') msg
     Just (UFV wt raw) | wt /= wireType -> badwt wt
-                                    | otherwise -> do
+                      | otherwise -> do
       bs <- wireGetFromWire fieldId wireType
       let v' = UFV wt (raw |> bs)
           uf' = M.insert fieldId v' uf
