@@ -27,7 +27,7 @@ Executable hprotoc
   build-depends:   protocol-buffers == 1.6.0, protocol-buffers-descriptor == 1.6.0
   build-depends:   binary, utf8-string
   build-depends:   parsec < 3, haskell-src-exts >= 1.7.0,
-                   containers,bytestring,array,filepath == 1.1.0.2,directory == 1.0.0.3,mtl,QuickCheck
+                   containers,bytestring,array,filepath == 1.1.0.0,directory == 1.0.0.1,mtl,QuickCheck
 
   if flag(small_base)
         build-depends: base == 4.*
