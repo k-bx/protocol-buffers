@@ -52,7 +52,7 @@ import Text.ProtocolBuffers.Header(ByteString,Int32,Int64,Word32,Word64
                                   ,ReflectEnum(reflectEnumInfo),enumName)
 import Text.ProtocolBuffers.ProtoCompile.Lexer(Lexed(..),alexScanTokens,getLinePos)
 import Text.ProtocolBuffers.ProtoCompile.Instances(parseLabel,parseType)
-import Text.ProtocolBuffers.Reflections(HsDefault(..),SomeRealFloat(..))
+import Text.ProtocolBuffers.Reflections()
 
 import Control.Monad(when,liftM2,liftM3)
 import qualified Data.ByteString.Lazy.Char8 as LC(notElem,head)
@@ -386,7 +386,7 @@ constant (Just t) =
 --                       when (isNaN d || isInfinite d)
 --                            (fail $ "default floating point literal "++show d++" is out of range for type "++show t)
                        return' (U.fromString . showRF $ d)
-    TYPE_FLOAT   -> do f <- floatLit
+    TYPE_FLOAT   -> do fl <- floatLit
 {-
                        let fl :: Float
                            fl = read (show d)
@@ -395,7 +395,7 @@ constant (Just t) =
                        when (isNaN fl /= isNaN d || isInfinite fl /= isInfinite d  || (d==0) /= (fl==0))
                             (fail $ "default floating point literal "++show d++" is out of range for type "++show t)
 -}
-                       return' (U.fromString . showRF $ f)
+                       return' (U.fromString . showRF $ fl)
     TYPE_BOOL    -> boolLit >>= \b -> return' $ if b then true else false
     TYPE_STRING  -> strLit >>= return . utf8
     TYPE_BYTES   -> bsLit

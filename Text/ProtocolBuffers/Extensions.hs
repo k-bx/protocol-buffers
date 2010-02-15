@@ -21,10 +21,11 @@ module Text.ProtocolBuffers.Extensions
     getKeyFieldId,getKeyFieldType,getKeyDefaultValue
   -- * External types and classes
   , Key(..),ExtKey(..),MessageAPI(..)
-  , PackedSeq(..)
+  , PackedSeq(..), EP(..)
   -- * Internal types, functions, and classes
   , wireSizeExtField,wirePutExtField,loadExtension,notExtension
-  , GPB,ExtField(..),ExtendMessage(..),ExtFieldValue(..)
+  , wireGetKeyToUnPacked, wireGetKeyToPacked
+  , GPB,ExtField(..),ExtendMessage(..),ExtFieldValue(..),
   ) where
 
 import Control.Monad.Error.Class(throwError)

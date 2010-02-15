@@ -884,9 +884,13 @@ interpretOptions name msg unos = do
   let (ExtField ef) = getExtField msg
       ef' = foldl' (\m (k,v) -> seq v $ M.insertWithKey mergeWires k v m) ef ios
 
+      mergeWires _k (ExtFromWire newData) (ExtFromWire oldData) =
+          ExtFromWire (mappend oldData newData)
+{-
       mergeWires k (ExtFromWire wt1 newData) (ExtFromWire wt2 oldData) =
         if wt1 /= wt2 then err $ "interpretOptions.mergeWires : ExtFromWire WireType mismatch while storing new options in extension fields: " ++ show (name,k,(wt1,wt2))
           else ExtFromWire wt2 (mappend oldData newData)
+-}
       mergeWires k a b = err $ "interpretOptions.mergeWires : impossible case\n"++show (k,a,b)
       msg' = seq ef' (putExtField (ExtField ef') msg)
   return msg'
@@ -939,13 +943,14 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
       E'Group {} -> return TYPE_GROUP
       _ -> iFail $ "Intermediate entry is not an E'Message or E'Group: "++show (eName entity)
     -- recursive call to get inner result
-    (fid',ExtFromWire wt' raw') <- go (Just entity) (eName entity) next rest
+--    (fid',ExtFromWire wt' raw') <- go (Just entity) (eName entity) next rest
+    (fid',ExtFromWire raw') <- go (Just entity) (eName entity) next rest
     -- wrap old tag + inner result with outer info
     let tag' = getWireTag (mkWireTag fid' wt')
-        bs' = Seq.index raw' 0
+        (EP wt' bs') = Seq.index raw' 0
     let fid = fNumber fk
         wt = toWireType (FieldType (fromEnum t))
-        raw = Seq.singleton . runPut $
+        bs = runPut $
           case t of TYPE_MESSAGE -> do putSize (size'Varint tag' + LC.length bs')
                                        putVarUInt tag'
                                        putLazyByteString bs'
@@ -953,7 +958,8 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
                                      putLazyByteString bs'
                                      putVarUInt (succ (getWireTag (mkWireTag fid wt)))
                     _ -> fail $ "bug! raw with type "++show t++" should be impossible"
-    return (fid,ExtFromWire wt raw)
+--    return (fid,ExtFromWire wt raw)
+    return (fid,ExtFromWire (Seq.singleton (EP wt bs)))
 
   -- This takes care of the acutal value of the option, which must be a basic type
   go mParent names (D.NamePart { D.NamePart.name_part = name
@@ -979,7 +985,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
         done v = let ft = FieldType (fromEnum t)
                      wt = toWireType ft
                      fid = fNumber fk
-                 in return (fid,ExtFromWire wt (Seq.singleton (runPut (wirePut ft v))))
+                 in return (fid,ExtFromWire (Seq.singleton (EP wt (runPut (wirePut ft v)))))
     -- The actual type and value fed to 'done' depends on the values 't' and 'uno':
     case t of
       TYPE_ENUM ->

@@ -124,7 +124,7 @@ importPN r selfMod@(ModuleName self) part pn =
       m2 = ModuleName (joinMod (parentModule pn))
       fromSource = S.member (FMName self,part,o) (rIBoot r)
       ans = if m1 == selfMod && part /= KeyFile then Nothing
-              else Just $ ImportDecl src m1 True fromSource (Just m2)
+              else Just $ ImportDecl src m1 True fromSource Nothing (Just m2)
                             (Just (False,[IAbs (Ident (mName (baseName pn)))]))
   in ecart (unlines . map (\ (a,b) -> a ++ " = "++b) $
                  [("selfMod",show selfMod)
@@ -153,7 +153,7 @@ importPFN r m@(ModuleName self) pfn =
                     | otherwise = Nothing
       sourceFlag = (kind == KeyTypeBoot) && fromAlt
       ans = if not qualifiedFlag && kind /= SplitKeyTypeBoot then Nothing else Just $
-              ImportDecl src m1key qualifiedFlag sourceFlag qualifiedName spec
+              ImportDecl src m1key qualifiedFlag sourceFlag Nothing qualifiedName spec
   in ecart (unlines . map (\ (a,b) -> a ++ " = "++b) $
                 [("m",show m)
                 ,("pfn",show pfn)
@@ -167,11 +167,11 @@ importPFN r m@(ModuleName self) pfn =
 -- Several items might be taken from the same module, combine these statements
 mergeImports :: [ImportDecl] -> [ImportDecl]
 mergeImports importsIn =
-  let idKey (ImportDecl _p1 p2 p3 p4 p5 (Just (p6,_xs))) = (p2,p3,p4,p5,Just p6)
-      idKey (ImportDecl _p1 p2 p3 p4 p5 Nothing) = (p2,p3,p4,p5,Nothing)
-      mergeImports' (ImportDecl p1 p2 p3 p4 p5 (Just (p6,xs)))
-                   (ImportDecl _ _ _ _ _ (Just (_,ys))) =
-        ImportDecl p1 p2 p3 p4 p5 (Just (p6,xs `union` ys))
+  let idKey (ImportDecl _p1 p2 p3 p4 _ p5 (Just (p6,_xs))) = (p2,p3,p4,p5,Just p6)
+      idKey (ImportDecl _p1 p2 p3 p4 _ p5 Nothing) = (p2,p3,p4,p5,Nothing)
+      mergeImports' (ImportDecl p1 p2 p3 p4 _ p5 (Just (p6,xs)))
+                   (ImportDecl _ _ _ _ _ _ (Just (_,ys))) =
+        ImportDecl p1 p2 p3 p4 Nothing p5 (Just (p6,xs `union` ys))
       mergeImports' i _ = i -- identical, so drop one
       combined = M.fromListWith mergeImports' . map (\ i -> (idKey i,i)) $ importsIn
   in M.elems combined
@@ -351,11 +351,11 @@ protoModule result pri fdpBS
     in Module src m [] Nothing (Just (exportKeys++exportNames)) imports
          (keysXTypeVal protoName (extensionKeys pri) ++ embed'ProtoInfo pri ++ embed'fdpBS fdpBS)
  where protoImports = standardImports False (not . Seq.null . extensionKeys $ pri) ++
-         [ ImportDecl src (ModuleName "Text.DescriptorProtos.FileDescriptorProto") False False Nothing
+         [ ImportDecl src (ModuleName "Text.DescriptorProtos.FileDescriptorProto") False False Nothing Nothing
                         (Just (False,[IAbs (Ident "FileDescriptorProto")]))
-         , ImportDecl src (ModuleName "Text.ProtocolBuffers.Reflections") False False Nothing
+         , ImportDecl src (ModuleName "Text.ProtocolBuffers.Reflections") False False Nothing Nothing
                         (Just (False,[IAbs (Ident "ProtoInfo")]))
-         , ImportDecl src (ModuleName "Text.ProtocolBuffers.WireMessage") True False (Just (ModuleName "P'"))
+         , ImportDecl src (ModuleName "Text.ProtocolBuffers.WireMessage") True False Nothing (Just (ModuleName "P'"))
                         (Just (False,[IVar (Ident "wireGet,getFromBS")])) ]
 
 embed'ProtoInfo :: ProtoInfo -> [Decl]
@@ -452,14 +452,14 @@ descriptorNormalModule result di
 
 minimalImports :: [ImportDecl]
 minimalImports =
-  [ ImportDecl src (ModuleName "Prelude") True False (Just (ModuleName "P'")) Nothing
-  , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False (Just (ModuleName "P'")) Nothing ]
+  [ ImportDecl src (ModuleName "Prelude") True False Nothing (Just (ModuleName "P'")) Nothing
+  , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False Nothing (Just (ModuleName "P'")) Nothing ]
 
 standardImports :: Bool -> Bool -> [ImportDecl]
 standardImports isEnumMod ext =
-  [ ImportDecl src (ModuleName "Prelude") False False Nothing (Just (False,ops))
-  , ImportDecl src (ModuleName "Prelude") True False (Just (ModuleName "P'")) Nothing
-  , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False (Just (ModuleName "P'")) Nothing ]
+  [ ImportDecl src (ModuleName "Prelude") False False Nothing Nothing (Just (False,ops))
+  , ImportDecl src (ModuleName "Prelude") True False Nothing (Just (ModuleName "P'")) Nothing
+  , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False Nothing (Just (ModuleName "P'")) Nothing ]
  where ops | ext = map (IVar . Symbol) $ base ++ ["==","<=","&&"]
            | otherwise = map (IVar . Symbol) base
        base | isEnumMod = ["+","."]
@@ -690,8 +690,8 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                 , var]
 -- new for 1.5.7, rewriting this a great deal!
         getCases = let param = if storeUnknown di
-                                 then Paren (pvar "catch'Unknown" $$ lvar "check'allowed")
-                                 else lvar "check'allowed"
+                                 then Paren (pvar "catch'Unknown" $$ lvar "update'Self")
+                                 else lvar "update'Self"
                    in UnGuardedRhs $ cases (pvar "getBareMessageWith" $$ param)
                                            (pvar "getMessageWith" $$ param)
                                            (pvar "wireGetErr" $$ lvar "ft'")
@@ -721,6 +721,20 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                      else (litInt lo <=! x) &&! (x <=! litInt hi)
                               else litInt lo <=! x )
                        allowedExts
+
+-- nned to check isPacked and call appropriate wireGetKey[Un]Packed substitute function
+        toUpdateExt fi | Just (wt1,wt2) <- packedTag fi = [toUpdateExtUnpacked wt1, toUpdateExtPacked wt2]
+                       | otherwise = [toUpdateExtUnpacked (wireTag fi)]
+          where (getUnP,getP) | isPacked fi = (pvar "wireGetKeyToPacked",pvar "wireGetKey")
+                              | otherwise = (pvar "wireGetKey",pvar "wireGetKeyToUnPacked")
+                toUpdateExtUnpacked wt1 =
+                  Alt src (litIntP . getWireTag $ wt1)
+                      (UnGuardedAlt $ getUnP $$ Var (mayQualName protoName (fieldName fi)) $$ lvar "old'Self")
+                      noWhere
+                toUpdateExtPacked wt2 =
+                  Alt src (litIntP . getWireTag $ wt2)
+                      (UnGuardedAlt $ getP $$ Var (mayQualName protoName (fieldName fi)) $$ lvar "old'Self")
+                      noWhere
         toUpdate fi | Just (wt1,wt2) <- packedTag fi = [toUpdateUnpacked wt1 fi, toUpdatePacked wt2 fi]
                     | otherwise                      = [toUpdateUnpacked (wireTag fi) fi]
         toUpdateUnpacked wt1 fi =
@@ -753,6 +767,9 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
 
 
 
+
+
+{-
         getCases = UnGuardedRhs $ cases
           (pvar "getBareMessageWith" $$ lvar "check'allowed")
           (pvar "getMessageWith" $$ lvar "check'allowed")
@@ -831,7 +848,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         labelUpdatePacked fi = pvar "mergeAppend" $$ Paren ((Var . unqualFName . fieldName $ fi)
                                                                  $$ lvar "old'Self")
                                                   $$ lvar "new'Field"
-
+-}
 -- removed after version 1.5.5 to make compatible with protobuf-2.3.0
 {-
         whereUpdateSelf = defun "update'Self" [patvar "field'Number", patvar "old'Self"]

@@ -307,7 +307,8 @@ genericPacked ft = do
 -- getMessageWith assumes the wireTag for the message, if it existed, has already been read.
 -- getMessageWith assumes that it still needs to read the Varint encoded length of the message.
 getMessageWith :: (Mergeable message, ReflectDescriptor message)
-               => (WireTag -> FieldId -> WireType -> message -> Get message)
+--               => (WireTag -> FieldId -> WireType -> message -> Get message)
+               => (WireTag -> message -> Get message)
                -> Get message
 getMessageWith updater = do
   messageLength <- getVarInt
@@ -322,9 +323,9 @@ getMessageWith updater = do
           LT -> tooMuchData messageLength start here
           GT -> do
             wireTag <- fmap WireTag getVarInt -- get tag off wire
-            let (fieldId,wireType) = splitWireTag wireTag
+            let -- (fieldId,wireType) = splitWireTag wireTag
                 reqs' = Set.delete wireTag reqs
-            updater wireTag fieldId wireType message >>= go reqs'
+            updater wireTag {- fieldId wireType -} message >>= go reqs'
       go' message = do
         here <- bytesRead
         case compare stop here of
@@ -332,8 +333,8 @@ getMessageWith updater = do
           LT -> tooMuchData messageLength start here
           GT -> do
             wireTag <- fmap WireTag getVarInt -- get tag off wire
-            let (fieldId,wireType) = splitWireTag wireTag
-            updater wireTag fieldId wireType message >>= go'
+--            let (fieldId,wireType) = splitWireTag wireTag
+            updater wireTag {- fieldId wireType -} message >>= go'
   go required initialMessage
  where
   initialMessage = mergeEmpty
@@ -353,7 +354,8 @@ getMessageWith updater = do
 -- getBareMessageWith will consume the entire ByteString it is operating on, or until it
 -- finds any STOP_GROUP tag (wireType == 4)
 getBareMessageWith :: (Mergeable message, ReflectDescriptor message)
-                   => (WireTag -> FieldId -> WireType -> message -> Get message) -- handle wireTags that are unknown or produce errors
+--                   => (WireTag -> FieldId -> WireType -> message -> Get message) -- handle wireTags that are unknown or produce errors
+                   => (WireTag -> message -> Get message) -- handle wireTags that are unknown or produce errors
                    -> Get message
 getBareMessageWith updater = go required initialMessage
  where
@@ -366,7 +368,7 @@ getBareMessageWith updater = go required initialMessage
         let (fieldId,wireType) = splitWireTag wireTag
         if wireType == 4 then notEnoughData -- END_GROUP too soon
           else let reqs' = Set.delete wireTag reqs
-               in updater wireTag fieldId wireType message >>= go reqs'
+               in updater wireTag {- fieldId wireType -} message >>= go reqs'
   go' message = do
     done <- isReallyEmpty
     if done then return message
@@ -374,7 +376,7 @@ getBareMessageWith updater = go required initialMessage
         wireTag <- fmap WireTag getVarInt -- get tag off wire
         let (fieldId,wireType) = splitWireTag wireTag
         if wireType == 4 then return message
-          else updater wireTag fieldId wireType message >>= go'
+          else updater wireTag {- fieldId wireType -} message >>= go'
   initialMessage = mergeEmpty
   (GetMessageInfo {requiredTags=required}) = getMessageInfo initialMessage
   notEnoughData = throwError ("Text.ProtocolBuffers.WireMessage.getBareMessageWith: Required fields missing when processing "
