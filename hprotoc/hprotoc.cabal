@@ -22,6 +22,7 @@ flag small_base
 
 Executable hprotoc
   Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
+  Hs-Source-Dirs:  .,protoc-gen-haskell
   build-tools:     alex
   ghc-options:     -O2 -Wall
   build-depends:   protocol-buffers == 1.6.0, protocol-buffers-descriptor == 1.6.0
@@ -35,6 +36,10 @@ Executable hprotoc
         build-depends: base == 3.*
 
   other-modules:   Paths_hprotoc
+                   Text.Google.Protobuf.Compiler
+                   Text.Google.Protobuf.Compiler.CodeGeneratorRequest
+                   Text.Google.Protobuf.Compiler.CodeGeneratorResponse
+                   Text.Google.Protobuf.Compiler.CodeGeneratorResponse.File
                    Text.ProtocolBuffers.ProtoCompile.BreakRecursion
                    Text.ProtocolBuffers.ProtoCompile.Gen
                    Text.ProtocolBuffers.ProtoCompile.Instances

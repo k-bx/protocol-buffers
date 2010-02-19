@@ -1,0 +1,7 @@
+# To regenerate the source files here:
+
+hprotoc \
+  -d hprotoc-1.2.2/protoc-gen-haskell/ \
+  --prefix=Text \
+  -I protobuf-2.3.0/src/ \
+  protobuf-2.3.0/src/google/protobuf/compiler/plugin.proto
