@@ -2,22 +2,26 @@
 module Main where
 
 import Control.Monad(when,forM_)
-import qualified Data.ByteString.Lazy.Char8 as LC (writeFile)
+import Control.Monad.State(State, execState, modify)
+import qualified Data.ByteString.Lazy.Char8 as LC (hGetContents, hPut, pack, unpack)
+import Data.Foldable (toList)
 import Data.List(break)
 import qualified Data.Sequence as Seq (fromList,singleton)
+import Data.Sequence ((|>))
 import Data.Version(showVersion)
 import Language.Haskell.Exts.Pretty(prettyPrintStyleMode,Style(..),Mode(..),PPHsMode(..),PPLayout(..))
 import System.Console.GetOpt(OptDescr(Option),ArgDescr(NoArg,ReqArg)
                             ,usageInfo,getOpt,ArgOrder(ReturnInOrder))
 import System.Directory(getCurrentDirectory,createDirectoryIfMissing)
-import System.Environment(getArgs)
+import System.Environment(getProgName, getArgs)
 import System.FilePath(takeDirectory,combine,joinPath)
 import qualified System.FilePath.Posix as Canon(takeBaseName)
+import System.IO (stdin, stdout, stderr, hPrint)
 
-import Text.ProtocolBuffers.Basic(defaultValue)
+import Text.ProtocolBuffers.Basic(defaultValue, Utf8(..), utf8)
 import Text.ProtocolBuffers.Identifiers(MName,checkDIString,mangle)
 import Text.ProtocolBuffers.Reflections(ProtoInfo(..),EnumInfo(..))
-import Text.ProtocolBuffers.WireMessage (messagePut)
+import Text.ProtocolBuffers.WireMessage (messagePut, messageGet)
 
 import qualified Text.DescriptorProtos.FileDescriptorProto as D(FileDescriptorProto)
 import qualified Text.DescriptorProtos.FileDescriptorProto as D.FileDescriptorProto(FileDescriptorProto(..))
@@ -27,8 +31,13 @@ import qualified Text.DescriptorProtos.FileDescriptorSet   as D.FileDescriptorSe
 import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(makeResult)
 import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule)
 import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
-import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,makeNameMaps,getTLS
-                                                ,LocalFP(..),CanonFP(..),TopLevel(..))
+import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadCodeGenRequest,makeNameMaps,getTLS
+                                                ,Env,LocalFP(..),CanonFP(..),TopLevel(..))
+
+import Text.Google.Protobuf.Compiler.CodeGeneratorRequest
+import Text.Google.Protobuf.Compiler.CodeGeneratorResponse hiding (error, file)
+import qualified Text.Google.Protobuf.Compiler.CodeGeneratorResponse as CGR(file)
+import qualified Text.Google.Protobuf.Compiler.CodeGeneratorResponse.File as CGR.File
 
 -- The Paths_hprotoc module is produced by cabal
 import Paths_hprotoc(version)
@@ -140,6 +149,24 @@ defaultOptions = do
 
 main :: IO ()
 main = do
+  progName <- getProgName
+  case progName of
+    "protoc-gen-haskell" -> pluginMain
+    _                    -> standaloneMain
+
+pluginMain :: IO ()
+pluginMain = do
+  defs <- defaultOptions
+  inputBytes <- LC.hGetContents stdin
+  let req = either error fst $ messageGet inputBytes :: CodeGeneratorRequest
+  hPrint stderr req
+  let resp = runPlugin defs req
+  hPrint stderr "FOOO"
+  hPrint stderr resp
+  LC.hPut stdout $ messagePut resp
+
+standaloneMain :: IO ()
+standaloneMain = do
   defs <- defaultOptions
   args <- getArgs
   case processOptions args of
@@ -154,7 +181,7 @@ process options [] = if null (unLocalFP (optProto options))
                        else putStrLn "Processing complete, have a nice day."
 process options (Mutate f:rest) = process (f options) rest
 process options (Run f:rest) = let options' = f options
-                            in run options' >> process options' rest
+                            in runStandalone options' >> process options' rest
 process _options (Switch VersionInfo:_) = putStrLn versionInfo
   
 mkdirFor :: FilePath -> IO ()
@@ -166,42 +193,69 @@ style = Style PageMode 132 0.6
 myMode :: PPHsMode
 myMode = PPHsMode 2 2 2 2 4 1 True PPOffsideRule False -- True
 
-dump :: Bool -> Maybe LocalFP -> D.FileDescriptorProto -> [D.FileDescriptorProto] -> IO ()
-dump _ Nothing _ _ = return ()
-dump imports (Just (LocalFP dumpFile)) fdp fdps = do
-  putStrLn $ "dumping to filename: "++show dumpFile
+dump :: (Monad m) => Output m -> Bool -> Maybe LocalFP -> D.FileDescriptorProto -> [D.FileDescriptorProto] -> m ()
+dump _ _ Nothing _ _ = return ()
+dump o imports (Just (LocalFP dumpFile)) fdp fdps = do
+  outputReport o $ "dumping to filename: "++show dumpFile
   let s = if imports then Seq.fromList fdps else Seq.singleton fdp
-  LC.writeFile dumpFile (messagePut $ defaultValue { D.FileDescriptorSet.file = s })
-  putStrLn $ "finished dumping FileDescriptorSet binary of: "++show (D.FileDescriptorProto.name fdp)
+  outputWriteFile o dumpFile $ LC.unpack (messagePut $ defaultValue { D.FileDescriptorSet.file = s })
+  outputReport o $ "finished dumping FileDescriptorSet binary of: "++show (D.FileDescriptorProto.name fdp)
 
-run :: Options -> IO ()
-run options = do
+data (Monad m) => Output m = Output {
+  outputReport :: String -> m (),
+  outputWriteFile :: FilePath -> String -> m ()
+}
+
+runStandalone :: Options -> IO ()
+runStandalone options = do
   (env,fdps) <- loadProto (optInclude options) (optProto options)
   putStrLn "All proto files loaded"
+  run' standaloneMode options env fdps where
+    standaloneMode :: Output IO
+    standaloneMode = Output print (\f c -> mkdirFor f >> writeFile f c)
+
+runPlugin :: Options -> CodeGeneratorRequest -> CodeGeneratorResponse
+runPlugin options req = execState (run' pluginOutput options env fdps) defaultValue where
+  (env,fdps) = loadCodeGenRequest req (head requestedFiles)
+  pluginOutput :: Output (State CodeGeneratorResponse)
+  pluginOutput = Output {
+      outputReport = const $ return (),
+      outputWriteFile = appendFileRecord
+    }
+  appendFileRecord :: FilePath -> String -> State CodeGeneratorResponse ()
+  appendFileRecord f c = modify $ \resp -> resp {
+          CGR.file = (CGR.file resp) |> newFile
+        } where
+      newFile = defaultValue {
+          CGR.File.name = Just $ Utf8 $ LC.pack f,
+          CGR.File.content = Just $ Utf8 $ LC.pack c
+        }
+  requestedFiles = map (LocalFP . LC.unpack . utf8) . toList . file_to_generate $ req
+
+run' :: (Monad m) => Output m -> Options -> Env -> [D.FileDescriptorProto] -> m ()
+run' o@(Output print' writeFile') options env fdps = do
   let fdp = either error id . top'FDP . fst . getTLS $ env
-  when (not (optDryRun options)) $ dump (optImports options) (optDesc options) fdp fdps
+  when (not (optDryRun options)) $ dump o (optImports options) (optDesc options) fdp fdps
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
-  putStrLn "Haskell name mangling done"
+  print' "Haskell name mangling done"
   let protoInfo = makeProtoInfo (optUnknownFields options) nameMap fdp
       result = makeResult protoInfo
-  seq result (putStrLn "Recursive modules resolved")
+  seq result (print' "Recursive modules resolved")
   let produceMSG di = do
         when (not (optDryRun options)) $ do
           -- There might be several modules
           let fileModules = descriptorModules result di
           forM_ fileModules $ \ (relPath,modSyn) -> do
             let file = combine (unLocalFP . optTarget $ options) relPath
-            print file
-            mkdirFor file
-            writeFile file (prettyPrintStyleMode style myMode modSyn)
+            print' file
+            writeFile' file (prettyPrintStyleMode style myMode modSyn)
       produceENM ei = do
         let file = combine (unLocalFP . optTarget $ options) . joinPath . enumFilePath $ ei
-        print file
+        print' file
         when (not (optDryRun options)) $ do
-          mkdirFor file
-          writeFile file (prettyPrintStyleMode style myMode (enumModule ei))
+          writeFile' file (prettyPrintStyleMode style myMode (enumModule ei))
   mapM_ produceMSG (messages protoInfo)
   mapM_ produceENM (enums protoInfo)
   let file = combine (unLocalFP . optTarget $ options) . joinPath . protoFilePath $ protoInfo
-  print file
-  writeFile file (prettyPrintStyleMode style myMode (protoModule result protoInfo (serializeFDP fdp)))
+  print' file
+  writeFile' file (prettyPrintStyleMode style myMode (protoModule result protoInfo (serializeFDP fdp)))
