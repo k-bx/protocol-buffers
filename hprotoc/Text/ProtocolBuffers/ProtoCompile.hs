@@ -212,7 +212,7 @@ runStandalone options = do
   putStrLn "All proto files loaded"
   run' standaloneMode options env fdps where
     standaloneMode :: Output IO
-    standaloneMode = Output print (\f c -> mkdirFor f >> writeFile f c)
+    standaloneMode = Output putStrLn (\f c -> mkdirFor f >> writeFile f c)
 
 runPlugin :: Options -> CodeGeneratorRequest -> CodeGeneratorResponse
 runPlugin options req = execState (run' pluginOutput options env fdps) defaultValue where

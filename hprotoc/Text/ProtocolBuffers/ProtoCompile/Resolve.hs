@@ -1121,7 +1121,7 @@ loadProto protoDirs protoFile = loadProto' findAndParseSource protoFile where
           Nothing -> loadFailed file (unlines (["loading failed, could not find file: "++show (unLocalFP file)
                                                ,"Searched paths were:"] ++ map (("  "++).show.unLocalFP) protoDirs))
           Just (toRead,relpath) -> do
-            protoContents <- liftIO $ do print ("Loading filepath: "++show (unLocalFP toRead))
+            protoContents <- liftIO $ do putStrLn ("Loading filepath: "++show (unLocalFP toRead))
                                          LC.readFile (unLocalFP toRead)
             parsed'fdp <- either (loadFailed toRead . show) return $
                           (parseProto (unCanonFP relpath) protoContents)
