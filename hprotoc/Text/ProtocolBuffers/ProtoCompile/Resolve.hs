@@ -10,7 +10,7 @@
 -- The makeNameMaps command makes the translator from proto name to
 -- Haskell name.  Many possible errors in the proto data are caught
 -- and reported by these operations.
-module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,makeNameMap,makeNameMaps,getTLS
+module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadCodeGenRequest,makeNameMap,makeNameMaps,getTLS
                                                 ,Env(..),TopLevel(..),ReMap,NameMap(..),LocalFP(..),CanonFP(..)) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
@@ -51,6 +51,8 @@ import qualified Text.DescriptorProtos.MethodOptions    as D.MethodOptions(Metho
 import qualified Text.DescriptorProtos.ServiceOptions   as D(ServiceOptions)
 import qualified Text.DescriptorProtos.ServiceOptions   as D.ServiceOptions(ServiceOptions(uninterpreted_option))
 
+import qualified Text.Google.Protobuf.Compiler.CodeGeneratorRequest as CGR
+
 import Text.ProtocolBuffers.Header
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Extensions
@@ -59,6 +61,7 @@ import Text.ProtocolBuffers.ProtoCompile.Instances
 import Text.ProtocolBuffers.ProtoCompile.Parser
 
 import Control.Applicative
+import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Error
@@ -67,10 +70,9 @@ import Data.Char
 import Data.Ratio
 import Data.Ix(inRange)
 import Data.List(foldl',stripPrefix,lookup,isPrefixOf,isSuffixOf)
-import Data.Map(Map)
+import Data.Map(Map, keys)
 import Data.Maybe(mapMaybe)
 import Data.Monoid(Monoid(..))
-import Data.Set(Set)
 import System.Directory
 import qualified System.FilePath as Local(pathSeparator,splitDirectories,joinPath,combine,makeRelative)
 import qualified System.FilePath.Posix as Canon(pathSeparator,splitDirectories,joinPath,takeBaseName)
@@ -1075,15 +1077,16 @@ findFile paths (LocalFP target) = test paths where
                             ++show truepath++"\n  file: "++show truefile
 
 
-type DescriptorReader = LocalFP -> IO (D.FileDescriptorProto, [IName String])
+-- | Given a path, tries to find and parse a FileDescriptorProto
+-- corresponding to it; returns also a canonicalised path.
+type DescriptorReader m = (Monad m) => LocalFP -> m (D.FileDescriptorProto, LocalFP)
 
-loadProto' :: DescriptorReader -> LocalFP -> IO (Env,[D.FileDescriptorProto])
+loadProto' :: (Monad r) => DescriptorReader r -> LocalFP -> r (Env,[D.FileDescriptorProto])
 loadProto' fdpReader protoFile = goState (load Set.empty protoFile) where
   goState act = do (env,m) <- runStateT act mempty
                    let fromRight (Right x) = x
                        fromRight (Left s) = error $ "loadProto failed to resolve a FileDescriptorProto: "++s
                    return (env,map (fromRight . top'FDP . fst . getTLS) (M.elems m))
-  load :: Set.Set LocalFP -> LocalFP -> StateT (Map LocalFP Env) IO Env
   load parentsIn file = do
     built <- get
     when (Set.member file parentsIn)
@@ -1092,7 +1095,9 @@ loadProto' fdpReader protoFile = goState (load Set.empty protoFile) where
     case M.lookup file built of
       Just result -> return result
       Nothing -> do
-            (parsed'fdp, packageName) <- liftIO $ fdpReader file
+            (parsed'fdp, canonicalFile) <- lift $ fdpReader file
+            packageName <- either (loadFailed canonicalFile . show) (return . map iToString . snd) $
+                           (checkDIUtf8 (getPackage parsed'fdp)) -- =<< getJust "makeTopLevel.packageName: you need a pacakge declaration in your proto file" (D.FileDescriptorProto.package parsed'fdp))
             let parents = Set.insert file parentsIn
                 importList = map (fpCanonToLocal . CanonFP . toString) . F.toList . D.FileDescriptorProto.dependency $ parsed'fdp
             imports <- mapM (fmap getTL . load parents) importList
@@ -1109,7 +1114,7 @@ loadFailed f msg = fail . unlines $ ["Parsing proto:",show (unLocalFP f),"has fa
 -- looking for them in the file system.
 loadProto :: [LocalFP] -> LocalFP -> IO (Env,[D.FileDescriptorProto])
 loadProto protoDirs protoFile = loadProto' findAndParseSource protoFile where
-      findAndParseSource :: DescriptorReader
+      findAndParseSource :: DescriptorReader IO
       findAndParseSource file = do
         mayToRead <- liftIO $ findFile protoDirs file
         case mayToRead of
@@ -1120,6 +1125,15 @@ loadProto protoDirs protoFile = loadProto' findAndParseSource protoFile where
                                          LC.readFile (unLocalFP toRead)
             parsed'fdp <- either (loadFailed toRead . show) return $
                           (parseProto (unCanonFP relpath) protoContents)
-            packageName <- either (loadFailed toRead . show) (return . map iToString . snd) $
-                           (checkDIUtf8 (getPackage parsed'fdp)) -- =<< getJust "makeTopLevel.packageName: you need a pacakge declaration in your proto file" (D.FileDescriptorProto.package parsed'fdp))
-            return (parsed'fdp, packageName)
+            return (parsed'fdp, toRead)
+
+loadCodeGenRequest :: CGR.CodeGeneratorRequest -> LocalFP -> (Env,[D.FileDescriptorProto])
+loadCodeGenRequest req protoFile = runIdentity $ loadProto' lookUpParsedSource protoFile where
+  lookUpParsedSource :: DescriptorReader Identity
+  lookUpParsedSource file = case M.lookup file fdpsByName of
+    Just result -> return (result, file)
+    Nothing -> loadFailed file ("Request refers to file: "++show (unLocalFP file)
+                                    ++" but it was not supplied in the request.")
+  fdpsByName = M.fromList . map keyByName . F.toList . CGR.proto_file $ req
+  keyByName fdp = (fdpName fdp, fdp)
+  fdpName = LocalFP . maybe "" (LC.unpack . utf8) . D.FileDescriptorProto.name
