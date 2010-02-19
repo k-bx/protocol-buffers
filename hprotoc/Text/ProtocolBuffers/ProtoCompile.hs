@@ -159,7 +159,9 @@ pluginMain = do
   defs <- defaultOptions
   inputBytes <- LC.hGetContents stdin
   let req = either error fst $ messageGet inputBytes
-  let resp = runPlugin defs req
+  let prefix = fmap (LC.unpack . utf8) $ parameter req
+  let opts = maybe defs (flip setPrefix $ defs) prefix
+  let resp = runPlugin opts req
   LC.hPut stdout $ messagePut resp
 
 standaloneMain :: IO ()
