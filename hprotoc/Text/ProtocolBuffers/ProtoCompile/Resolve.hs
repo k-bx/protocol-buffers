@@ -1074,13 +1074,15 @@ findFile paths (LocalFP target) = test paths where
                 else fail $ "file found but it is not below path, cannot make canonical name:\n  path: "
                             ++show truepath++"\n  file: "++show truefile
 
-loadProto :: [LocalFP] -> LocalFP -> IO (Env,[D.FileDescriptorProto])
-loadProto protoDirs protoFile = goState (load Set.empty protoFile) where
+
+type DescriptorReader = LocalFP -> IO (D.FileDescriptorProto, [IName String])
+
+loadProto' :: DescriptorReader -> LocalFP -> IO (Env,[D.FileDescriptorProto])
+loadProto' fdpReader protoFile = goState (load Set.empty protoFile) where
   goState act = do (env,m) <- runStateT act mempty
                    let fromRight (Right x) = x
                        fromRight (Left s) = error $ "loadProto failed to resolve a FileDescriptorProto: "++s
                    return (env,map (fromRight . top'FDP . fst . getTLS) (M.elems m))
-  loadFailed f msg = fail . unlines $ ["Parsing proto:",show (unLocalFP f),"has failed with message",msg]
   load :: Set.Set LocalFP -> LocalFP -> StateT (Map LocalFP Env) IO Env
   load parentsIn file = do
     built <- get
@@ -1090,6 +1092,25 @@ loadProto protoDirs protoFile = goState (load Set.empty protoFile) where
     case M.lookup file built of
       Just result -> return result
       Nothing -> do
+            (parsed'fdp, packageName) <- liftIO $ fdpReader file
+            let parents = Set.insert file parentsIn
+                importList = map (fpCanonToLocal . CanonFP . toString) . F.toList . D.FileDescriptorProto.dependency $ parsed'fdp
+            imports <- mapM (fmap getTL . load parents) importList
+            let eEnv = makeTopLevel parsed'fdp packageName imports
+            global'env <- either (loadFailed file) return eEnv
+            either (loadFailed file) return (top'FDP . getTL $ global'env)
+            modify (M.insert file global'env) -- add to memorized results
+            return global'env
+
+loadFailed :: (Monad m) => LocalFP -> String -> m a
+loadFailed f msg = fail . unlines $ ["Parsing proto:",show (unLocalFP f),"has failed with message",msg]
+
+-- | Given a list of paths to search, loads proto files by
+-- looking for them in the file system.
+loadProto :: [LocalFP] -> LocalFP -> IO (Env,[D.FileDescriptorProto])
+loadProto protoDirs protoFile = loadProto' findAndParseSource protoFile where
+      findAndParseSource :: DescriptorReader
+      findAndParseSource file = do
         mayToRead <- liftIO $ findFile protoDirs file
         case mayToRead of
           Nothing -> loadFailed file (unlines (["loading failed, could not find file: "++show (unLocalFP file)
@@ -1101,11 +1122,4 @@ loadProto protoDirs protoFile = goState (load Set.empty protoFile) where
                           (parseProto (unCanonFP relpath) protoContents)
             packageName <- either (loadFailed toRead . show) (return . map iToString . snd) $
                            (checkDIUtf8 (getPackage parsed'fdp)) -- =<< getJust "makeTopLevel.packageName: you need a pacakge declaration in your proto file" (D.FileDescriptorProto.package parsed'fdp))
-            let parents = Set.insert file parentsIn
-                importList = map (fpCanonToLocal . CanonFP . toString) . F.toList . D.FileDescriptorProto.dependency $ parsed'fdp
-            imports <- mapM (fmap getTL . load parents) importList
-            let eEnv = makeTopLevel parsed'fdp packageName imports
-            global'env <- either (loadFailed file) return eEnv
-            either (loadFailed file) return (top'FDP . getTL $ global'env)
-            modify (M.insert file global'env) -- add to memorized results
-            return global'env
+            return (parsed'fdp, packageName)
