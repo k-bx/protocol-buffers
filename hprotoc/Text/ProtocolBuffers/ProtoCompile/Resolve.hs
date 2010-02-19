@@ -793,6 +793,8 @@ fqField isKey fdp = annErr ("fqField FieldDescriptorProto name is "++show (D.Fie
                                               | otherwise ->
                     fqFail ("fqField.actualType : This Enum is invalid, you cannot pack a non-repeated field.") fdp entity
                   (Just t, Nothing) -> return t
+                  (Just TYPE_MESSAGE, Just (E'Message {})) -> return TYPE_MESSAGE
+                  (Just TYPE_ENUM, Just (E'Enum {})) -> return TYPE_ENUM
                   (mt,me) -> fqFail ("fqField.actualType: "++show mt++" and "++show (fmap eName me)++" is invalid.") fdp entity
   -- Check that a default value of an TYPE_ENUM is valid
   case (mTypeName,D.FieldDescriptorProto.default_value fdp) of
