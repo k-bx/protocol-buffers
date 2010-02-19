@@ -1,7 +1,7 @@
 -- | This is the Main module for the command line program 'hprotoc'
 module Main where
 
-import Control.Monad(when,forM_)
+import Control.Monad(unless,forM_)
 import Control.Monad.State(State, execState, modify)
 import qualified Data.ByteString.Lazy.Char8 as LC (hGetContents, hPut, pack, unpack)
 import Data.Foldable (toList)
@@ -16,7 +16,7 @@ import System.Directory(getCurrentDirectory,createDirectoryIfMissing)
 import System.Environment(getProgName, getArgs)
 import System.FilePath(takeDirectory,combine,joinPath)
 import qualified System.FilePath.Posix as Canon(takeBaseName)
-import System.IO (stdin, stdout, stderr, hPrint)
+import System.IO (stdin, stdout)
 
 import Text.ProtocolBuffers.Basic(defaultValue, Utf8(..), utf8)
 import Text.ProtocolBuffers.Identifiers(MName,checkDIString,mangle)
@@ -158,11 +158,8 @@ pluginMain :: IO ()
 pluginMain = do
   defs <- defaultOptions
   inputBytes <- LC.hGetContents stdin
-  let req = either error fst $ messageGet inputBytes :: CodeGeneratorRequest
-  hPrint stderr req
+  let req = either error fst $ messageGet inputBytes
   let resp = runPlugin defs req
-  hPrint stderr "FOOO"
-  hPrint stderr resp
   LC.hPut stdout $ messagePut resp
 
 standaloneMain :: IO ()
@@ -212,7 +209,12 @@ runStandalone options = do
   putStrLn "All proto files loaded"
   run' standaloneMode options env fdps where
     standaloneMode :: Output IO
-    standaloneMode = Output putStrLn (\f c -> mkdirFor f >> writeFile f c)
+    standaloneMode = Output putStrLn emitFile
+    emitFile file contents = do
+      let fullPath = combine (unLocalFP . optTarget $ options) file
+      putStrLn fullPath
+      mkdirFor fullPath
+      unless (optDryRun options) $ writeFile fullPath contents
 
 runPlugin :: Options -> CodeGeneratorRequest -> CodeGeneratorResponse
 runPlugin options req = execState (run' pluginOutput options env fdps) defaultValue where
@@ -235,27 +237,22 @@ runPlugin options req = execState (run' pluginOutput options env fdps) defaultVa
 run' :: (Monad m) => Output m -> Options -> Env -> [D.FileDescriptorProto] -> m ()
 run' o@(Output print' writeFile') options env fdps = do
   let fdp = either error id . top'FDP . fst . getTLS $ env
-  when (not (optDryRun options)) $ dump o (optImports options) (optDesc options) fdp fdps
+  unless (optDryRun options) $ dump o (optImports options) (optDesc options) fdp fdps
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
   print' "Haskell name mangling done"
   let protoInfo = makeProtoInfo (optUnknownFields options) nameMap fdp
       result = makeResult protoInfo
   seq result (print' "Recursive modules resolved")
   let produceMSG di = do
-        when (not (optDryRun options)) $ do
+        unless (optDryRun options) $ do
           -- There might be several modules
           let fileModules = descriptorModules result di
           forM_ fileModules $ \ (relPath,modSyn) -> do
-            let file = combine (unLocalFP . optTarget $ options) relPath
-            print' file
-            writeFile' file (prettyPrintStyleMode style myMode modSyn)
+            writeFile' relPath (prettyPrintStyleMode style myMode modSyn)
       produceENM ei = do
-        let file = combine (unLocalFP . optTarget $ options) . joinPath . enumFilePath $ ei
-        print' file
-        when (not (optDryRun options)) $ do
-          writeFile' file (prettyPrintStyleMode style myMode (enumModule ei))
+        let file = joinPath . enumFilePath $ ei
+        writeFile' file (prettyPrintStyleMode style myMode (enumModule ei))
   mapM_ produceMSG (messages protoInfo)
   mapM_ produceENM (enums protoInfo)
-  let file = combine (unLocalFP . optTarget $ options) . joinPath . protoFilePath $ protoInfo
-  print' file
+  let file = joinPath . protoFilePath $ protoInfo
   writeFile' file (prettyPrintStyleMode style myMode (protoModule result protoInfo (serializeFDP fdp)))
