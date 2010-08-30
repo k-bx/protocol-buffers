@@ -1,5 +1,5 @@
 name:           hprotoc
-version:        1.7.9
+version:        1.8.0
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -10,6 +10,12 @@ maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
 stability:      Experimental
 homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
 package-url:    http://code.haskell.org/protocol-buffers/
+synopsis:       Parse Google Protocol Buffer specifications
+description:    Parse http://code.google.com/apis/protocolbuffers/docs/proto.html
+  and perhaps general haskell code to use them
+category:       Text
+Tested-With:    GHC ==6.8.3
+extra-source-files:
 
 flag small_base
     description: Choose the new smaller, split-up base package.

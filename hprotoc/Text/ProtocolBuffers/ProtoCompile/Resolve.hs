@@ -3,6 +3,10 @@
 
   what about keys 'extendee' resolution to Message names only? expectM in entityField
 
+  makeTopLevel is the main internal entry point in this module.
+  This is called from loadProto' which has two callers:
+  loadProto and loadCodeGenRequest
+
 -}
 
 -- | This huge module handles the loading and name resolution.  The
@@ -569,9 +573,13 @@ makeTopLevel :: D.FileDescriptorProto -> [IName String] -> [TopLevel] -> Either 
 makeTopLevel fdp packageName imports = mdo
   filePath <- getJust "makeTopLevel.filePath" (D.FileDescriptorProto.name fdp)
   let sEnv = SEnv packageName global
-      groupNames = mapMaybe validI . map toString . mapMaybe D.FieldDescriptorProto.type_name
+      -- There should be no TYPE_GROUP in the extension list here, but to be safe:
+      groupNamesRaw = map toString . mapMaybe D.FieldDescriptorProto.type_name
                  . filter (maybe False (TYPE_GROUP ==) . D.FieldDescriptorProto.type') 
                  $ (F.toList . D.FileDescriptorProto.extension $ fdp)
+      groupNamesI = mapMaybe validI groupNamesRaw
+      groupNamesDI = mapMaybe validDI groupNamesRaw  -- These fully qualified names from using hprotoc as a plugin for protoc
+      groupNames = groupNamesI ++ map (last . splitDI) groupNamesDI
       isGroup = (`elem` groupNames)
   global <- runSE sEnv (do
     (bads,children) <- fmap unzip . sequence $
@@ -600,15 +608,21 @@ are reported by hopefully sensible (Left String) messages.
 
  *** -}
 
+-- Fix this to look at groupNamesDI as well as the original list of groupNamesI.  This fixes a bug
+-- in the plug-in usage because protoc will have already resolved the type_name to a fully qualified
+-- name.
 entityMsg :: (IName String -> Bool) -> D.DescriptorProto -> SE (IName String,Entity)
 entityMsg isGroup dp = annErr ("entityMsg DescriptorProto name is "++show (D.DescriptorProto.name dp)) $ mdo
   (self,names) <- getNames "entityMsg.name" D.DescriptorProto.name dp
   numbers <- fmap Set.fromList . mapM (getJust "entityMsg.field.number" . D.FieldDescriptorProto.number) . F.toList . D.DescriptorProto.field $ dp
   when (Set.size numbers /= Seq.length (D.DescriptorProto.field dp)) $
     throwError $ "entityMsg.field.number: There must be duplicate field numbers for "++show names++"\n "++show numbers
-  let groupNames = mapMaybe validI . map toString . mapMaybe D.FieldDescriptorProto.type_name
-                 . filter (maybe False (TYPE_GROUP ==) . D.FieldDescriptorProto.type') 
-                 $ (F.toList . D.DescriptorProto.field $ dp) ++ (F.toList . D.DescriptorProto.extension $ dp)
+  let groupNamesRaw = map toString . mapMaybe D.FieldDescriptorProto.type_name
+                      . filter (maybe False (TYPE_GROUP ==) . D.FieldDescriptorProto.type') 
+                      $ (F.toList . D.DescriptorProto.field $ dp) ++ (F.toList . D.DescriptorProto.extension $ dp)
+      groupNamesI = mapMaybe validI groupNamesRaw
+      groupNamesDI = mapMaybe validDI groupNamesRaw  -- These fully qualified names from using hprotoc as a plugin for protoc
+      groupNames = groupNamesI ++ map (last . splitDI) groupNamesDI
       isGroup' = (`elem` groupNames)
   entity <- descend names entity $ do
     (bads,children) <- fmap unzip . sequence $
