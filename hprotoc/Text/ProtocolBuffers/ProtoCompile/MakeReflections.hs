@@ -43,7 +43,6 @@ import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag,toPackedWireTag,ru
 import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..))
 
 import qualified Data.Foldable as F(foldr,toList)
-import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import qualified Data.Sequence as Seq(fromList,empty,singleton,null)
 import Numeric(readHex,readOct,readDec)
 import Data.Monoid(mconcat,mappend)
@@ -221,21 +220,24 @@ parseDefaultValue f@(D.FieldDescriptorProto.FieldDescriptorProto
                    TYPE_FLOAT   -> Just parseDefFloat
                    TYPE_STRING  -> Just parseDefString
                    _            -> Just parseDefInteger
-         case todo (utf8 bs) of
+         case todo bs of
            Nothing -> error $ "Could not parse as type "++ show t ++" the default value (raw) is "++ show mayRawDef ++" for field "++show f
            Just value -> return value
 
 --- From here down is code used to parse the format of the default values in the .proto files
 
-parseDefEnum :: ByteString -> Maybe HsDefault
-parseDefEnum = Just . HsDef'Enum . U.toString
+-- On 25 August 2010 20:12, George van den Driessche <georgevdd@google.com> sent Chris Kuklewicz a
+-- patch to MakeReflections.parseDefEnum to ensure that HsDef'Enum holds the mangled form of the
+-- name.
+parseDefEnum :: Utf8 -> Maybe HsDefault
+parseDefEnum = Just . HsDef'Enum . mName . mangle . IName . uToString
 
 {-# INLINE mayRead #-}
 mayRead :: ReadS a -> String -> Maybe a
 mayRead f s = case f s of [(a,"")] -> Just a; _ -> Nothing
 
-parseDefDouble :: ByteString -> Maybe HsDefault
-parseDefDouble bs = case (U.toString bs) of
+parseDefDouble :: Utf8 -> Maybe HsDefault
+parseDefDouble bs = case (uToString bs) of
                       "nan" -> Just (HsDef'RealFloat SRF'nan)
                       "-inf" -> Just (HsDef'RealFloat SRF'ninf)
                       "inf" -> Just (HsDef'RealFloat SRF'inf)
@@ -244,15 +246,15 @@ parseDefDouble bs = case (U.toString bs) of
         reads' = readSigned' reads
 
 {-
-parseDefDouble :: ByteString -> Maybe HsDefault
+parseDefDouble :: Utf8 -> Maybe HsDefault
 parseDefDouble bs | 
                   | otherwise = fmap (HsDef'Rational . toRational) 
-                                . mayRead reads' . U.toString $ bs
+                                . mayRead reads' . uToString $ bs
 -}
 
 
-parseDefFloat :: ByteString -> Maybe HsDefault
-parseDefFloat bs = case (U.toString bs) of
+parseDefFloat :: Utf8 -> Maybe HsDefault
+parseDefFloat bs = case (uToString bs) of
                       "nan" -> Just (HsDef'RealFloat SRF'nan)
                       "-inf" -> Just (HsDef'RealFloat SRF'ninf)
                       "inf" -> Just (HsDef'RealFloat SRF'inf)
@@ -261,29 +263,29 @@ parseDefFloat bs = case (U.toString bs) of
         reads' = readSigned' reads
 
 {-
-parseDefFloat :: ByteString -> Maybe HsDefault
+parseDefFloat :: Utf8 -> Maybe HsDefault
 parseDefFloat bs = fmap  (HsDef'Rational . toRational) 
-                   . mayRead reads' . U.toString $ bs
+                   . mayRead reads' . uToString $ bs
   where reads' :: ReadS Float
         reads' = readSigned' reads
 -}
 
-parseDefString :: ByteString -> Maybe HsDefault
-parseDefString bs = Just (HsDef'ByteString bs)
+parseDefString :: Utf8 -> Maybe HsDefault
+parseDefString bs = Just (HsDef'ByteString (utf8 bs))
 
-parseDefBytes :: ByteString -> Maybe HsDefault
-parseDefBytes bs = Just (HsDef'ByteString bs)
+parseDefBytes :: Utf8 -> Maybe HsDefault
+parseDefBytes bs = Just (HsDef'ByteString (utf8 bs))
 
-parseDefInteger :: ByteString -> Maybe HsDefault
-parseDefInteger bs = fmap HsDef'Integer . mayRead checkSign . U.toString $ bs
+parseDefInteger :: Utf8 -> Maybe HsDefault
+parseDefInteger bs = fmap HsDef'Integer . mayRead checkSign . uToString $ bs
     where checkSign = readSigned' checkBase
           checkBase ('0':'x':xs@(_:_)) = readHex xs
           checkBase ('0':xs@(_:_)) = readOct xs
           checkBase xs = readDec xs
 
-parseDefBool :: ByteString -> Maybe HsDefault
-parseDefBool bs | bs == U.fromString "true" = Just (HsDef'Bool True)
-                | bs == U.fromString "false" = Just (HsDef'Bool False)
+parseDefBool :: Utf8 -> Maybe HsDefault
+parseDefBool bs | bs == uFromString "true" = Just (HsDef'Bool True)
+                | bs == uFromString "false" = Just (HsDef'Bool False)
                 | otherwise = Nothing
 
 -- The Numeric.readSigned does not handle '+' for some odd reason

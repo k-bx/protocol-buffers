@@ -9,7 +9,7 @@ module Text.ProtocolBuffers.Basic
   , WireTag(..),FieldId(..),WireType(..),FieldType(..),EnumCode(..),WireSize
     -- * Some of the type classes implemented messages and fields
   , Mergeable(..),Default(..),Wire(..)
-  , isValidUTF8, toUtf8, utf8
+  , isValidUTF8, toUtf8, utf8, uToString, uFromString
   ) where
 
 import Control.Monad.Error.Class(throwError)
@@ -210,7 +210,7 @@ class Wire b where
 
 -- Returns Nothing if valid, and the position of the error if invalid
 isValidUTF8 :: ByteString -> Maybe Int
-isValidUTF8 ws = go 0 (L.unpack ws) 0 where
+isValidUTF8 bs = go 0 (L.unpack bs) 0 where
   go :: Int -> [Word8] -> Int -> Maybe Int
   go 0 [] _ = Nothing
   go 0 (x:xs) n | x <= 127 = go 0 xs $! succ n -- binary 01111111
@@ -228,5 +228,10 @@ isValidUTF8 ws = go 0 (L.unpack ws) 0 where
   high [] n = Just n
 
 toUtf8 :: ByteString -> Either Int Utf8
-toUtf8 b = maybe (Right (Utf8 b)) Left (isValidUTF8 b)
+toUtf8 bs = maybe (Right (Utf8 bs)) Left (isValidUTF8 bs)
 
+uToString :: Utf8 -> String
+uToString (Utf8 bs) = U.toString bs
+
+uFromString :: String -> Utf8
+uFromString s = Utf8 (U.fromString s)

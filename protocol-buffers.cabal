@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        1.6.0
+version:        1.7.9
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -9,7 +9,7 @@ author:         Christopher Edward Kuklewicz
 maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
 stability:      Beta
 homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
-package-url:    http://darcs.haskell.org/packages/protocol-buffers2/
+package-url:    http://code.haskell.org/protocol-buffers/
 synopsis:       Parse Google Protocol Buffer specifications
 description:    Parse proto files and generate Haskell code.
 category:       Text

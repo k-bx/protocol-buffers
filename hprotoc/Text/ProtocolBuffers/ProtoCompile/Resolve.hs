@@ -625,7 +625,7 @@ entityMsg isGroup dp = annErr ("entityMsg DescriptorProto name is "++show (D.Des
   return (self,entity)
 
 -- Among other things, this is where ambiguous type names in the proto file are resolved into a
--- Message or a Group or an Error.
+-- Message or a Group or an Enum.
 {- old: Tracking error flow: if the expectMGE fails then the 'mVal' in the E'Field is a (Just (Left _)).  This triggers a thrown error if accessed in 'fqField'. -}
 entityField :: Bool -> D.FieldDescriptorProto -> SE (IName String,Entity)
 entityField isKey fdp = annErr ("entityField FieldDescriptorProto name is "++show (D.FieldDescriptorProto.name fdp)) $ do

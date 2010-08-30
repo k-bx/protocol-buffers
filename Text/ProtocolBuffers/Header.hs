@@ -43,6 +43,7 @@ import Text.ProtocolBuffers.WireMessage
   ( prependMessageSize,putSize,splitWireTag
   , wireSizeReq,wireSizeOpt,wireSizeRep
   , wirePutReq,wirePutOpt,wirePutRep
+  , wirePutPacked,wireSizePacked
   , getMessageWith,getBareMessageWith,wireGetEnum,wireGetPackedEnum
   , wireSizeErr,wirePutErr,wireGetErr
   , unknown,unknownField

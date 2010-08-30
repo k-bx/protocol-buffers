@@ -114,6 +114,10 @@ data FieldInfo = FieldInfo { fieldName     :: ProtoFName
 --
 -- Note that Utf8 labeled byte sequences have been stripped to just
 -- 'ByteString' here as this is sufficient for code generation.
+--
+-- On 25 August 2010 20:12, George van den Driessche <georgevdd@google.com> sent Chris Kuklewicz a
+-- patch to MakeReflections.parseDefEnum to ensure that HsDef'Enum holds the mangled form of the
+-- name.
 data HsDefault = HsDef'Bool Bool
                | HsDef'ByteString ByteString
                | HsDef'RealFloat SomeRealFloat
@@ -139,7 +143,7 @@ fromRF x | isNaN x = SRF'nan
 
 data EnumInfo = EnumInfo { enumName :: ProtoName
                          , enumFilePath :: [FilePath]
-                         , enumValues :: [(EnumCode,String)]
+                         , enumValues :: [(EnumCode,String)] -- ^ The String is the Haskell name to write into the generated source files
                          }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
