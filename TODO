@@ -1,4 +1,5 @@
-make changes to align with protocol-buffer 2.3.0
+make changes to align with protocol-buffer 2.3.0 -- done
+
 http://protobuf.googlecode.com/svn/trunk/CHANGES.txt
 
   General

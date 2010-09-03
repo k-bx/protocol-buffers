@@ -36,15 +36,15 @@ import Data.Map(Map)
 import qualified Data.Map as M
 import Data.Maybe(fromMaybe,isJust)
 import Data.Monoid(mappend,mconcat)
-import Data.Sequence(Seq,(|>),(><))
-import qualified Data.Sequence as Seq
-import Data.Typeable
+import Data.Sequence((|>),(><))
+import qualified Data.Sequence as Seq(singleton,null,empty)
+import Data.Typeable()
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Default()
 import Text.ProtocolBuffers.WireMessage
 import Text.ProtocolBuffers.Reflections
-import Text.ProtocolBuffers.Get as Get (Get,runGet,Result(..),bytesRead)
+import Text.ProtocolBuffers.Get as Get (Result(..),bytesRead)
 
 err :: String -> b
 err msg = error $ "Text.ProtocolBuffers.Extensions error\n"++msg

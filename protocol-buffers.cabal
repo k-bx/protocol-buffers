@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        1.7.9
+version:        1.8.0
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -15,8 +15,7 @@ description:    Parse proto files and generate Haskell code.
 category:       Text
 Tested-With:    GHC ==6.10.1
 --data-files:     
-extra-source-files: Setup.hs
-                    TODO
+extra-source-files: TODO
                     README
 -- extra-tmp-files:
 

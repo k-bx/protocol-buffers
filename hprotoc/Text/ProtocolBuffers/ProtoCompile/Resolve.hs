@@ -40,19 +40,19 @@ import qualified Text.DescriptorProtos.UninterpretedOption            as D(Unint
 import qualified Text.DescriptorProtos.UninterpretedOption            as D.UninterpretedOption(UninterpretedOption(..))
 import qualified Text.DescriptorProtos.UninterpretedOption.NamePart   as D(NamePart(NamePart))
 import qualified Text.DescriptorProtos.UninterpretedOption.NamePart   as D.NamePart(NamePart(..))
-import qualified Text.DescriptorProtos.EnumOptions      as D(EnumOptions)
+-- import qualified Text.DescriptorProtos.EnumOptions      as D(EnumOptions)
 import qualified Text.DescriptorProtos.EnumOptions      as D.EnumOptions(EnumOptions(uninterpreted_option))
-import qualified Text.DescriptorProtos.EnumValueOptions as D(EnumValueOptions)
+-- import qualified Text.DescriptorProtos.EnumValueOptions as D(EnumValueOptions)
 import qualified Text.DescriptorProtos.EnumValueOptions as D.EnumValueOptions(EnumValueOptions(uninterpreted_option))
 import qualified Text.DescriptorProtos.FieldOptions     as D(FieldOptions(FieldOptions))
 import qualified Text.DescriptorProtos.FieldOptions     as D.FieldOptions(FieldOptions(packed,uninterpreted_option))
-import qualified Text.DescriptorProtos.FileOptions      as D(FileOptions)
+-- import qualified Text.DescriptorProtos.FileOptions      as D(FileOptions)
 import qualified Text.DescriptorProtos.FileOptions      as D.FileOptions(FileOptions(..))
-import qualified Text.DescriptorProtos.MessageOptions   as D(MessageOptions)
+-- import qualified Text.DescriptorProtos.MessageOptions   as D(MessageOptions)
 import qualified Text.DescriptorProtos.MessageOptions   as D.MessageOptions(MessageOptions(uninterpreted_option))
-import qualified Text.DescriptorProtos.MethodOptions    as D(MethodOptions)
+-- import qualified Text.DescriptorProtos.MethodOptions    as D(MethodOptions)
 import qualified Text.DescriptorProtos.MethodOptions    as D.MethodOptions(MethodOptions(uninterpreted_option))
-import qualified Text.DescriptorProtos.ServiceOptions   as D(ServiceOptions)
+-- import qualified Text.DescriptorProtos.ServiceOptions   as D(ServiceOptions)
 import qualified Text.DescriptorProtos.ServiceOptions   as D.ServiceOptions(ServiceOptions(uninterpreted_option))
 
 import qualified Text.Google.Protobuf.Compiler.CodeGeneratorRequest as CGR
@@ -73,10 +73,10 @@ import Control.Monad.Writer
 import Data.Char
 import Data.Ratio
 import Data.Ix(inRange)
-import Data.List(foldl',stripPrefix,lookup,isPrefixOf,isSuffixOf)
-import Data.Map(Map, keys)
+import Data.List(foldl',stripPrefix,isPrefixOf,isSuffixOf)
+import Data.Map(Map)
 import Data.Maybe(mapMaybe)
-import Data.Monoid(Monoid(..))
+-- import Data.Monoid()
 import System.Directory
 import qualified System.FilePath as Local(pathSeparator,splitDirectories,joinPath,combine,makeRelative)
 import qualified System.FilePath.Posix as Canon(pathSeparator,splitDirectories,joinPath,takeBaseName)
@@ -480,7 +480,7 @@ makeNameMap hPrefix fdpIn = -- trace (show ("getPrefix",D.FileDescriptorProto.na
   makeOne fdp = do
     -- Create 'template' :: ProtoName using "Text.ProtocolBuffers.Identifiers"
     let rawPackage = getPackage fdp
-    lift (checkDIUtf8 rawPackage) -- guard-like effect
+    _ <- lift (checkDIUtf8 rawPackage) -- guard-like effect
     let packageName = difi (DIName rawPackage)
     rawParent <- getJust "makeNameMap.makeOne: " . msum $
         [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options fdp)
@@ -675,7 +675,7 @@ entityEnum edp@(D.EnumDescriptorProto {D.EnumDescriptorProto.value=vs}) = do
 
 entityEnumValue :: D.EnumValueDescriptorProto -> SE ()
 entityEnumValue evdp = do -- Merely use getNames to add mangled self to ReMap state
-  getNames "entityEnumValue.name" D.EnumValueDescriptorProto.name evdp
+  _ <- getNames "entityEnumValue.name" D.EnumValueDescriptorProto.name evdp
   return ()
 
 entityService :: D.ServiceDescriptorProto -> SE (IName String,Entity)
@@ -1119,7 +1119,7 @@ loadProto' fdpReader protoFile = goState (load Set.empty protoFile) where
             imports <- mapM (fmap getTL . load parents) importList
             let eEnv = makeTopLevel parsed'fdp packageName imports
             global'env <- either (loadFailed file) return eEnv
-            either (loadFailed file) return (top'FDP . getTL $ global'env)
+            _ <- either (loadFailed file) return (top'FDP . getTL $ global'env)
             modify (M.insert file global'env) -- add to memorized results
             return global'env
 

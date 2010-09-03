@@ -15,8 +15,7 @@ module Text.ProtocolBuffers.WireMessage
     ( -- * User API functions
       -- ** Main encoding and decoding operations (non-delimited message encoding)
       messageSize,messagePut,messageGet,messagePutM,messageGetM
-      -- ** These should agree with the length delimited message format of protobuf-2.10, where the
-      -- message size preceeds the data.
+      -- ** These should agree with the length delimited message format of protobuf-2.10, where the message size preceeds the data.
     , messageWithLengthSize,messageWithLengthPut,messageWithLengthGet,messageWithLengthPutM,messageWithLengthGetM
       -- ** Encoding to write or read a single message field (good for delimited messages or incremental use)
     , messageAsFieldSize,messageAsFieldPutM,messageAsFieldGetM
@@ -365,7 +364,7 @@ getBareMessageWith updater = go required initialMessage
     if done then notEnoughData
       else do
         wireTag <- fmap WireTag getVarInt -- get tag off wire
-        let (fieldId,wireType) = splitWireTag wireTag
+        let (_fieldId,wireType) = splitWireTag wireTag
         if wireType == 4 then notEnoughData -- END_GROUP too soon
           else let reqs' = Set.delete wireTag reqs
                in updater wireTag {- fieldId wireType -} message >>= go reqs'
@@ -374,7 +373,7 @@ getBareMessageWith updater = go required initialMessage
     if done then return message
       else do
         wireTag <- fmap WireTag getVarInt -- get tag off wire
-        let (fieldId,wireType) = splitWireTag wireTag
+        let (_fieldId,wireType) = splitWireTag wireTag
         if wireType == 4 then return message
           else updater wireTag {- fieldId wireType -} message >>= go'
   initialMessage = mergeEmpty

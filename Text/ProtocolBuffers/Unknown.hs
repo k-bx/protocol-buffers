@@ -10,14 +10,12 @@ import qualified Data.ByteString.Lazy as L
 import qualified Data.Foldable as F
 import Data.Generics
 import Data.Monoid(mempty,mappend)
-import Data.Sequence(Seq,(|>))
-import qualified Data.Sequence as Seq
-import Data.Typeable
+import Data.Sequence((|>))
+import Data.Typeable()
 import Control.Monad.Error.Class(catchError)
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.WireMessage
-import Text.ProtocolBuffers.Get as Get (Get)
 
 -- err :: String -> b
 -- err msg = error $ "Text.ProtocolBuffers.Unknown error\n"++msg

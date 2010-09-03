@@ -1,9 +1,49 @@
 This the README file for protocol-buffers, protocol-buffers-descriptors, and hprotoc.
 These are three interdependent Haskell packages by Chris Kuklewicz.
-This README was updated most recently to reflect version 1.5.0
-This code should be compatible with Google protobuf version 2.1.0
+This README was updated most recently to reflect version 1.8.0
+This code should be compatible with Google protobuf version 2.3.0
 
 Questions and answers:
+
+What is new in 1.8.0 ?
+
+Submitted bug fixes!
+Fix for compiling generated haskell that uses packed fields.
+Fix to mangling default value Enum names.
+Fix for using "group" when in plug-in mode.
+
+I also changed the directory layout for the source code of protocol-buffers-descriptor.  The
+auto-generated code is now in "src-auto-generated" and the API for accessing options is under
+"src-hand-written".  I also added a README file to the descriptor package explaining the commands to
+recreate src-auto-generated.
+
+What is new in 1.7.0 ?
+
+This version adds a patch from George van den Driessche to allow hprotoc to work as a plug-in to
+protoc.  You must copy the hprotoc to be named protoc-gen-haskell (not a symlink) and call it as:
+
+/opt/protobuf-2.3.0/bin/protoc --plugin=./protoc-gen-haskell --haskell_out=DirOut test.proto
+
+What is new in 1.6.0 ?
+
+This version is now caught up with the official protobuf-2.3.0 release.
+ The highlights of the changes are (cribbing from Kenton's announcement):
+
+>   General
+>   * Parsers for repeated numeric fields now always accept both packed and
+>     unpacked input.  The [packed=true] option only affects serializers.
+>     Therefore, it is possible to switch a field to packed format without
+>     breaking backwards-compatibility -- as long as all parties are using
+>     protobuf 2.3.0 or above, at least.
+and
+>   * inf, -inf, and nan can now be used as default values for float and double
+>     fields.
+have been added to 1.6.0.
+
+I did not add support for plugin code generators or for writing directly
+to a compressed zip or jar file.  No service related code is ever
+generated so the "option *_generic_services" changes were ignored.
+
 
 What is new in 1.5.0 ?
 

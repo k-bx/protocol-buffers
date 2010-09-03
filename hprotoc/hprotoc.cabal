@@ -25,7 +25,7 @@ Executable hprotoc
   Hs-Source-Dirs:  .,protoc-gen-haskell
   build-tools:     alex
   ghc-options:     -O2 -Wall
-  build-depends:   protocol-buffers == 1.7.9, protocol-buffers-descriptor == 1.7.9
+  build-depends:   protocol-buffers == 1.8.0, protocol-buffers-descriptor == 1.8.0
   build-depends:   binary, utf8-string
   build-depends:   parsec < 3, haskell-src-exts >= 1.7.0,
                    containers,bytestring,array,

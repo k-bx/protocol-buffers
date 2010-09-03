@@ -10,49 +10,48 @@ module Text.ProtocolBuffers.ProtoCompile.Parser(parseProto,isValidPacked) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
-import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D(ExtensionRange)
+-- import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D(ExtensionRange)
 import qualified Text.DescriptorProtos.DescriptorProto.ExtensionRange as D.ExtensionRange(ExtensionRange(..))
 import qualified Text.DescriptorProtos.EnumDescriptorProto            as D(EnumDescriptorProto)
 import qualified Text.DescriptorProtos.EnumDescriptorProto            as D.EnumDescriptorProto(EnumDescriptorProto(..))
-import qualified Text.DescriptorProtos.EnumOptions                    as D(EnumOptions)
+-- import qualified Text.DescriptorProtos.EnumOptions                    as D(EnumOptions)
 import qualified Text.DescriptorProtos.EnumOptions                    as D.EnumOptions(EnumOptions(..))
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D(EnumValueDescriptorProto)
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D.EnumValueDescriptorProto(EnumValueDescriptorProto(..))
-import qualified Text.DescriptorProtos.EnumValueOptions               as D(EnumValueOptions)
+-- import qualified Text.DescriptorProtos.EnumValueOptions               as D(EnumValueOptions)
 import qualified Text.DescriptorProtos.EnumValueOptions               as D.EnumValueOptions(EnumValueOptions(..))
 import qualified Text.DescriptorProtos.FieldDescriptorProto           as D(FieldDescriptorProto)
 import qualified Text.DescriptorProtos.FieldDescriptorProto           as D.FieldDescriptorProto(FieldDescriptorProto(..))
 import           Text.DescriptorProtos.FieldDescriptorProto.Label
-import qualified Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto(Type)
+-- import qualified Text.DescriptorProtos.FieldDescriptorProto.Type      as D.FieldDescriptorProto(Type)
 import           Text.DescriptorProtos.FieldDescriptorProto.Type         (Type(..))
-import qualified Text.DescriptorProtos.FieldOptions                   as D(FieldOptions)
+-- import qualified Text.DescriptorProtos.FieldOptions                   as D(FieldOptions)
 import qualified Text.DescriptorProtos.FieldOptions                   as D.FieldOptions(FieldOptions(..))
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D(FileDescriptorProto)
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D.FileDescriptorProto(FileDescriptorProto(..))
-import qualified Text.DescriptorProtos.FileOptions                    as D(FileOptions)
+-- import qualified Text.DescriptorProtos.FileOptions                    as D(FileOptions)
 import qualified Text.DescriptorProtos.FileOptions                    as D.FileOptions(FileOptions(..))
-import qualified Text.DescriptorProtos.MessageOptions                 as D(MessageOptions)
+-- import qualified Text.DescriptorProtos.MessageOptions                 as D(MessageOptions)
 import qualified Text.DescriptorProtos.MessageOptions                 as D.MessageOptions(MessageOptions(..))
 import qualified Text.DescriptorProtos.MethodDescriptorProto          as D(MethodDescriptorProto)
 import qualified Text.DescriptorProtos.MethodDescriptorProto          as D.MethodDescriptorProto(MethodDescriptorProto(..))
-import qualified Text.DescriptorProtos.MethodOptions                  as D(MethodOptions)
+-- import qualified Text.DescriptorProtos.MethodOptions                  as D(MethodOptions)
 import qualified Text.DescriptorProtos.MethodOptions                  as D.MethodOptions(MethodOptions(..))
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D(ServiceDescriptorProto)
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D.ServiceDescriptorProto(ServiceDescriptorProto(..))
-import qualified Text.DescriptorProtos.ServiceOptions                 as D(ServiceOptions)
+-- import qualified Text.DescriptorProtos.ServiceOptions                 as D(ServiceOptions)
 import qualified Text.DescriptorProtos.ServiceOptions                 as D.ServiceOptions(ServiceOptions(..))
 import qualified Text.DescriptorProtos.UninterpretedOption            as D(UninterpretedOption)
 import qualified Text.DescriptorProtos.UninterpretedOption            as D.UninterpretedOption(UninterpretedOption(..))
-import qualified Text.DescriptorProtos.UninterpretedOption.NamePart   as D(NamePart)
+-- import qualified Text.DescriptorProtos.UninterpretedOption.NamePart   as D(NamePart)
 import qualified Text.DescriptorProtos.UninterpretedOption.NamePart   as D.NamePart(NamePart(..))
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
-import Text.ProtocolBuffers.Header(ByteString,Int32,Int64,Word32,Word64
-                                  ,ReflectEnum(reflectEnumInfo),enumName)
+import Text.ProtocolBuffers.Header(ReflectEnum(reflectEnumInfo),enumName)
 import Text.ProtocolBuffers.ProtoCompile.Lexer(Lexed(..),alexScanTokens,getLinePos)
 import Text.ProtocolBuffers.ProtoCompile.Instances(parseLabel,parseType)
-import Text.ProtocolBuffers.Reflections()
+-- import Text.ProtocolBuffers.Reflections()
 
 import Control.Monad(when,liftM2,liftM3)
 import qualified Data.ByteString.Lazy.Char8 as LC(notElem,head)
@@ -367,7 +366,7 @@ subField label mt = do
 
 defaultConstant LABEL_REPEATED _ = pName (U.fromString "default") >> fail "Repeated fields cannot have a default value"
 defaultConstant _ mt = do
-  pName (U.fromString "default")
+  _ <- pName (U.fromString "default")
   maybeDefault <- pChar '=' >> fmap Just (constant mt)
   -- XXX Hack: we lie about Utf8 for the default_value below
   update' (\s -> s { D.FieldDescriptorProto.default_value = fmap Utf8 maybeDefault })
@@ -519,7 +518,7 @@ serviceOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
 rpc = pName (U.fromString "rpc") >> do
   name <- ident1
   input <- between (pChar '(') (pChar ')') ident1
-  pName (U.fromString "returns")
+  _ <- pName (U.fromString "returns")
   output <- between (pChar '(') (pChar ')') ident1
   let m1 = defaultValue { D.MethodDescriptorProto.name=Just name
                         , D.MethodDescriptorProto.input_type=Just input
