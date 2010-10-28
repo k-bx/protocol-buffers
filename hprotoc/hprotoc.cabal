@@ -11,8 +11,7 @@ stability:      Experimental
 homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
 package-url:    http://code.haskell.org/protocol-buffers/
 synopsis:       Parse Google Protocol Buffer specifications
-description:    Parse http://code.google.com/apis/protocolbuffers/docs/proto.html
-  and perhaps general haskell code to use them
+description:    Parse "http://code.google.com/apis/protocolbuffers/docs/proto.html" and perhaps general haskell code to use them
 category:       Text
 Tested-With:    GHC ==6.8.3
 extra-source-files:
