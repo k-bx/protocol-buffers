@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        1.8.0
+version:        1.8.1
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3

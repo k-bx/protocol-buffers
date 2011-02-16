@@ -2,6 +2,8 @@ This the README file for protocol-buffers, protocol-buffers-descriptors, and hpr
 These are three interdependent Haskell packages by Chris Kuklewicz.
 This README was updated most recently to reflect version 1.8.0
 This code should be compatible with Google protobuf version 2.3.0
+Changes to keep up with Google protobuf version 2.4.0 are being considered.
+
 
 Questions and answers:
 

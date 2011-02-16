@@ -5,13 +5,14 @@ import qualified Text.ProtocolBuffers.Header as P'
  
 data OptimizeMode = SPEED
                   | CODE_SIZE
+                  | LITE_RUNTIME
                   deriving (P'.Read, P'.Show, P'.Eq, P'.Ord, P'.Typeable)
  
 instance P'.Mergeable OptimizeMode
  
 instance P'.Bounded OptimizeMode where
   minBound = SPEED
-  maxBound = CODE_SIZE
+  maxBound = LITE_RUNTIME
  
 instance P'.Default OptimizeMode where
   defaultValue = SPEED
@@ -19,17 +20,21 @@ instance P'.Default OptimizeMode where
 toMaybe'Enum :: P'.Int -> P'.Maybe OptimizeMode
 toMaybe'Enum 1 = P'.Just SPEED
 toMaybe'Enum 2 = P'.Just CODE_SIZE
+toMaybe'Enum 3 = P'.Just LITE_RUNTIME
 toMaybe'Enum _ = P'.Nothing
  
 instance P'.Enum OptimizeMode where
   fromEnum (SPEED) = 1
   fromEnum (CODE_SIZE) = 2
+  fromEnum (LITE_RUNTIME) = 3
   toEnum
    = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FileOptions.OptimizeMode") .
       toMaybe'Enum
   succ (SPEED) = CODE_SIZE
+  succ (CODE_SIZE) = LITE_RUNTIME
   succ _ = P'.error "hprotoc generated code: succ failure for type Text.DescriptorProtos.FileOptions.OptimizeMode"
   pred (CODE_SIZE) = SPEED
+  pred (LITE_RUNTIME) = CODE_SIZE
   pred _ = P'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FileOptions.OptimizeMode"
  
 instance P'.Wire OptimizeMode where
@@ -46,9 +51,9 @@ instance P'.MessageAPI msg' (msg' -> OptimizeMode) OptimizeMode where
   getVal m' f' = f' m'
  
 instance P'.ReflectEnum OptimizeMode where
-  reflectEnum = [(1, "SPEED", SPEED), (2, "CODE_SIZE", CODE_SIZE)]
+  reflectEnum = [(1, "SPEED", SPEED), (2, "CODE_SIZE", CODE_SIZE), (3, "LITE_RUNTIME", LITE_RUNTIME)]
   reflectEnumInfo _
    = P'.EnumInfo
       (P'.makePNF (P'.pack ".google.protobuf.FileOptions.OptimizeMode") ["Text"] ["DescriptorProtos", "FileOptions"] "OptimizeMode")
       ["Text", "DescriptorProtos", "FileOptions", "OptimizeMode.hs"]
-      [(1, "SPEED"), (2, "CODE_SIZE")]
+      [(1, "SPEED"), (2, "CODE_SIZE"), (3, "LITE_RUNTIME")]
