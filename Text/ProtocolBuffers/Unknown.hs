@@ -30,7 +30,7 @@ class UnknownMessage msg where
 newtype UnknownField = UnknownField (Seq UnknownFieldValue)
   deriving (Eq,Ord,Show,Read,Data,Typeable)
 
-data UnknownFieldValue = UFV {-# UNPACK #-} !WireTag {-# UNPACK #-} !ByteString
+data UnknownFieldValue = UFV {-# UNPACK #-} !WireTag !ByteString
   deriving (Eq,Ord,Show,Read,Data,Typeable)
 
 instance Mergeable UnknownField where

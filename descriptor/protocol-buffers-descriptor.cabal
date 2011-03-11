@@ -1,19 +1,19 @@
 name:           protocol-buffers-descriptor
-version:        1.8.1
+version:        1.8.2
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
 license-file:   LICENSE
-copyright:      (c) 2009 Christopher Edward Kuklewicz
+copyright:      (c) 2009-2010 Christopher Edward Kuklewicz
 author:         Christopher Edward Kuklewicz
 maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
-stability:      Experimental
+stability:      Good
 homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
 package-url:    http://code.haskell.org/protocol-buffers/
 synopsis:       Text.DescriptorProto.Options and Google Protocol Buffer specifications
 description:    Uses protocol-buffers package
 category:       Text
-Tested-With:    GHC ==6.10.2
+Tested-With:    GHC == 7.0.2
 data-files:     descriptor.proto
 extra-source-files: README
 -- extra-source-files: Setup.hs
@@ -50,10 +50,12 @@ Library
                    Text.DescriptorProtos.MethodOptions
                    Text.DescriptorProtos.ServiceDescriptorProto
                    Text.DescriptorProtos.ServiceOptions
+                   Text.DescriptorProtos.SourceCodeInfo
+                   Text.DescriptorProtos.SourceCodeInfo.Location
                    Text.DescriptorProtos.UninterpretedOption
                    Text.DescriptorProtos.UninterpretedOption.NamePart
 
-  build-depends:   protocol-buffers == 1.8.0,
+  build-depends:   protocol-buffers == 1.8.2,
                    containers,
                    bytestring
 

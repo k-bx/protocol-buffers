@@ -926,6 +926,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
                                 [] -> iFail $ "Empty name_part"
                                 (part:parts) -> go Nothing optName part parts
  where
+  iFail :: String -> RE a  -- needed by ghc-7.0.2
   iFail msg = do env <- ask
                  throw $ unlines [ "interpretOption: Failed to handle UninterpretedOption for: "++show optName
                                  , "  environment: "++whereEnv env
@@ -933,6 +934,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
                                  , "  message: "++msg ]
 
   -- This takes care of an intermediate message or group type
+  go :: Maybe Entity -> [IName String] -> D.NamePart -> [D.NamePart] -> RE (FieldId,ExtFieldValue)
   go mParent names (D.NamePart { D.NamePart.name_part = name
                                , D.NamePart.is_extension = isKey }) (next:rest) = do
     -- get entity (Field or Key) and the TYPE_*
@@ -981,7 +983,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
 
   -- This takes care of the acutal value of the option, which must be a basic type
   go mParent names (D.NamePart { D.NamePart.name_part = name
-                                , D.NamePart.is_extension = isKey }) [] = do
+                               , D.NamePart.is_extension = isKey }) [] = do
     -- get entity (Field or Key) and the TYPE_*
     fk <- if isKey then resolveRE name
                 else case mParent of
@@ -1097,7 +1099,7 @@ findFile paths (LocalFP target) = test paths where
 -- corresponding to it; returns also a canonicalised path.
 type DescriptorReader m = (Monad m) => LocalFP -> m (D.FileDescriptorProto, LocalFP)
 
-loadProto' :: (Monad r) => DescriptorReader r -> LocalFP -> r (Env,[D.FileDescriptorProto])
+loadProto' :: (Functor r,Monad r) => DescriptorReader r -> LocalFP -> r (Env,[D.FileDescriptorProto])
 loadProto' fdpReader protoFile = goState (load Set.empty protoFile) where
   goState act = do (env,m) <- runStateT act mempty
                    let fromRight (Right x) = x

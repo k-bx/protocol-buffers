@@ -1,19 +1,19 @@
 name:           protocol-buffers
-version:        1.8.0
+version:        1.8.2
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
 license-file:   LICENSE
-copyright:      (c) 2008 Christopher Edward Kuklewicz
+copyright:      (c) 2008-2010 Christopher Edward Kuklewicz
 author:         Christopher Edward Kuklewicz
 maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
-stability:      Beta
+stability:      Good
 homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
 package-url:    http://code.haskell.org/protocol-buffers/
 synopsis:       Parse Google Protocol Buffer specifications
 description:    Parse proto files and generate Haskell code.
 category:       Text
-Tested-With:    GHC ==6.10.1
+Tested-With:    GHC == 7.0.2
 --data-files:     
 extra-source-files: TODO
                     README
@@ -23,7 +23,8 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Library
-  ghc-options:  -Wall -O2
+  -- Added -fspec-constr-count=10 to quiet ghc-7.0.2
+  ghc-options:  -Wall -O2 -fspec-constr-count=10 -fno-warn-orphans
   exposed-modules: Text.ProtocolBuffers
                    Text.ProtocolBuffers.Basic
                    Text.ProtocolBuffers.Default

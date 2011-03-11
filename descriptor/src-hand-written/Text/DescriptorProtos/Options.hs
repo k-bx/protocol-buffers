@@ -35,9 +35,9 @@
 > test7 :: Maybe D.MethodOptions
 > test7 = return fileDescriptorProto >>= toSP "ImaginaryService" >>= descend "ImaginaryMethod" >>= return . options
 -}
-module Text.DescriptorProtos.Options(name,options,descend',descend,descendKey',descendKey
+module Text.DescriptorProtos.Options(descend,descendKey
                                     ,toDP,toEP,toSP,toFP,toEVP,toMP
-                                    ,NameAndOptions,DescendClass,DescendKey
+                                    ,NameAndOptions(name,options),DescendClass(descend'),DescendKey(descendKey')
                                     ,D.FileDescriptorProto,D.DescriptorProto,D.EnumDescriptorProto
                                     ,D.EnumValueDescriptorProto,D.FieldDescriptorProto
                                     ,D.ServiceDescriptorProto,D.MethodDescriptorProto

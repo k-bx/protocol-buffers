@@ -67,9 +67,15 @@ litIntP :: Integral x => x -> Pat
 litIntP x | x<0 = PParen $ PLit (Hse.Int (toInteger x))
           | otherwise = PLit (Hse.Int (toInteger x))
 
+litIntP' :: Int -> Pat
+litIntP' = litIntP
+
 litInt :: Integral x => x -> Exp
 litInt x | x<0 = Paren $ Lit (Hse.Int (toInteger x))
          | otherwise = Lit (Hse.Int (toInteger x))
+
+litInt' :: Int -> Exp
+litInt' = litInt
 
 typeApp :: String -> Type -> Type
 typeApp s =  TyApp (TyCon (private s))
@@ -299,11 +305,11 @@ instanceWireEnum ei
   where withName foo = inst foo [patvar "ft'",patvar "enum"] rhs
           where rhs = pvar foo $$ lvar "ft'" $$
                         (Paren $ pvar "fromEnum" $$ lvar "enum")
-        withGet = inst "wireGet" [litIntP 14] rhs
+        withGet = inst "wireGet" [litIntP' 14] rhs
           where rhs = pvar "wireGetEnum" $$ lvar "toMaybe'Enum"
         withGetErr = inst "wireGet" [patvar "ft'"] rhs
           where rhs = pvar "wireGetErr" $$ lvar "ft'"
-        withGetPacked = inst "wireGetPacked" [litIntP 14] rhs
+        withGetPacked = inst "wireGetPacked" [litIntP' 14] rhs
           where rhs = pvar "wireGetPackedEnum" $$ lvar "toMaybe'Enum"
         withGetPackedErr = inst "wireGetPacked" [patvar "ft'"] rhs
           where rhs = pvar "wireGetErr" $$ lvar "ft'"
@@ -369,7 +375,7 @@ embed'fdpBS bs = [ myType, myValue ]
   where myType = TypeSig src [ Ident "fileDescriptorProto" ] (TyCon (local "FileDescriptorProto"))
         myValue = PatBind src (PApp (local "fileDescriptorProto") []) Nothing (UnGuardedRhs $
                     pvar "getFromBS" $$
-                      Paren (pvar "wireGet" $$ litInt 11) $$ 
+                      Paren (pvar "wireGet" $$ litInt' 11) $$ 
                       Paren (pvar "pack" $$ litStr (LC.unpack bs))) noWhere
 
 --------------------------------------------
@@ -508,9 +514,9 @@ defToSyntax tc x =
                            (Paren $ pvar "pack" $$ litStr (LC.unpack bs))
     HsDef'RealFloat (SRF'Rational r) | r < 0 -> Paren $ Lit (Frac r)
                                      | otherwise -> Lit (Frac r)
-    HsDef'RealFloat SRF'nan  -> litInt   0  /! litInt 0
-    HsDef'RealFloat SRF'ninf -> litInt   1  /! litInt 0
-    HsDef'RealFloat SRF'inf  -> litInt (-1) /! litInt 0
+    HsDef'RealFloat SRF'nan  -> litInt'   0  /! litInt' 0
+    HsDef'RealFloat SRF'ninf -> litInt'   1  /! litInt' 0
+    HsDef'RealFloat SRF'inf  -> litInt' (-1) /! litInt' 0
     HsDef'Integer i -> litInt i
     HsDef'Enum s -> Paren $ pvar "read" $$ litStr s
  where (/!) a b = Paren (mkOp "/" a b)
@@ -582,14 +588,14 @@ instanceMergeable di
             $ Seq.length (fields di)
         patternVars1,patternVars2 :: [Pat]
         patternVars1 = take len inf
-            where inf = map (\ n -> patvar ("x'" ++ show n)) [1..]
+            where inf = map (\ n -> patvar ("x'" ++ show n)) [(1::Int)..]
         patternVars2 = take len inf
-            where inf = map (\ n -> patvar ("y'" ++ show n)) [1..]
+            where inf = map (\ n -> patvar ("y'" ++ show n)) [(1::Int)..]
         vars1,vars2 :: [Exp]
         vars1 = take len inf
-            where inf = map (\ n -> lvar ("x'" ++ show n)) [1..]
+            where inf = map (\ n -> lvar ("x'" ++ show n)) [(1::Int)..]
         vars2 = take len inf
-            where inf = map (\ n -> lvar ("y'" ++ show n)) [1..]
+            where inf = map (\ n -> lvar ("y'" ++ show n)) [(1::Int)..]
         append x y = Paren $ pvar "mergeAppend" $$ x $$ y
 
 instanceDefault :: DescriptorInfo -> Decl
@@ -628,16 +634,16 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         len = (if extensible then succ else id) 
             $ (if storeUnknown di then succ else id)
             $ Seq.length fieldInfos
-        mine = PApp me . take len . map (\ n -> patvar ("x'" ++ show n)) $ [1..]
-        vars = take len . map (\ n -> lvar ("x'" ++ show n)) $ [1..]
+        mine = PApp me . take len . map (\ n -> patvar ("x'" ++ show n)) $ [(1::Int)..]
+        vars = take len . map (\ n -> lvar ("x'" ++ show n)) $ [(1::Int)..]
         mExt | extensible = Just (vars !! Seq.length fieldInfos)
              | otherwise = Nothing
         mUnknown | storeUnknown di = Just (last vars)
                  | otherwise = Nothing
 
         -- first case is for Group behavior, second case is for Message behavior, last is error handler
-        cases g m e = Case (lvar "ft'") [ Alt src (litIntP 10) (UnGuardedAlt g) noWhere
-                                        , Alt src (litIntP 11) (UnGuardedAlt m) noWhere
+        cases g m e = Case (lvar "ft'") [ Alt src (litIntP' 10) (UnGuardedAlt g) noWhere
+                                        , Alt src (litIntP' 11) (UnGuardedAlt m) noWhere
                                         , Alt src PWildCard  (UnGuardedAlt e) noWhere
                                         ]
 
@@ -664,7 +670,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         putCases = UnGuardedRhs $ cases
           (lvar "put'Fields")
           (Do [ Qualifier $ pvar "putSize" $$
-                    (Paren $ foldl' App (pvar "wireSize") [ litInt 10 , lvar "self'" ])
+                    (Paren $ foldl' App (pvar "wireSize") [ litInt' 10 , lvar "self'" ])
                 , Qualifier $ lvar "put'Fields" ])
           (pvar "wirePutErr" $$ lvar "ft'" $$ lvar "self'")
         wherePutFields = BDecls [defun "put'Fields" [] (Do putStmts)]
@@ -749,7 +755,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                               $$ lvar "new'Field"
                                | isRequired fi = qMerge (lvar "new'Field")
                                | otherwise = qMerge (pcon "Just" $$ lvar "new'Field")
-            where qMerge x | fromIntegral (getFieldType (typeCode fi)) `elem` [10,11] =
+            where qMerge x | fromIntegral (getFieldType (typeCode fi)) `elem` [10,(11::Int)] =
                                pvar "mergeAppend" $$ Paren ( (Var . unqualFName . fieldName $ fi)
                                                                $$ lvar "old'Self" )
                                                   $$ Paren x

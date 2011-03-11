@@ -88,12 +88,12 @@ import GHC.Word(Word16(..),Word32(..),Word64(..),uncheckedShiftL64#)
 
 -- Simple external return type
 data Result a = Failed {-# UNPACK #-} !Int64 String
-              | Finished {-# UNPACK #-} !L.ByteString {-# UNPACK #-} !Int64 a
+              | Finished !L.ByteString {-# UNPACK #-} !Int64 a
               | Partial (Maybe L.ByteString -> Result a)
 
 -- Internal state type, not exposed to the user.
 data S = S { top :: {-# UNPACK #-} !S.ByteString
-           , current :: {-# UNPACK #-} !L.ByteString
+           , current :: !L.ByteString
            , consumed :: {-# UNPACK #-} !Int64
            } deriving Show
 
@@ -134,10 +134,15 @@ newtype Get a = Get {
 -- IMPORTANT: Any FutureFrame at the top level(s) is discarded by throwError.
 setCheckpoint,useCheckpoint,clearCheckpoint :: Get ()
 setCheckpoint = Get $ \ sc s pc -> sc () s (HandlerFrame Nothing s mempty pc)
-useCheckpoint = Get $ \ sc (S _ _ _) (HandlerFrame Nothing s future pc) ->
-  let (S {top=ss, current=bs, consumed=n}) = collect s future
-  in sc () (S ss bs n) pc
-clearCheckpoint = Get $ \ sc s (HandlerFrame Nothing _s _future pc) -> sc () s pc
+useCheckpoint = Get $ \ sc (S _ _ _) frame ->
+  case frame of
+    (HandlerFrame Nothing s future pc) -> let (S {top=ss, current=bs, consumed=n}) = collect s future
+                                          in sc () (S ss bs n) pc
+    _ -> error "Text.ProtocolBuffers.Get: Impossible useCheckpoint frame!"
+clearCheckpoint = Get $ \ sc s frame ->
+   case frame of
+     (HandlerFrame Nothing _s _future pc) -> sc () s pc
+     _ -> error "Text.ProtocolBuffers.Get: Impossible clearCheckpoint frame!"
 
 -- | 'lookAhead' runs the @todo@ action and then rewinds only the
 -- BinaryParser state.  Any new input from 'suspend' or changes from
@@ -301,7 +306,34 @@ class MonadSuspend m where
 -- by 'addFuture' to ('S' user) and to the packaging of the resumption
 -- function in 'IResult'('IPartial').
 instance MonadSuspend Get where
-    suspend = Get $ \ sc sIn pcIn ->
+    suspend = Get (
+-- XXX I moved checkBool, addFuture, and rememberFalse inside the Get ( ) from
+-- their previous location in the where clause below (with appendBS).
+--
+-- XXX This is because ghc-7.0.2 had error:
+{-
+Text/ProtocolBuffers/Get.hs:304:15:
+    Couldn't match type `b1' with `b'
+      because type variable `b' would escape its scope
+    This (rigid, skolem) type variable is bound by
+      a type expected by the context:
+        Success b Bool -> S -> FrameStack b -> Result b
+    The following variables have types that mention b1
+      addFuture :: L.ByteString -> FrameStack b1 -> FrameStack b1
+        (bound at Text/ProtocolBuffers/Get.hs:315:12)
+-}
+-- XXX I am worried this may change the allocation behavior of the program.
+      let checkBool (ErrorFrame _ b) = b
+          checkBool (HandlerFrame _ _ _ pc) = checkBool pc
+          -- addFuture puts the new data in 'future' where throwError's collect can find and use it
+          addFuture bs (HandlerFrame catcher s future pc) =
+                        HandlerFrame catcher s (future |> bs) (addFuture bs pc)
+          addFuture _bs x@(ErrorFrame {}) = x
+          -- Once suspend is given Nothing, it remembers this and always returns False
+          rememberFalse (ErrorFrame ec _) = ErrorFrame ec False
+          rememberFalse (HandlerFrame catcher s future pc) =
+                         HandlerFrame catcher s future (rememberFalse pc)
+      in \ sc sIn pcIn ->
       if checkBool pcIn -- Has Nothing ever been given to a partial continuation?
         then let f Nothing = let pcOut = rememberFalse pcIn
                              in sc False sIn pcOut
@@ -310,18 +342,9 @@ instance MonadSuspend Get where
                                 in sc True sOut pcOut
              in Partial f
         else sc False sIn pcIn  -- once Nothing has been given suspend is a no-op
+                  )
      where appendBS (S ss bs n) bs' = S ss (mappend bs bs') n
-           -- addFuture puts the new data in 'future' where throwError's collect can find and use it
-           addFuture bs (HandlerFrame catcher s future pc) =
-                         HandlerFrame catcher s (future |> bs) (addFuture bs pc)
-           addFuture _bs x@(ErrorFrame {}) = x
-           -- Once suspend is given Nothing, it remembers this and always returns False
-           checkBool (ErrorFrame _ b) = b
-           checkBool (HandlerFrame _ _ _ pc) = checkBool pc
-           rememberFalse (ErrorFrame ec _) = ErrorFrame ec False
-           rememberFalse (HandlerFrame catcher s future pc) =
-                          HandlerFrame catcher s future (rememberFalse pc)
-          
+
 -- A unique sort of command...
 
 -- | 'discardInnerHandler' causes the most recent catchError to be

@@ -137,7 +137,7 @@ data ExtFieldValue = ExtFromWire !(Seq EP) -- XXX must store wiretype with ByteS
                    | ExtPacked   !FieldType !GPDynSeq
   deriving (Typeable,Ord,Show)
 
-data EP = EP {-# UNPACK #-} !WireType  {-# UNPACK #-} !ByteString
+data EP = EP {-# UNPACK #-} !WireType  !ByteString
   deriving (Typeable,Eq,Ord,Show)
 
 data DummyMessageType deriving (Typeable)
