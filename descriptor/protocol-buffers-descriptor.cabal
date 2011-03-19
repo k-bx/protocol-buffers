@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        1.8.2
+version:        1.8.3
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -55,7 +55,7 @@ Library
                    Text.DescriptorProtos.UninterpretedOption
                    Text.DescriptorProtos.UninterpretedOption.NamePart
 
-  build-depends:   protocol-buffers == 1.8.2,
+  build-depends:   protocol-buffers == 1.8.3,
                    containers,
                    bytestring
 
@@ -65,9 +65,8 @@ Library
         build-depends: base == 3.*
 
   extensions:      DeriveDataTypeable,
-                   EmptyDataDecls,
                    FlexibleInstances,
-                   MultiParamTypeClasses,
-                   FunctionalDependencies,
-                   FlexibleContexts
-
+                   MultiParamTypeClasses
+  -- extensions:      EmptyDataDecls,
+  --                  FunctionalDependencies,
+  --                  FlexibleContexts

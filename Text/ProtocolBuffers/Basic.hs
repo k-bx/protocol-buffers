@@ -4,7 +4,7 @@
 -- 'Default', and 'Wire' classes.
 module Text.ProtocolBuffers.Basic
   ( -- * Basic types for protocol buffer fields in Haskell
-    Seq,Utf8(Utf8),ByteString,Int32,Int64,Word32,Word64
+    Double,Float,Bool,Maybe,Seq,Utf8(Utf8),ByteString,Int32,Int64,Word32,Word64
     -- * Haskell types that act in the place of DescritorProto values
   , WireTag(..),FieldId(..),WireType(..),FieldType(..),EnumCode(..),WireSize
     -- * Some of the type classes implemented messages and fields
