@@ -1,45 +1,47 @@
+{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
 module Text.DescriptorProtos.FileOptions.OptimizeMode (OptimizeMode(..)) where
-import Prelude ((+), (.))
-import qualified Prelude as P'
+import Prelude ((+), (/), (.))
+import qualified Prelude as Prelude'
+import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
  
 data OptimizeMode = SPEED
                   | CODE_SIZE
                   | LITE_RUNTIME
-                  deriving (P'.Read, P'.Show, P'.Eq, P'.Ord, P'.Typeable)
+                  deriving (Prelude'.Read, Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.Mergeable OptimizeMode
  
-instance P'.Bounded OptimizeMode where
+instance Prelude'.Bounded OptimizeMode where
   minBound = SPEED
   maxBound = LITE_RUNTIME
  
 instance P'.Default OptimizeMode where
   defaultValue = SPEED
  
-toMaybe'Enum :: P'.Int -> P'.Maybe OptimizeMode
-toMaybe'Enum 1 = P'.Just SPEED
-toMaybe'Enum 2 = P'.Just CODE_SIZE
-toMaybe'Enum 3 = P'.Just LITE_RUNTIME
-toMaybe'Enum _ = P'.Nothing
+toMaybe'Enum :: Prelude'.Int -> P'.Maybe OptimizeMode
+toMaybe'Enum 1 = Prelude'.Just SPEED
+toMaybe'Enum 2 = Prelude'.Just CODE_SIZE
+toMaybe'Enum 3 = Prelude'.Just LITE_RUNTIME
+toMaybe'Enum _ = Prelude'.Nothing
  
-instance P'.Enum OptimizeMode where
-  fromEnum (SPEED) = 1
-  fromEnum (CODE_SIZE) = 2
-  fromEnum (LITE_RUNTIME) = 3
+instance Prelude'.Enum OptimizeMode where
+  fromEnum SPEED = 1
+  fromEnum CODE_SIZE = 2
+  fromEnum LITE_RUNTIME = 3
   toEnum
-   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FileOptions.OptimizeMode") .
-      toMaybe'Enum
-  succ (SPEED) = CODE_SIZE
-  succ (CODE_SIZE) = LITE_RUNTIME
-  succ _ = P'.error "hprotoc generated code: succ failure for type Text.DescriptorProtos.FileOptions.OptimizeMode"
-  pred (CODE_SIZE) = SPEED
-  pred (LITE_RUNTIME) = CODE_SIZE
-  pred _ = P'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FileOptions.OptimizeMode"
+   = P'.fromMaybe (Prelude'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FileOptions.OptimizeMode")
+      . toMaybe'Enum
+  succ SPEED = CODE_SIZE
+  succ CODE_SIZE = LITE_RUNTIME
+  succ _ = Prelude'.error "hprotoc generated code: succ failure for type Text.DescriptorProtos.FileOptions.OptimizeMode"
+  pred CODE_SIZE = SPEED
+  pred LITE_RUNTIME = CODE_SIZE
+  pred _ = Prelude'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FileOptions.OptimizeMode"
  
 instance P'.Wire OptimizeMode where
-  wireSize ft' enum = P'.wireSize ft' (P'.fromEnum enum)
-  wirePut ft' enum = P'.wirePut ft' (P'.fromEnum enum)
+  wireSize ft' enum = P'.wireSize ft' (Prelude'.fromEnum enum)
+  wirePut ft' enum = P'.wirePut ft' (Prelude'.fromEnum enum)
   wireGet 14 = P'.wireGetEnum toMaybe'Enum
   wireGet ft' = P'.wireGetErr ft'
   wireGetPacked 14 = P'.wireGetPackedEnum toMaybe'Enum

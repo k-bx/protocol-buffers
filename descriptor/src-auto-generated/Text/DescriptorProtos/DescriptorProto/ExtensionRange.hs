@@ -1,10 +1,12 @@
+{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
 module Text.DescriptorProtos.DescriptorProto.ExtensionRange (ExtensionRange(..)) where
-import Prelude ((+))
-import qualified Prelude as P'
+import Prelude ((+), (/))
+import qualified Prelude as Prelude'
+import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
  
 data ExtensionRange = ExtensionRange{start :: P'.Maybe P'.Int32, end :: P'.Maybe P'.Int32, unknown'field :: P'.UnknownField}
-                    deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
+                    deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.UnknownMessage ExtensionRange where
   getUnknownField = unknown'field
@@ -47,8 +49,8 @@ instance P'.Wire ExtensionRange where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             8 -> P'.fmap (\ new'Field -> old'Self{start = P'.Just new'Field}) (P'.wireGet 5)
-             16 -> P'.fmap (\ new'Field -> old'Self{end = P'.Just new'Field}) (P'.wireGet 5)
+             8 -> Prelude'.fmap (\ new'Field -> old'Self{start = Prelude'.Just new'Field}) (P'.wireGet 5)
+             16 -> Prelude'.fmap (\ new'Field -> old'Self{end = Prelude'.Just new'Field}) (P'.wireGet 5)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in P'.unknown field'Number wire'Type old'Self
  
 instance P'.MessageAPI msg' (msg' -> ExtensionRange) ExtensionRange where
@@ -59,5 +61,5 @@ instance P'.GPB ExtensionRange
 instance P'.ReflectDescriptor ExtensionRange where
   getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [8, 16])
   reflectDescriptorInfo _
-   = P'.read
+   = Prelude'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.DescriptorProto.ExtensionRange\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\",MName \"DescriptorProto\"], baseName = MName \"ExtensionRange\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"DescriptorProto\",\"ExtensionRange.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.DescriptorProto.ExtensionRange.start\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"DescriptorProto\",MName \"ExtensionRange\"], baseName' = FName \"start\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 5}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.DescriptorProto.ExtensionRange.end\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"DescriptorProto\",MName \"ExtensionRange\"], baseName' = FName \"end\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 16}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 5}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"

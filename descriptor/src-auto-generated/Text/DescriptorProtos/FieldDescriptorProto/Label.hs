@@ -1,45 +1,48 @@
+{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
 module Text.DescriptorProtos.FieldDescriptorProto.Label (Label(..)) where
-import Prelude ((+), (.))
-import qualified Prelude as P'
+import Prelude ((+), (/), (.))
+import qualified Prelude as Prelude'
+import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
  
 data Label = LABEL_OPTIONAL
            | LABEL_REQUIRED
            | LABEL_REPEATED
-           deriving (P'.Read, P'.Show, P'.Eq, P'.Ord, P'.Typeable)
+           deriving (Prelude'.Read, Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.Mergeable Label
  
-instance P'.Bounded Label where
+instance Prelude'.Bounded Label where
   minBound = LABEL_OPTIONAL
   maxBound = LABEL_REPEATED
  
 instance P'.Default Label where
   defaultValue = LABEL_OPTIONAL
  
-toMaybe'Enum :: P'.Int -> P'.Maybe Label
-toMaybe'Enum 1 = P'.Just LABEL_OPTIONAL
-toMaybe'Enum 2 = P'.Just LABEL_REQUIRED
-toMaybe'Enum 3 = P'.Just LABEL_REPEATED
-toMaybe'Enum _ = P'.Nothing
+toMaybe'Enum :: Prelude'.Int -> P'.Maybe Label
+toMaybe'Enum 1 = Prelude'.Just LABEL_OPTIONAL
+toMaybe'Enum 2 = Prelude'.Just LABEL_REQUIRED
+toMaybe'Enum 3 = Prelude'.Just LABEL_REPEATED
+toMaybe'Enum _ = Prelude'.Nothing
  
-instance P'.Enum Label where
-  fromEnum (LABEL_OPTIONAL) = 1
-  fromEnum (LABEL_REQUIRED) = 2
-  fromEnum (LABEL_REPEATED) = 3
+instance Prelude'.Enum Label where
+  fromEnum LABEL_OPTIONAL = 1
+  fromEnum LABEL_REQUIRED = 2
+  fromEnum LABEL_REPEATED = 3
   toEnum
-   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldDescriptorProto.Label") .
-      toMaybe'Enum
-  succ (LABEL_OPTIONAL) = LABEL_REQUIRED
-  succ (LABEL_REQUIRED) = LABEL_REPEATED
-  succ _ = P'.error "hprotoc generated code: succ failure for type Text.DescriptorProtos.FieldDescriptorProto.Label"
-  pred (LABEL_REQUIRED) = LABEL_OPTIONAL
-  pred (LABEL_REPEATED) = LABEL_REQUIRED
-  pred _ = P'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FieldDescriptorProto.Label"
+   = P'.fromMaybe
+      (Prelude'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldDescriptorProto.Label")
+      . toMaybe'Enum
+  succ LABEL_OPTIONAL = LABEL_REQUIRED
+  succ LABEL_REQUIRED = LABEL_REPEATED
+  succ _ = Prelude'.error "hprotoc generated code: succ failure for type Text.DescriptorProtos.FieldDescriptorProto.Label"
+  pred LABEL_REQUIRED = LABEL_OPTIONAL
+  pred LABEL_REPEATED = LABEL_REQUIRED
+  pred _ = Prelude'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FieldDescriptorProto.Label"
  
 instance P'.Wire Label where
-  wireSize ft' enum = P'.wireSize ft' (P'.fromEnum enum)
-  wirePut ft' enum = P'.wirePut ft' (P'.fromEnum enum)
+  wireSize ft' enum = P'.wireSize ft' (Prelude'.fromEnum enum)
+  wirePut ft' enum = P'.wirePut ft' (Prelude'.fromEnum enum)
   wireGet 14 = P'.wireGetEnum toMaybe'Enum
   wireGet ft' = P'.wireGetErr ft'
   wireGetPacked 14 = P'.wireGetPackedEnum toMaybe'Enum

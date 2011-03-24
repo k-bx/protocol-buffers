@@ -1,45 +1,47 @@
+{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
 module Text.DescriptorProtos.FieldOptions.CType (CType(..)) where
-import Prelude ((+), (.))
-import qualified Prelude as P'
+import Prelude ((+), (/), (.))
+import qualified Prelude as Prelude'
+import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
  
 data CType = STRING
            | CORD
            | STRING_PIECE
-           deriving (P'.Read, P'.Show, P'.Eq, P'.Ord, P'.Typeable)
+           deriving (Prelude'.Read, Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.Mergeable CType
  
-instance P'.Bounded CType where
+instance Prelude'.Bounded CType where
   minBound = STRING
   maxBound = STRING_PIECE
  
 instance P'.Default CType where
   defaultValue = STRING
  
-toMaybe'Enum :: P'.Int -> P'.Maybe CType
-toMaybe'Enum 0 = P'.Just STRING
-toMaybe'Enum 1 = P'.Just CORD
-toMaybe'Enum 2 = P'.Just STRING_PIECE
-toMaybe'Enum _ = P'.Nothing
+toMaybe'Enum :: Prelude'.Int -> P'.Maybe CType
+toMaybe'Enum 0 = Prelude'.Just STRING
+toMaybe'Enum 1 = Prelude'.Just CORD
+toMaybe'Enum 2 = Prelude'.Just STRING_PIECE
+toMaybe'Enum _ = Prelude'.Nothing
  
-instance P'.Enum CType where
-  fromEnum (STRING) = 0
-  fromEnum (CORD) = 1
-  fromEnum (STRING_PIECE) = 2
+instance Prelude'.Enum CType where
+  fromEnum STRING = 0
+  fromEnum CORD = 1
+  fromEnum STRING_PIECE = 2
   toEnum
-   = P'.fromMaybe (P'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldOptions.CType") .
+   = P'.fromMaybe (Prelude'.error "hprotoc generated code: toEnum failure for type Text.DescriptorProtos.FieldOptions.CType") .
       toMaybe'Enum
-  succ (STRING) = CORD
-  succ (CORD) = STRING_PIECE
-  succ _ = P'.error "hprotoc generated code: succ failure for type Text.DescriptorProtos.FieldOptions.CType"
-  pred (CORD) = STRING
-  pred (STRING_PIECE) = CORD
-  pred _ = P'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FieldOptions.CType"
+  succ STRING = CORD
+  succ CORD = STRING_PIECE
+  succ _ = Prelude'.error "hprotoc generated code: succ failure for type Text.DescriptorProtos.FieldOptions.CType"
+  pred CORD = STRING
+  pred STRING_PIECE = CORD
+  pred _ = Prelude'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FieldOptions.CType"
  
 instance P'.Wire CType where
-  wireSize ft' enum = P'.wireSize ft' (P'.fromEnum enum)
-  wirePut ft' enum = P'.wirePut ft' (P'.fromEnum enum)
+  wireSize ft' enum = P'.wireSize ft' (Prelude'.fromEnum enum)
+  wirePut ft' enum = P'.wirePut ft' (Prelude'.fromEnum enum)
   wireGet 14 = P'.wireGetEnum toMaybe'Enum
   wireGet ft' = P'.wireGetErr ft'
   wireGetPacked 14 = P'.wireGetPackedEnum toMaybe'Enum

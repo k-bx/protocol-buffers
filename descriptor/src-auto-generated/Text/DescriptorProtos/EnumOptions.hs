@@ -1,12 +1,14 @@
+{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
 module Text.DescriptorProtos.EnumOptions (EnumOptions(..)) where
-import Prelude ((+), (==), (<=), (&&))
-import qualified Prelude as P'
+import Prelude ((+), (/), (==), (<=), (&&))
+import qualified Prelude as Prelude'
+import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
  
 data EnumOptions = EnumOptions{uninterpreted_option :: P'.Seq DescriptorProtos.UninterpretedOption, ext'field :: P'.ExtField,
                                unknown'field :: P'.UnknownField}
-                 deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
+                 deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.ExtendMessage EnumOptions where
   getExtField = ext'field
@@ -54,10 +56,11 @@ instance P'.Wire EnumOptions where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             7994 -> P'.fmap (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
+             7994 -> Prelude'.fmap
+                      (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
                       (P'.wireGet 11)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in
-                   if P'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then
+                   if Prelude'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then
                     P'.loadExtension field'Number wire'Type old'Self else P'.unknown field'Number wire'Type old'Self
  
 instance P'.MessageAPI msg' (msg' -> EnumOptions) EnumOptions where
@@ -68,5 +71,5 @@ instance P'.GPB EnumOptions
 instance P'.ReflectDescriptor EnumOptions where
   getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [7994])
   reflectDescriptorInfo _
-   = P'.read
+   = Prelude'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.EnumOptions\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"EnumOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"EnumOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.EnumOptions.uninterpreted_option\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"EnumOptions\"], baseName' = FName \"uninterpreted_option\"}, fieldNumber = FieldId {getFieldId = 999}, wireTag = WireTag {getWireTag = 7994}, packedTag = Nothing, wireTagLength = 2, isPacked = False, isRequired = False, canRepeat = True, mightPack = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.UninterpretedOption\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"UninterpretedOption\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [(FieldId {getFieldId = 1000},FieldId {getFieldId = 18999}),(FieldId {getFieldId = 20000},FieldId {getFieldId = 536870911})], knownKeys = fromList [], storeUnknown = True}"

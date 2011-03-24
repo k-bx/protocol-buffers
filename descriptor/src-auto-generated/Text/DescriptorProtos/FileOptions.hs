@@ -1,6 +1,8 @@
+{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
 module Text.DescriptorProtos.FileOptions (FileOptions(..)) where
-import Prelude ((+), (==), (<=), (&&))
-import qualified Prelude as P'
+import Prelude ((+), (/), (==), (<=), (&&))
+import qualified Prelude as Prelude'
+import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FileOptions.OptimizeMode as DescriptorProtos.FileOptions (OptimizeMode)
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
@@ -12,7 +14,7 @@ data FileOptions = FileOptions{java_package :: P'.Maybe P'.Utf8, java_outer_clas
                                py_generic_services :: P'.Maybe P'.Bool,
                                uninterpreted_option :: P'.Seq DescriptorProtos.UninterpretedOption, ext'field :: P'.ExtField,
                                unknown'field :: P'.UnknownField}
-                 deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
+                 deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.ExtendMessage FileOptions where
   getExtField = ext'field
@@ -42,10 +44,11 @@ instance P'.Mergeable FileOptions where
  
 instance P'.Default FileOptions where
   defaultValue
-   = FileOptions P'.defaultValue P'.defaultValue (P'.Just P'.False) (P'.Just P'.False) (P'.Just (P'.read "SPEED"))
-      (P'.Just P'.False)
-      (P'.Just P'.False)
-      (P'.Just P'.False)
+   = FileOptions P'.defaultValue P'.defaultValue (Prelude'.Just Prelude'.False) (Prelude'.Just Prelude'.False)
+      (Prelude'.Just (Prelude'.read "SPEED"))
+      (Prelude'.Just Prelude'.False)
+      (Prelude'.Just Prelude'.False)
+      (Prelude'.Just Prelude'.False)
       P'.defaultValue
       P'.defaultValue
       P'.defaultValue
@@ -95,18 +98,19 @@ instance P'.Wire FileOptions where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             10 -> P'.fmap (\ new'Field -> old'Self{java_package = P'.Just new'Field}) (P'.wireGet 9)
-             66 -> P'.fmap (\ new'Field -> old'Self{java_outer_classname = P'.Just new'Field}) (P'.wireGet 9)
-             80 -> P'.fmap (\ new'Field -> old'Self{java_multiple_files = P'.Just new'Field}) (P'.wireGet 8)
-             160 -> P'.fmap (\ new'Field -> old'Self{java_generate_equals_and_hash = P'.Just new'Field}) (P'.wireGet 8)
-             72 -> P'.fmap (\ new'Field -> old'Self{optimize_for = P'.Just new'Field}) (P'.wireGet 14)
-             128 -> P'.fmap (\ new'Field -> old'Self{cc_generic_services = P'.Just new'Field}) (P'.wireGet 8)
-             136 -> P'.fmap (\ new'Field -> old'Self{java_generic_services = P'.Just new'Field}) (P'.wireGet 8)
-             144 -> P'.fmap (\ new'Field -> old'Self{py_generic_services = P'.Just new'Field}) (P'.wireGet 8)
-             7994 -> P'.fmap (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
+             10 -> Prelude'.fmap (\ new'Field -> old'Self{java_package = Prelude'.Just new'Field}) (P'.wireGet 9)
+             66 -> Prelude'.fmap (\ new'Field -> old'Self{java_outer_classname = Prelude'.Just new'Field}) (P'.wireGet 9)
+             80 -> Prelude'.fmap (\ new'Field -> old'Self{java_multiple_files = Prelude'.Just new'Field}) (P'.wireGet 8)
+             160 -> Prelude'.fmap (\ new'Field -> old'Self{java_generate_equals_and_hash = Prelude'.Just new'Field}) (P'.wireGet 8)
+             72 -> Prelude'.fmap (\ new'Field -> old'Self{optimize_for = Prelude'.Just new'Field}) (P'.wireGet 14)
+             128 -> Prelude'.fmap (\ new'Field -> old'Self{cc_generic_services = Prelude'.Just new'Field}) (P'.wireGet 8)
+             136 -> Prelude'.fmap (\ new'Field -> old'Self{java_generic_services = Prelude'.Just new'Field}) (P'.wireGet 8)
+             144 -> Prelude'.fmap (\ new'Field -> old'Self{py_generic_services = Prelude'.Just new'Field}) (P'.wireGet 8)
+             7994 -> Prelude'.fmap
+                      (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
                       (P'.wireGet 11)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in
-                   if P'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then
+                   if Prelude'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then
                     P'.loadExtension field'Number wire'Type old'Self else P'.unknown field'Number wire'Type old'Self
  
 instance P'.MessageAPI msg' (msg' -> FileOptions) FileOptions where
@@ -118,5 +122,5 @@ instance P'.ReflectDescriptor FileOptions where
   getMessageInfo _
    = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [10, 66, 72, 80, 128, 136, 144, 160, 7994])
   reflectDescriptorInfo _
-   = P'.read
+   = Prelude'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.FileOptions\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"FileOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"FileOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.java_package\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"java_package\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.java_outer_classname\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"java_outer_classname\"}, fieldNumber = FieldId {getFieldId = 8}, wireTag = WireTag {getWireTag = 66}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.java_multiple_files\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"java_multiple_files\"}, fieldNumber = FieldId {getFieldId = 10}, wireTag = WireTag {getWireTag = 80}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.java_generate_equals_and_hash\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"java_generate_equals_and_hash\"}, fieldNumber = FieldId {getFieldId = 20}, wireTag = WireTag {getWireTag = 160}, packedTag = Nothing, wireTagLength = 2, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.optimize_for\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"optimize_for\"}, fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 72}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 14}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.FileOptions.OptimizeMode\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName = MName \"OptimizeMode\"}), hsRawDefault = Just (Chunk \"SPEED\" Empty), hsDefault = Just (HsDef'Enum \"SPEED\")},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.cc_generic_services\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"cc_generic_services\"}, fieldNumber = FieldId {getFieldId = 16}, wireTag = WireTag {getWireTag = 128}, packedTag = Nothing, wireTagLength = 2, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.java_generic_services\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"java_generic_services\"}, fieldNumber = FieldId {getFieldId = 17}, wireTag = WireTag {getWireTag = 136}, packedTag = Nothing, wireTagLength = 2, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.py_generic_services\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"py_generic_services\"}, fieldNumber = FieldId {getFieldId = 18}, wireTag = WireTag {getWireTag = 144}, packedTag = Nothing, wireTagLength = 2, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FileOptions.uninterpreted_option\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FileOptions\"], baseName' = FName \"uninterpreted_option\"}, fieldNumber = FieldId {getFieldId = 999}, wireTag = WireTag {getWireTag = 7994}, packedTag = Nothing, wireTagLength = 2, isPacked = False, isRequired = False, canRepeat = True, mightPack = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.UninterpretedOption\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"UninterpretedOption\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [(FieldId {getFieldId = 1000},FieldId {getFieldId = 18999}),(FieldId {getFieldId = 20000},FieldId {getFieldId = 536870911})], knownKeys = fromList [], storeUnknown = True}"

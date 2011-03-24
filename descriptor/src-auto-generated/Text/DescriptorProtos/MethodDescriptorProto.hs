@@ -1,6 +1,8 @@
+{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
 module Text.DescriptorProtos.MethodDescriptorProto (MethodDescriptorProto(..)) where
-import Prelude ((+))
-import qualified Prelude as P'
+import Prelude ((+), (/))
+import qualified Prelude as Prelude'
+import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.MethodOptions as DescriptorProtos (MethodOptions)
  
@@ -8,7 +10,7 @@ data MethodDescriptorProto = MethodDescriptorProto{name :: P'.Maybe P'.Utf8, inp
                                                    output_type :: P'.Maybe P'.Utf8,
                                                    options :: P'.Maybe DescriptorProtos.MethodOptions,
                                                    unknown'field :: P'.UnknownField}
-                           deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
+                           deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.UnknownMessage MethodDescriptorProto where
   getUnknownField = unknown'field
@@ -56,10 +58,10 @@ instance P'.Wire MethodDescriptorProto where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             10 -> P'.fmap (\ new'Field -> old'Self{name = P'.Just new'Field}) (P'.wireGet 9)
-             18 -> P'.fmap (\ new'Field -> old'Self{input_type = P'.Just new'Field}) (P'.wireGet 9)
-             26 -> P'.fmap (\ new'Field -> old'Self{output_type = P'.Just new'Field}) (P'.wireGet 9)
-             34 -> P'.fmap (\ new'Field -> old'Self{options = P'.mergeAppend (options old'Self) (P'.Just new'Field)})
+             10 -> Prelude'.fmap (\ new'Field -> old'Self{name = Prelude'.Just new'Field}) (P'.wireGet 9)
+             18 -> Prelude'.fmap (\ new'Field -> old'Self{input_type = Prelude'.Just new'Field}) (P'.wireGet 9)
+             26 -> Prelude'.fmap (\ new'Field -> old'Self{output_type = Prelude'.Just new'Field}) (P'.wireGet 9)
+             34 -> Prelude'.fmap (\ new'Field -> old'Self{options = P'.mergeAppend (options old'Self) (Prelude'.Just new'Field)})
                     (P'.wireGet 11)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in P'.unknown field'Number wire'Type old'Self
  
@@ -71,5 +73,5 @@ instance P'.GPB MethodDescriptorProto
 instance P'.ReflectDescriptor MethodDescriptorProto where
   getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [10, 18, 26, 34])
   reflectDescriptorInfo _
-   = P'.read
+   = Prelude'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.MethodDescriptorProto\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"MethodDescriptorProto\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"MethodDescriptorProto.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.MethodDescriptorProto.name\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"MethodDescriptorProto\"], baseName' = FName \"name\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.MethodDescriptorProto.input_type\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"MethodDescriptorProto\"], baseName' = FName \"input_type\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 18}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.MethodDescriptorProto.output_type\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"MethodDescriptorProto\"], baseName' = FName \"output_type\"}, fieldNumber = FieldId {getFieldId = 3}, wireTag = WireTag {getWireTag = 26}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.MethodDescriptorProto.options\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"MethodDescriptorProto\"], baseName' = FName \"options\"}, fieldNumber = FieldId {getFieldId = 4}, wireTag = WireTag {getWireTag = 34}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.MethodOptions\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"MethodOptions\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"

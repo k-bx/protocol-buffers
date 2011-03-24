@@ -1,6 +1,8 @@
+{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
 module Text.DescriptorProtos.UninterpretedOption (UninterpretedOption(..)) where
-import Prelude ((+))
-import qualified Prelude as P'
+import Prelude ((+), (/))
+import qualified Prelude as Prelude'
+import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.UninterpretedOption.NamePart as DescriptorProtos.UninterpretedOption (NamePart)
  
@@ -9,7 +11,7 @@ data UninterpretedOption = UninterpretedOption{name :: P'.Seq DescriptorProtos.U
                                                negative_int_value :: P'.Maybe P'.Int64, double_value :: P'.Maybe P'.Double,
                                                string_value :: P'.Maybe P'.ByteString, aggregate_value :: P'.Maybe P'.Utf8,
                                                unknown'field :: P'.UnknownField}
-                         deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
+                         deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.UnknownMessage UninterpretedOption where
   getUnknownField = unknown'field
@@ -71,13 +73,13 @@ instance P'.Wire UninterpretedOption where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             18 -> P'.fmap (\ new'Field -> old'Self{name = P'.append (name old'Self) new'Field}) (P'.wireGet 11)
-             26 -> P'.fmap (\ new'Field -> old'Self{identifier_value = P'.Just new'Field}) (P'.wireGet 9)
-             32 -> P'.fmap (\ new'Field -> old'Self{positive_int_value = P'.Just new'Field}) (P'.wireGet 4)
-             40 -> P'.fmap (\ new'Field -> old'Self{negative_int_value = P'.Just new'Field}) (P'.wireGet 3)
-             49 -> P'.fmap (\ new'Field -> old'Self{double_value = P'.Just new'Field}) (P'.wireGet 1)
-             58 -> P'.fmap (\ new'Field -> old'Self{string_value = P'.Just new'Field}) (P'.wireGet 12)
-             66 -> P'.fmap (\ new'Field -> old'Self{aggregate_value = P'.Just new'Field}) (P'.wireGet 9)
+             18 -> Prelude'.fmap (\ new'Field -> old'Self{name = P'.append (name old'Self) new'Field}) (P'.wireGet 11)
+             26 -> Prelude'.fmap (\ new'Field -> old'Self{identifier_value = Prelude'.Just new'Field}) (P'.wireGet 9)
+             32 -> Prelude'.fmap (\ new'Field -> old'Self{positive_int_value = Prelude'.Just new'Field}) (P'.wireGet 4)
+             40 -> Prelude'.fmap (\ new'Field -> old'Self{negative_int_value = Prelude'.Just new'Field}) (P'.wireGet 3)
+             49 -> Prelude'.fmap (\ new'Field -> old'Self{double_value = Prelude'.Just new'Field}) (P'.wireGet 1)
+             58 -> Prelude'.fmap (\ new'Field -> old'Self{string_value = Prelude'.Just new'Field}) (P'.wireGet 12)
+             66 -> Prelude'.fmap (\ new'Field -> old'Self{aggregate_value = Prelude'.Just new'Field}) (P'.wireGet 9)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in P'.unknown field'Number wire'Type old'Self
  
 instance P'.MessageAPI msg' (msg' -> UninterpretedOption) UninterpretedOption where
@@ -88,5 +90,5 @@ instance P'.GPB UninterpretedOption
 instance P'.ReflectDescriptor UninterpretedOption where
   getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [18, 26, 32, 40, 49, 58, 66])
   reflectDescriptorInfo _
-   = P'.read
+   = Prelude'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.UninterpretedOption\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"UninterpretedOption\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"UninterpretedOption.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.UninterpretedOption.name\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"UninterpretedOption\"], baseName' = FName \"name\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 18}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = True, mightPack = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.UninterpretedOption.NamePart\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\",MName \"UninterpretedOption\"], baseName = MName \"NamePart\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.UninterpretedOption.identifier_value\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"UninterpretedOption\"], baseName' = FName \"identifier_value\"}, fieldNumber = FieldId {getFieldId = 3}, wireTag = WireTag {getWireTag = 26}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.UninterpretedOption.positive_int_value\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"UninterpretedOption\"], baseName' = FName \"positive_int_value\"}, fieldNumber = FieldId {getFieldId = 4}, wireTag = WireTag {getWireTag = 32}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 4}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.UninterpretedOption.negative_int_value\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"UninterpretedOption\"], baseName' = FName \"negative_int_value\"}, fieldNumber = FieldId {getFieldId = 5}, wireTag = WireTag {getWireTag = 40}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 3}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.UninterpretedOption.double_value\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"UninterpretedOption\"], baseName' = FName \"double_value\"}, fieldNumber = FieldId {getFieldId = 6}, wireTag = WireTag {getWireTag = 49}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 1}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.UninterpretedOption.string_value\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"UninterpretedOption\"], baseName' = FName \"string_value\"}, fieldNumber = FieldId {getFieldId = 7}, wireTag = WireTag {getWireTag = 58}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 12}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.UninterpretedOption.aggregate_value\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"UninterpretedOption\"], baseName' = FName \"aggregate_value\"}, fieldNumber = FieldId {getFieldId = 8}, wireTag = WireTag {getWireTag = 66}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True}"

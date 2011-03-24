@@ -1,6 +1,8 @@
+{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
 module Text.DescriptorProtos.FieldOptions (FieldOptions(..)) where
-import Prelude ((+), (==), (<=), (&&))
-import qualified Prelude as P'
+import Prelude ((+), (/), (==), (<=), (&&))
+import qualified Prelude as Prelude'
+import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FieldOptions.CType as DescriptorProtos.FieldOptions (CType)
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
@@ -9,7 +11,7 @@ data FieldOptions = FieldOptions{ctype :: P'.Maybe DescriptorProtos.FieldOptions
                                  deprecated :: P'.Maybe P'.Bool, experimental_map_key :: P'.Maybe P'.Utf8,
                                  uninterpreted_option :: P'.Seq DescriptorProtos.UninterpretedOption, ext'field :: P'.ExtField,
                                  unknown'field :: P'.UnknownField}
-                  deriving (P'.Show, P'.Eq, P'.Ord, P'.Typeable)
+                  deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.ExtendMessage FieldOptions where
   getExtField = ext'field
@@ -30,7 +32,9 @@ instance P'.Mergeable FieldOptions where
  
 instance P'.Default FieldOptions where
   defaultValue
-   = FieldOptions (P'.Just (P'.read "STRING")) P'.defaultValue (P'.Just P'.False) P'.defaultValue P'.defaultValue P'.defaultValue
+   = FieldOptions (Prelude'.Just (Prelude'.read "STRING")) P'.defaultValue (Prelude'.Just Prelude'.False) P'.defaultValue
+      P'.defaultValue
+      P'.defaultValue
       P'.defaultValue
  
 instance P'.Wire FieldOptions where
@@ -70,14 +74,15 @@ instance P'.Wire FieldOptions where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             8 -> P'.fmap (\ new'Field -> old'Self{ctype = P'.Just new'Field}) (P'.wireGet 14)
-             16 -> P'.fmap (\ new'Field -> old'Self{packed = P'.Just new'Field}) (P'.wireGet 8)
-             24 -> P'.fmap (\ new'Field -> old'Self{deprecated = P'.Just new'Field}) (P'.wireGet 8)
-             74 -> P'.fmap (\ new'Field -> old'Self{experimental_map_key = P'.Just new'Field}) (P'.wireGet 9)
-             7994 -> P'.fmap (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
+             8 -> Prelude'.fmap (\ new'Field -> old'Self{ctype = Prelude'.Just new'Field}) (P'.wireGet 14)
+             16 -> Prelude'.fmap (\ new'Field -> old'Self{packed = Prelude'.Just new'Field}) (P'.wireGet 8)
+             24 -> Prelude'.fmap (\ new'Field -> old'Self{deprecated = Prelude'.Just new'Field}) (P'.wireGet 8)
+             74 -> Prelude'.fmap (\ new'Field -> old'Self{experimental_map_key = Prelude'.Just new'Field}) (P'.wireGet 9)
+             7994 -> Prelude'.fmap
+                      (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
                       (P'.wireGet 11)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in
-                   if P'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then
+                   if Prelude'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then
                     P'.loadExtension field'Number wire'Type old'Self else P'.unknown field'Number wire'Type old'Self
  
 instance P'.MessageAPI msg' (msg' -> FieldOptions) FieldOptions where
@@ -88,5 +93,5 @@ instance P'.GPB FieldOptions
 instance P'.ReflectDescriptor FieldOptions where
   getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [8, 16, 24, 74, 7994])
   reflectDescriptorInfo _
-   = P'.read
+   = Prelude'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.FieldOptions\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"FieldOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"FieldOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldOptions.ctype\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldOptions\"], baseName' = FName \"ctype\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 8}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 14}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.FieldOptions.CType\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\",MName \"FieldOptions\"], baseName = MName \"CType\"}), hsRawDefault = Just (Chunk \"STRING\" Empty), hsDefault = Just (HsDef'Enum \"STRING\")},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldOptions.packed\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldOptions\"], baseName' = FName \"packed\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 16}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldOptions.deprecated\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldOptions\"], baseName' = FName \"deprecated\"}, fieldNumber = FieldId {getFieldId = 3}, wireTag = WireTag {getWireTag = 24}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just (Chunk \"false\" Empty), hsDefault = Just (HsDef'Bool False)},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldOptions.experimental_map_key\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldOptions\"], baseName' = FName \"experimental_map_key\"}, fieldNumber = FieldId {getFieldId = 9}, wireTag = WireTag {getWireTag = 74}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldOptions.uninterpreted_option\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldOptions\"], baseName' = FName \"uninterpreted_option\"}, fieldNumber = FieldId {getFieldId = 999}, wireTag = WireTag {getWireTag = 7994}, packedTag = Nothing, wireTagLength = 2, isPacked = False, isRequired = False, canRepeat = True, mightPack = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.UninterpretedOption\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"UninterpretedOption\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [(FieldId {getFieldId = 1000},FieldId {getFieldId = 18999}),(FieldId {getFieldId = 20000},FieldId {getFieldId = 536870911})], knownKeys = fromList [], storeUnknown = True}"
