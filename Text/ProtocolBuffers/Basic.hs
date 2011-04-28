@@ -161,7 +161,7 @@ class Mergeable a where
   -- | 'mergeAppend' is the right-biased merge of two values.  A
   -- message (or group) is merged recursively.  Required field are
   -- always taken from the second message. Optional field values are
-  -- taken from the most defined message or the message message if
+  -- taken from the most defined message or the second message if
   -- both are set.  Repeated fields have the sequences concatenated.
   -- Note that strings and bytes are NOT concatenated.
   mergeAppend :: a -> a -> a

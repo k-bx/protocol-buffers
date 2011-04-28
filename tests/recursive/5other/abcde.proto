@@ -1,0 +1,176 @@
+package ABCDE;
+
+message A {
+  optional string name = 1;
+  extensions 2 to max;
+
+  extend B { optional A keyab = 11; }
+  extend A { optional B keyba = 14; } 
+
+  extend A { optional C keyca = 17; }
+  extend B { optional C keycb = 18; }
+  extend C { optional A keyac = 12; }
+  extend C { optional B keybc = 15; }
+
+  extend A { optional D keyda = 20; }
+  extend B { optional D keydb = 21; }
+  extend C { optional D keydc = 22; }
+  extend D { optional A keyad = 13; }
+  extend D { optional B keybd = 16; }
+  extend D { optional C keycd = 19; }
+
+  extend A { optional E keyea = 23; }
+  extend B { optional E keyeb = 24; }
+  extend C { optional E keyec = 25; }
+  extend D { optional E keyed = 26; }
+  extend E { optional A keyea = 27; }
+  extend E { optional B keyea = 28; }
+  extend E { optional C keyea = 29; }
+  extend E { optional D keyea = 30; }
+}
+
+
+message B {
+  optional string name = 1;
+  extensions 2 to max;
+
+  extend B { optional A keyab = 111; }
+  extend A { optional B keyba = 114; } 
+
+  extend A { optional C keyca = 117; }
+  extend B { optional C keycb = 118; }
+  extend C { optional A keyac = 112; }
+  extend C { optional B keybc = 115; }
+
+  extend A { optional D keyda = 120; }
+  extend B { optional D keydb = 121; }
+  extend C { optional D keydc = 122; }
+  extend D { optional A keyad = 113; }
+  extend D { optional B keybd = 116; }
+  extend D { optional C keycd = 119; }
+
+  extend A { optional E keyea = 123; }
+  extend B { optional E keyeb = 124; }
+  extend C { optional E keyec = 125; }
+  extend D { optional E keyed = 126; }
+  extend E { optional A keyea = 127; }
+  extend E { optional B keyea = 128; }
+  extend E { optional C keyea = 129; }
+  extend E { optional D keyea = 130; }
+}
+
+
+message C {
+  optional string name = 1;
+  extensions 2 to max;
+
+  extend B { optional A keyab = 211; }
+  extend A { optional B keyba = 214; } 
+
+  extend A { optional C keyca = 217; }
+  extend B { optional C keycb = 218; }
+  extend C { optional A keyac = 212; }
+  extend C { optional B keybc = 215; }
+
+  extend A { optional D keyda = 220; }
+  extend B { optional D keydb = 221; }
+  extend C { optional D keydc = 222; }
+  extend D { optional A keyad = 213; }
+  extend D { optional B keybd = 216; }
+  extend D { optional C keycd = 219; }
+
+  extend A { optional E keyea = 223; }
+  extend B { optional E keyeb = 224; }
+  extend C { optional E keyec = 225; }
+  extend D { optional E keyed = 226; }
+  extend E { optional A keyea = 227; }
+  extend E { optional B keyea = 228; }
+  extend E { optional C keyea = 229; }
+  extend E { optional D keyea = 230; }
+}
+
+message D {
+  optional string name = 1;
+  extensions 2 to max;
+
+  extend B { optional A keyab = 311; }
+  extend A { optional B keyba = 314; } 
+
+  extend A { optional C keyca = 317; }
+  extend B { optional C keycb = 318; }
+  extend C { optional A keyac = 312; }
+  extend C { optional B keybc = 315; }
+
+  extend A { optional D keyda = 320; }
+  extend B { optional D keydb = 321; }
+  extend C { optional D keydc = 322; }
+  extend D { optional A keyad = 313; }
+  extend D { optional B keybd = 316; }
+  extend D { optional C keycd = 319; }
+
+  extend A { optional E keyea = 323; }
+  extend B { optional E keyeb = 324; }
+  extend C { optional E keyec = 325; }
+  extend D { optional E keyed = 326; }
+  extend E { optional A keyea = 327; }
+  extend E { optional B keyea = 328; }
+  extend E { optional C keyea = 329; }
+  extend E { optional D keyea = 330; }
+}
+
+message E {
+  optional string name = 1;
+  extensions 2 to max;
+
+  extend B { optional A keyab = 411; }
+  extend A { optional B keyba = 414; } 
+
+  extend A { optional C keyca = 417; }
+  extend B { optional C keycb = 418; }
+  extend C { optional A keyac = 412; }
+  extend C { optional B keybc = 415; }
+
+  extend A { optional D keyda = 420; }
+  extend B { optional D keydb = 421; }
+  extend C { optional D keydc = 422; }
+  extend D { optional A keyad = 413; }
+  extend D { optional B keybd = 416; }
+  extend D { optional C keycd = 419; }
+
+  extend A { optional E keyea = 423; }
+  extend B { optional E keyeb = 424; }
+  extend C { optional E keyec = 425; }
+  extend D { optional E keyed = 426; }
+  extend E { optional A keyea = 427; }
+  extend E { optional B keyea = 428; }
+  extend E { optional C keyea = 429; }
+  extend E { optional D keyea = 430; }
+}
+
+extend A {
+  repeated B keyab = 1001;
+  repeated C keyac = 1002;
+  repeated D keyad = 1003;
+  repeated E keyae = 1004;
+}
+
+extend B {
+  repeated C keybc = 1011;
+  repeated D keybd = 1012;
+  repeated E keybe = 1013;
+  repeated A keyba = 1014;
+}
+
+extend C {
+  repeated A keyca = 1021;
+  repeated B keycb = 1022;
+  repeated D keycd = 1023;
+  repeated E keyce = 1024;
+}
+
+extend D {
+  repeated A keyda = 1031;
+  repeated B keydb = 1032;
+  repeated C keydc = 1033;
+  repeated E keyde = 1034;
+}

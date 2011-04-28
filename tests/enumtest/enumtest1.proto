@@ -1,0 +1,12 @@
+package et;
+
+enum E {
+  E1 = 1;
+  E2 = 2;
+  E3 = 3;
+}
+
+message M {
+  repeated E es = 1;
+}
+

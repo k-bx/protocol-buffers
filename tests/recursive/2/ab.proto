@@ -1,0 +1,26 @@
+package AB;
+
+message A {
+  optional string name = 1;
+  extensions 2 to max;
+
+  extend B { optional A akeyba = 11; }
+}
+
+message B {
+  optional string name = 1;
+  extensions 2 to max;
+
+  extend A { optional B bkeyab = 21; }
+}
+
+
+extend A {
+  repeated B keyab = 41;
+  repeated A keyaa = 42;
+}
+
+extend B {
+  repeated A keyba = 43;
+  repeated B keybb = 44;
+}

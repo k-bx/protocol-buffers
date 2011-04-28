@@ -1,0 +1,15 @@
+package et;
+
+enum E {
+  E1 = 1;
+  E3 = 3;
+}
+
+message M2 {
+  repeated E es = 1; /* es fails here if substrituted for E */
+}
+
+message M3 {
+  extensions 1 to 1;
+  extend M3 { repeated E es = 1; };
+}

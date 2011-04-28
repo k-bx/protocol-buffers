@@ -1,0 +1,46 @@
+package ABC;
+
+message A {
+  optional string name = 1;
+  extensions 2 to max;
+
+  extend B { optional A akeyba = 11; }
+  extend C { optional A akeyca = 12; }
+  extend B { optional C akeybc = 13; }
+  extend C { optional B akeycb = 14; }
+}
+
+message B {
+  optional string name = 1;
+  extensions 2 to max;
+
+  extend C { optional B bkeycb = 21; }
+  extend A { optional B bkeyab = 22; }
+  extend C { optional A bkeyca = 23; }
+  extend A { optional C bkeyac = 24; }
+}
+
+message C {
+  optional string name = 1;
+  extensions 2 to max;
+
+  extend A { optional C ckeyac = 31; }
+  extend B { optional C ckeybc = 32; }
+  extend A { optional B ckeyab = 33; }
+  extend B { optional A ckeyba = 34; }
+}
+
+extend A {
+  repeated B keyab = 41;
+  repeated C keyac = 42;
+}
+
+extend B {
+  repeated C keybc = 43;
+  repeated A keyba = 44;
+}
+
+extend C {
+  repeated A keyca = 45;
+  repeated B keycb = 46;
+}

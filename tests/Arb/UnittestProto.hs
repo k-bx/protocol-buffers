@@ -46,15 +46,15 @@ instance Arbitrary RepeatedGroup where arbitrary = futz RepeatedGroup
 instance Arbitrary TestAllTypes where arbitrary = futz TestAllTypes
 
 instance Arbitrary TestRequired where arbitrary = futz TestRequired
-instance Arbitrary OptionalGroup_extension where arbitrary = futz OptionalGroup_extension
-instance Arbitrary RepeatedGroup_extension where arbitrary = futz RepeatedGroup_extension
+--instance Arbitrary OptionalGroup_extension where arbitrary = futz OptionalGroup_extension
+--instance Arbitrary RepeatedGroup_extension where arbitrary = futz RepeatedGroup_extension
 
 instance Arbitrary TestAllExtensions where
   arbitrary = F.foldlM (\msg alter -> alter msg) defaultValue (map snd allKeys)
 
 -- Test passes up to 100000
-prop_SizeCalcTo limit = all prop_SizeCalc [0..limit] where
-  prop_SizeCalc i = prependMessageSize i == i + (L.length . runPut . putSize $ i)
+check_SizeCalcTo limit = all prop_SizeCalc $ map NonNegative [0..limit]
+prop_SizeCalc (NonNegative i) = prependMessageSize i == i + (L.length . runPut . putSize $ i)
 
 -- quickCheck : TestAllTypes passes 100
 prop_Size1 :: forall msg. (ReflectDescriptor msg, Wire msg) => msg -> Bool
@@ -83,6 +83,15 @@ prop_WireArb1 a =
 
 type G x = Either String (x,ByteString)
 
+-- convert with with header
+prop_WireArb2 :: (Eq a,Arbitrary a,ReflectDescriptor a,Wire a) => a -> Bool
+prop_WireArb2 a =
+   case messageWithLengthGet (messageWithLengthPut a) of
+     Right (a',b) | L.null b -> if a==a' then True
+                                  else trace ("Unequal") False
+                  | otherwise -> trace ("Not all input consumed: "++show (L.length b)) False
+     Left msg -> trace msg False
+
 -- main method of serialing messages
 prop_WireArb3 :: (Show a,Eq a,Arbitrary a,ReflectDescriptor a,Wire a) => a -> Bool
 prop_WireArb3 aIn =
@@ -91,15 +100,6 @@ prop_WireArb3 aIn =
    case messageGet (messagePut a) of
      Right (a',b) | L.null b -> if a==a' then True
                                   else trace ("Unequal\n" ++ show a ++ "\n\n" ++show a') False
-                  | otherwise -> trace ("Not all input consumed: "++show (L.length b)) False
-     Left msg -> trace msg False
-
--- convert with with header
-prop_WireArb2 :: (Eq a,Arbitrary a,ReflectDescriptor a,Wire a) => a -> Bool
-prop_WireArb2 a =
-   case messageWithLengthGet (messageWithLengthPut a) of
-     Right (a',b) | L.null b -> if a==a' then True
-                                  else trace ("Unequal") False
                   | otherwise -> trace ("Not all input consumed: "++show (L.length b)) False
      Left msg -> trace msg False
 
@@ -150,7 +150,7 @@ allKeys =
   , ( "optional_bool_extension" , maybeKey optional_bool_extension )
   , ( "optional_string_extension" , maybeKey optional_string_extension )
   , ( "optional_bytes_extension" , maybeKey optional_bytes_extension )
-  , ( "optionalGroup_extension" , maybeKey optionalGroup_extension )
+--  , ( "optionalGroup_extension" , maybeKey optionalGroup_extension )
   , ( "optional_nested_message_extension" , maybeKey optional_nested_message_extension )
   , ( "optional_foreign_message_extension" , maybeKey optional_foreign_message_extension )
   , ( "optional_import_message_extension" , maybeKey optional_import_message_extension )
@@ -174,7 +174,7 @@ allKeys =
   , ( "repeated_bool_extension" , seqKey repeated_bool_extension )
   , ( "repeated_string_extension" , seqKey repeated_string_extension )
   , ( "repeated_bytes_extension" , seqKey repeated_bytes_extension )
-  , ( "repeatedGroup_extension" , seqKey repeatedGroup_extension )
+ -- , ( "repeatedGroup_extension" , seqKey repeatedGroup_extension )
   , ( "repeated_nested_message_extension" , seqKey repeated_nested_message_extension )
   , ( "repeated_foreign_message_extension" , seqKey repeated_foreign_message_extension )
   , ( "repeated_import_message_extension" , seqKey repeated_import_message_extension )
