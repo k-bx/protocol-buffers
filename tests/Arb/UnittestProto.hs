@@ -1,13 +1,19 @@
 -- everything passes version 0.2.7
+-- ghci  -fcontext-stack=100 -XRankNTypes -XMultiParamTypeClasses  -XFlexibleInstances -isrc-auto-generated/ Arb/UnittestProto.hs
+
 module Arb.UnittestProto where
 
 import Arb
+import Manytat.ManyTAT(ManyTAT(..))
 
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Foldable as F
 import qualified Data.Sequence as Seq
 import Numeric
+import qualified System.Random as Random
+import Data.Monoid
 import Test.QuickCheck
+import Test.QuickCheck.Gen(Gen(..))
 import Text.ProtocolBuffers
 import Text.ProtocolBuffers.Header(prependMessageSize,putSize)
 
@@ -72,7 +78,7 @@ prop_Size2 a =
   in if predicted == written then True
        else trace ("Wrong size: "++show(predicted,written)) False
 
--- convert with no header
+-- convert with no header, a to a' compare a with a'
 prop_WireArb1 :: (Show a,Eq a,Arbitrary a,ReflectDescriptor a,Wire a) => a -> Bool
 prop_WireArb1 a =
    case messageGet (messagePut a) of
@@ -83,7 +89,7 @@ prop_WireArb1 a =
 
 type G x = Either String (x,ByteString)
 
--- convert with with header
+-- convert with with header, a to a' compare a and a'
 prop_WireArb2 :: (Eq a,Arbitrary a,ReflectDescriptor a,Wire a) => a -> Bool
 prop_WireArb2 a =
    case messageWithLengthGet (messageWithLengthPut a) of
@@ -92,7 +98,7 @@ prop_WireArb2 a =
                   | otherwise -> trace ("Not all input consumed: "++show (L.length b)) False
      Left msg -> trace msg False
 
--- main method of serialing messages
+-- main method of serialing messages, aIn to a to a', compare a and a'
 prop_WireArb3 :: (Show a,Eq a,Arbitrary a,ReflectDescriptor a,Wire a) => a -> Bool
 prop_WireArb3 aIn =
    let unused = aIn==a
@@ -102,6 +108,7 @@ prop_WireArb3 aIn =
                                   else trace ("Unequal\n" ++ show a ++ "\n\n" ++show a') False
                   | otherwise -> trace ("Not all input consumed: "++show (L.length b)) False
      Left msg -> trace msg False
+
 
 -- used in allKeys
 maybeKey :: Arbitrary v => Key Maybe msg v -> msg -> Gen msg
@@ -222,3 +229,38 @@ tests_TestAllExtensions =
   , ( "WireArb2", prop_WireArb2 )
   , ( "WireArb3", prop_WireArb3 ) 
   ]
+
+
+samples :: Gen a -> IO [a]
+samples m =
+  do rnd0 <- Random.newStdGen
+     let --m' :: Random.StdGen -> (a,Random.StdGen)
+         m' g k = let (g1,g2) = Random.split g
+                  in (unGen m g1 k,g2)   -- reuse g, but what the hell
+         rg g k = let (x,g') = m' g k in x : (rg g' $! succ k)
+     return (rg rnd0 2)
+
+cs = let a1= arbitrary :: Gen UnittestProto.TestAllTypes.TestAllTypes
+     in do x <- sample' a1
+           print (head x)
+           x <- samples a1
+           print (take 3 x)
+
+makeFile outfile size = do
+  let go s (x:xs) | s > size = mempty
+                  | otherwise = let bs = messageWithLengthPut x
+                                in mappend bs (go (s+L.length bs) xs)
+  let a1 = arbitrary :: Gen UnittestProto.TestAllTypes.TestAllTypes
+  xs <- samples a1
+  L.writeFile outfile (go 0 xs)
+
+makeManyTATFile outfile size = do
+  let go s (x:xs) | s > size = []
+                  | otherwise = x : go (s+messageWithLengthSize x) xs
+
+  let a1 = arbitrary :: Gen UnittestProto.TestAllTypes.TestAllTypes
+  xs <- samples a1
+  let ys = go 0 xs
+      manyTAT :: ManyTAT
+      manyTAT = defaultValue { tats = Seq.fromList ys }
+  L.writeFile outfile (messagePut manyTAT)

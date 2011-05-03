@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 -- | A strong feature of the protocol-buffers package is that it does
 -- not contain any structures defined by descriptor.proto!  This
 -- prevents me hitting any annoying circular dependencies.  The

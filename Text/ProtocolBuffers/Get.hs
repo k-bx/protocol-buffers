@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP,MagicHash,ScopedTypeVariables,FlexibleInstances,RankNTypes #-}
+{-# LANGUAGE CPP,MagicHash,ScopedTypeVariables,FlexibleInstances,RankNTypes,TypeSynonymInstances,MultiParamTypeClasses #-}
 -- | By Chris Kuklewicz, drawing heavily from binary and binary-strict,
 -- but all the bugs are my own.
 --
@@ -38,8 +38,10 @@
 -- The three 'lookAhead' and 'lookAheadM' and 'lookAheadE' functions are
 -- very similar to the ones in binary's Data.Binary.Get.
 --
+--
+-- Add specialized high-bit-run
 module Text.ProtocolBuffers.Get
-    (Get,runGet,Result(..)
+    (Get,runGet,runGetAll,Result(..)
      -- main primitives
     ,ensureBytes,getStorable,getLazyByteString,suspendUntilComplete
      -- parser state manipulation
@@ -47,7 +49,7 @@ module Text.ProtocolBuffers.Get
      -- lookAhead capabilities
     ,lookAhead,lookAheadM,lookAheadE
      -- below is for implementation of BinaryParser (for Int64 and Lazy bytestrings)
-    ,skip,bytesRead,isEmpty,isReallyEmpty,remaining,spanOf
+    ,skip,bytesRead,isEmpty,isReallyEmpty,remaining,spanOf,highBitRun
     ,getWord8,getByteString
     ,getWord16be,getWord32be,getWord64be
     ,getWord16le,getWord32le,getWord64le
@@ -66,11 +68,11 @@ import Control.Monad.Error.Class(MonadError(throwError,catchError),Error(strMsg)
 import Control.Monad(ap)                             -- instead of Functor.fmap; ap for Applicative
 --import Control.Monad(replicateM,(>=>))               -- XXX testing
 import Data.Bits(Bits((.|.)))
-import qualified Data.ByteString as S(concat,length,null,splitAt)
+import qualified Data.ByteString as S(concat,length,null,splitAt,findIndex)
 --import qualified Data.ByteString as S(unpack) -- XXX testing
 import qualified Data.ByteString.Internal as S(ByteString,toForeignPtr,inlinePerformIO)
 import qualified Data.ByteString.Unsafe as S(unsafeIndex)
-import qualified Data.ByteString.Lazy as L(take,drop,length,span,toChunks,fromChunks,null)
+import qualified Data.ByteString.Lazy as L(take,drop,length,span,toChunks,fromChunks,null,findIndex)
 --import qualified Data.ByteString.Lazy as L(pack) -- XXX testing
 import qualified Data.ByteString.Lazy.Internal as L(ByteString(..),chunk)
 import qualified Data.Foldable as F(foldr,foldr1)    -- used with Seq
@@ -214,6 +216,14 @@ runGet (Get f) bsIn = f scIn sIn (ErrorFrame ec True)
                            L.Chunk ss bs -> S ss bs 0
         ec msg sOut = Failed (consumed sOut) msg
 
+-- | 'runGetAll' is the simple executor, and will not ask for any continuation because this lazy bytestring is all the input
+runGetAll :: Get a -> L.ByteString -> Result a
+runGetAll (Get f) bsIn = f scIn sIn (ErrorFrame ec False)
+  where scIn a (S ss bs n) _pc = Finished (L.chunk ss bs) n a
+        sIn = case bsIn of L.Empty -> S mempty mempty 0
+                           L.Chunk ss bs -> S ss bs 0
+        ec msg sOut = Failed (consumed sOut) msg
+
 -- | Get the input currently available to the parser.
 getAvailable :: Get L.ByteString
 getAvailable = Get $ \ sc s@(S ss bs _) pc -> sc (L.chunk ss bs) s pc
@@ -242,7 +252,7 @@ putAvailable bsNew = Get $ \ sc (S _ss _bs n) pc ->
       rebuild x@(ErrorFrame {}) = x
   in sc () s' (rebuild pc)
 
--- Internal access to full internal state, as helepr functions
+-- Internal access to full internal state, as helper functions
 getFull :: Get S
 getFull = Get $ \ sc s pc -> sc s s pc
 putFull :: S -> Get ()
@@ -288,7 +298,7 @@ getLazyByteString n | n<=0 = return mempty
          L.Empty -> putFull (S mempty mempty (offset + n))
          L.Chunk ss' bs' -> putFull (S ss' bs' (offset + n))
        return consume
-    Nothing -> suspendMsg "getLazyByteString failed" >> getLazyByteString n
+    Nothing -> suspendMsg ("getLazyByteString failed with "++show (n,(S.length ss,L.length bs,offset)))  >> getLazyByteString n
 {-# INLINE getLazyByteString #-} -- important
 
 -- | 'suspend' is supposed to allow the execution of the monad to be
@@ -423,6 +433,29 @@ isReallyEmpty = do
                      else return b
            else return True
 
+
+-- | get the longest prefix of the input where the high bit is set as well as following byte.
+-- This made getVarInt slower.
+highBitRun :: Get Int64
+{-# INLINE highBitRun #-}
+highBitRun = loop where
+  loop :: Get Int64
+  {-# INLINE loop #-}
+  loop = do
+    (S ss bs _n) <- getFull
+    let mi = S.findIndex (128>) ss
+    case mi of
+      Just i -> return (fromIntegral i)
+      Nothing -> do
+        let mj = L.findIndex (128>) bs
+        case mj of
+          Just j -> return (fromIntegral (S.length ss) + j)
+          Nothing -> do
+            continue <- suspend
+            if continue then loop
+              else throwError "highBitRun has failed"
+
+-- | get the longest prefix of the input where all the bytes satisfy the predicate.
 spanOf :: (Word8 -> Bool) ->  Get (L.ByteString)
 spanOf f = do let loop = do (S ss bs n) <- getFull
                             let (pre,post) = L.span f (L.chunk ss bs)
@@ -430,10 +463,9 @@ spanOf f = do let loop = do (S ss bs n) <- getFull
                               L.Empty -> putFull (S mempty mempty (n + L.length pre))
                               L.Chunk ss' bs' -> putFull (S ss' bs' (n + L.length pre))
                             if L.null post
-                              then fmap ((L.toChunks pre)++) $ do
-                                     continue <- suspend
-                                     if continue then loop
-                                       else return (L.toChunks pre)
+                              then do continue <- suspend
+                                      if continue then  fmap ((L.toChunks pre)++) loop
+                                        else return (L.toChunks pre)
                               else return (L.toChunks pre)
               fmap L.fromChunks loop
 {-# INLINE spanOf #-}

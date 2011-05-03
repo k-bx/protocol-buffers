@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable,GeneralizedNewtypeDeriving #-}
 -- | "Text.ProtocolBuffers.Basic" defines or re-exports most of the
 -- basic field types; 'Maybe','Bool', 'Double', and 'Float' come from
 -- the Prelude instead. This module also defined the 'Mergeable',
@@ -58,13 +59,13 @@ instance Monoid Utf8 where
 -- | 'WireTag' is the 32 bit value with the upper 29 bits being the
 -- 'FieldId' and the lower 3 bits being the 'WireType'
 newtype WireTag = WireTag { getWireTag :: Word32 } -- bit concatenation of FieldId and WireType
-  deriving (Eq,Ord,Read,Show,Num,Bits,Bounded,Data,Typeable)
+  deriving (Eq,Ord,Enum,Read,Show,Num,Bits,Bounded,Data,Typeable)
 
 -- | 'FieldId' is the field number which can be in the range 1 to
 -- 2^29-1 but the value from 19000 to 19999 are forbidden (so sayeth
 -- Google).
 newtype FieldId = FieldId { getFieldId :: Int32 } -- really 29 bits
-  deriving (Eq,Ord,Read,Show,Num,Data,Typeable,Ix)
+  deriving (Eq,Ord,Enum,Read,Show,Num,Data,Typeable,Ix)
 
 -- Note that values 19000-19999 are forbidden for FieldId
 instance Bounded FieldId where
@@ -87,7 +88,7 @@ instance Bounded FieldId where
 -- * 5 /32-bit/ : fixed32, sfixed32, float
 --
 newtype WireType = WireType { getWireType :: Word32 }    -- really 3 bits
-  deriving (Eq,Ord,Read,Show,Num,Data,Typeable)
+  deriving (Eq,Ord,Enum,Read,Show,Num,Data,Typeable)
 
 instance Bounded WireType where
   minBound = 0
@@ -127,7 +128,7 @@ instance Bounded WireType where
 -}
 
 newtype FieldType = FieldType { getFieldType :: Int } -- really [1..18] as fromEnum of Type from Type.hs
-  deriving (Eq,Ord,Read,Show,Num,Data,Typeable)
+  deriving (Eq,Ord,Enum,Read,Show,Num,Data,Typeable)
 
 instance Bounded FieldType where
   minBound = 1

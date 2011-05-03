@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        1.8.3
+version:        1.9.0
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -28,6 +28,7 @@ flag small_base
 Library
   Hs-Source-Dirs:  src-auto-generated,src-hand-written
   ghc-options:  -O2
+  ghc-prof-options: -auto-all -prof
   exposed-modules: Text.DescriptorProtos.Options
                    Text.DescriptorProtos
                    Text.DescriptorProtos.DescriptorProto
@@ -55,7 +56,7 @@ Library
                    Text.DescriptorProtos.UninterpretedOption
                    Text.DescriptorProtos.UninterpretedOption.NamePart
 
-  build-depends:   protocol-buffers == 1.8.3,
+  build-depends:   protocol-buffers == 1.9.0,
                    containers,
                    bytestring
 

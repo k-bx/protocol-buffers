@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable,RankNTypes #-}
 -- | This module add unknown field support to the library.  There are no user API things here,
 -- except for advanced spelunking into the data structures which can and have changed with no
 -- notice.  Importer beware.

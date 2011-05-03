@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        1.8.4
+version:        1.9.0
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -23,13 +23,16 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Library
-  -- Added -fspec-constr-count=10 to quiet ghc-7.0.2
+  -- Added -fspec-constr-count=10 to quiet ghc-7.0.2.
+  -- Being modular is more useful to me right now than no orphans
   ghc-options:  -Wall -O2 -fspec-constr-count=10 -fno-warn-orphans
+  ghc-prof-options: -auto-all -prof
   exposed-modules: Text.ProtocolBuffers
                    Text.ProtocolBuffers.Basic
                    Text.ProtocolBuffers.Default
                    Text.ProtocolBuffers.Extensions
                    Text.ProtocolBuffers.Get
+                   Text.ProtocolBuffers.Generic
                    Text.ProtocolBuffers.Header
                    Text.ProtocolBuffers.Mergeable
                    Text.ProtocolBuffers.Reflections
@@ -43,7 +46,7 @@ Library
                  filepath,
                  directory,
                  mtl,
-                 binary, parsec, utf8-string, haskell-src,
+                 binary, parsec < 3, utf8-string, haskell-src,
                  QuickCheck
 
   if flag(small_base)
@@ -52,6 +55,7 @@ Library
     build-depends: base == 3.*
 
 -- Most of these are needed for protocol-buffers (Get and WireMessage.hs)
+-- Nothing especially hazardous in this list
   extensions:      DeriveDataTypeable,
                    EmptyDataDecls,
                    FlexibleInstances,
@@ -64,4 +68,5 @@ Library
                    TypeSynonymInstances,
                    MultiParamTypeClasses,
                    FlexibleContexts,
-                   FunctionalDependencies
+                   FunctionalDependencies,
+                   RecordWildCards

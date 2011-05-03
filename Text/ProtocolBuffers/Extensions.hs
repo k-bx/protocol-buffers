@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs,MultiParamTypeClasses,FunctionalDependencies,FlexibleInstances,DeriveDataTypeable,ScopedTypeVariables #-}
 -- | The "Extensions" module contributes two main things.  The first
 -- is the definition and implementation of extensible message
 -- features.  This means that the 'ExtField' data type is exported but
@@ -528,7 +529,7 @@ parseWireExtMaybe k@(Key fi ft mv)  wt raw | wt /= toWireType ft =
 
 -- 'chooseGet' is an intermediate handler between parseWireExt* and applyGet.  This does not know
 -- whether the EP will result in a single r or repeat r, so it always returns a Seq.  It may also
--- realize that there is a mismatch between the derired FieldType and the WireType
+-- realize that there is a mismatch between the desired FieldType and the WireType
 chooseGet :: (Wire r) => FieldType -> EP -> Either String (Seq r)
 chooseGet ft (EP wt bsIn) =
   if (2==wt) && (isValidPacked ft)

@@ -33,6 +33,7 @@ module Text.ProtocolBuffers.WireMessage
     , unknownField,unknown,wireGetFromWire
     , castWord64ToDouble,castWord32ToFloat,castDoubleToWord64,castFloatToWord32
     , zzEncode64,zzEncode32,zzDecode64,zzDecode32
+    , genericPacked
     ) where
 
 import Control.Monad(when)
@@ -40,6 +41,8 @@ import Control.Monad.Error.Class(throwError)
 import Control.Monad.ST
 import Data.Array.ST
 import Data.Bits (Bits(..))
+--import qualified Data.ByteString as S(last)
+--import qualified Data.ByteString.Unsafe as S(unsafeIndex)
 import qualified Data.ByteString.Lazy as BS (length)
 import qualified Data.Foldable as F(foldl',forM_)
 import Data.List (genericLength)
@@ -52,13 +55,14 @@ import Data.Typeable (Typeable(..))
 -- This has been superceded by the ST array trick (ugly, but promised to work)
 --import GHC.Exts (Double(D#),Float(F#),unsafeCoerce#)
 --import GHC.Word (Word64(W64#)) -- ,Word32(W32#))
+import Debug.Trace
 
 -- binary package
 import Data.Binary.Put (Put,runPut,putWord8,putWord32le,putWord64le,putLazyByteString)
 
 import Text.ProtocolBuffers.Basic
-import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,bytesRead,isReallyEmpty
-                                       ,spanOf,skip,lookAhead
+import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,runGetAll,bytesRead,isReallyEmpty
+                                       ,spanOf,skip,lookAhead,highBitRun -- ,getByteString
                                        ,getWord8,getWord32le,getWord64le,getLazyByteString)
 import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
@@ -178,11 +182,11 @@ getFromBS parser bs = case runGetOnLazy parser bs of
 -- more input you should use 'runGet' and respond to 'Partial'
 -- differently.
 runGetOnLazy :: Get r -> ByteString -> Either String (r,ByteString)
-runGetOnLazy parser bs = resolve (runGet parser bs)
+runGetOnLazy parser bs = resolve (runGetAll parser bs)
   where resolve :: Result r -> Either String (r,ByteString)
         resolve (Failed i s) = Left ("Failed at "++show i++" : "++s)
         resolve (Finished bsOut _i r) = Right (r,bsOut)
-        resolve (Partial op) = resolve (op Nothing)
+        resolve (Partial op) = resolve (op Nothing) -- should be impossible
 
 -- | Used in generated code.
 prependMessageSize :: WireSize -> WireSize
@@ -305,6 +309,7 @@ genericPacked ft = do
 
 -- getMessageWith assumes the wireTag for the message, if it existed, has already been read.
 -- getMessageWith assumes that it still needs to read the Varint encoded length of the message.
+{- manyTAT.bin testing INLINE getMessageWith but made slower -}
 getMessageWith :: (Mergeable message, ReflectDescriptor message)
 --               => (WireTag -> FieldId -> WireType -> message -> Get message)
                => (WireTag -> message -> Get message)
@@ -347,11 +352,52 @@ getMessageWith updater = do
                   ++ (show . descName . reflectDescriptorInfo $ initialMessage)
                   ++ "\n  at  (messageLength,start,here) == " ++ show (messageLength,start,here))
 
+{- saved
+getMessageWith updater = do
+  messageLength <- getVarInt
+  start <- bytesRead
+  let stop = messageLength+start
+      -- switch from go to go' once all the required fields have been found
+      go reqs message | Set.null reqs = go' message
+                      | otherwise = do
+        here <- bytesRead
+        case compare stop here of
+          EQ -> notEnoughData messageLength start
+          LT -> tooMuchData messageLength start here
+          GT -> do
+            wireTag <- fmap WireTag getVarInt -- get tag off wire
+            let -- (fieldId,wireType) = splitWireTag wireTag
+                reqs' = Set.delete wireTag reqs
+            updater wireTag {- fieldId wireType -} message >>= go reqs'
+      go' message = do
+        here <- bytesRead
+        case compare stop here of
+          EQ -> return message
+          LT -> tooMuchData messageLength start here
+          GT -> do
+            wireTag <- fmap WireTag getVarInt -- get tag off wire
+--            let (fieldId,wireType) = splitWireTag wireTag
+            updater wireTag {- fieldId wireType -} message >>= go'
+  go required initialMessage
+ where
+  initialMessage = mergeEmpty
+  (GetMessageInfo {requiredTags=required}) = getMessageInfo initialMessage
+  notEnoughData messageLength start =
+      throwError ("Text.ProtocolBuffers.WireMessage.getMessageWith: Required fields missing when processing "
+                  ++ (show . descName . reflectDescriptorInfo $ initialMessage)
+                  ++ "\n  at (messageLength,start) == " ++ show (messageLength,start))
+  tooMuchData messageLength start here =
+      throwError ("Text.ProtocolBuffers.WireMessage.getMessageWith: overran expected length when processing"
+                  ++ (show . descName . reflectDescriptorInfo $ initialMessage)
+                  ++ "\n  at  (messageLength,start,here) == " ++ show (messageLength,start,here))
+-}
+
 -- | Used by generated code
 -- getBareMessageWith assumes the wireTag for the message, if it existed, has already been read.
 -- getBareMessageWith assumes that it does needs to read the Varint encoded length of the message.
 -- getBareMessageWith will consume the entire ByteString it is operating on, or until it
 -- finds any STOP_GROUP tag (wireType == 4)
+{- manyTAT.bin testing INLINE getBareMessageWith but made slower -}
 getBareMessageWith :: (Mergeable message, ReflectDescriptor message)
 --                   => (WireTag -> FieldId -> WireType -> message -> Get message) -- handle wireTags that are unknown or produce errors
                    => (WireTag -> message -> Get message) -- handle wireTags that are unknown or produce errors
@@ -557,7 +603,7 @@ instance Wire Int where
   wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_ENUM    -} 14        = getVarInt
   wireGet ft = wireGetErr ft
-  wireGetPacked 14 = genericPacked 14 -- Should actually be used, see wireGetPackedEnum
+  wireGetPacked 14 = genericPacked 14 -- Should not actually be used, see wireGetPackedEnum, though this ought to work if it were used (e.g. genericPacked)
   wireGetPacked ft = wireGetErr ft
 
 {-# INLINE verifyUtf8 #-}
@@ -667,7 +713,7 @@ putVarUInt b = let go i | i < 0x80 = putWord8 (fromIntegral i)
 wireGetFromWire :: FieldId -> WireType -> Get ByteString
 wireGetFromWire fi wt = getLazyByteString =<< calcLen where
   calcLen = case wt of
-              0 -> lenOf (spanOf (>=128) >> skip 1)
+              0 -> lenOf (spanOf (>=128) >> skip 1) -- highBitRun
               1 -> return 8
               2 -> lookAhead $ do
                      here <- bytesRead
@@ -680,7 +726,7 @@ wireGetFromWire fi wt = getLazyByteString =<< calcLen where
               wtf -> throwError $ "Invalid wire type (expected 0,1,2,3,or 5) found: "++show (fi,wtf)
   lenOf g = do here <- bytesRead
                there <- lookAhead (g >> bytesRead)
-               return (there-here)
+               trace (":wireGetFromWire.lenOf: "++show ((fi,wt),(here,there,there-here))) $ return (there-here)
           
 -- | After a group start tag with the given 'FieldId' this will skip
 -- ahead in the stream past the end tag of that group.  Used by
@@ -748,3 +794,23 @@ toWireType 16 =  1
 toWireType 17 =  0
 toWireType 18 =  0
 toWireType  x = error $ "Text.ProcolBuffers.Basic.toWireType: Bad FieldType: "++show x
+
+{-
+-- OPTIMIZE attempt:
+-- Used in bench-003-highBitrun-and-new-getVarInt and much slower
+-- This is a much slower variant than supplied by default in version 1.8.4
+getVarInt :: (Integral a, Bits a) => Get a
+getVarInt = do
+  n <- highBitRun -- n is at least 0, or an error is thrown by highBitRun
+  s <- getByteString (succ n) -- length of s is at least 1
+  let go 0 val = return val
+      go m val = let m' = pred m -- m' will be [(n-2) .. 0]
+                     val' = (val `shiftL` 7) .|. (fromIntegral (0x7F .&. S.unsafeIndex s m'))
+                 in go m' $! val'
+  go n (fromIntegral (S.last s))
+-}
+
+-- OPTIMIZE try inlinining getMessageWith and getBareMessageWith: bench-005, slower
+
+
+-- OPTIMIZE try NO-inlining getMessageWith and getBareMessageWith

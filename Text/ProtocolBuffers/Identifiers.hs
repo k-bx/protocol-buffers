@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses,TypeSynonymInstances,FlexibleInstances,DeriveDataTypeable #-}
 -- | This modules colelct utility routines related to the different
 -- incarnations of identifiers in the code.  The basic identifier is
 -- always ASCII, but because of the self generated DescriptorProto
