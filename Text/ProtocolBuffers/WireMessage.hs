@@ -64,7 +64,6 @@ import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,runGetAll,bytesRead,isReallyEmpty
                                        ,spanOf,skip,lookAhead,highBitRun -- ,getByteString
                                        ,getWord8,getWord32le,getWord64le,getLazyByteString)
-import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
                                        ,DescriptorInfo(..),GetMessageInfo(..))
 
@@ -312,11 +311,11 @@ genericPacked ft = do
 
 -- getMessageWith assumes the wireTag for the message, if it existed, has already been read.
 -- getMessageWith assumes that it still needs to read the Varint encoded length of the message.
-{- manyTAT.bin testing INLINE getMessageWith but made slower -}
 getMessageWith :: (Default message, ReflectDescriptor message)
 --               => (WireTag -> FieldId -> WireType -> message -> Get message)
                => (WireTag -> message -> Get message)
                -> Get message
+{- manyTAT.bin testing INLINE getMessageWith but made slower -}
 getMessageWith updater = do
   messageLength <- getVarInt
   start <- bytesRead
@@ -355,56 +354,16 @@ getMessageWith updater = do
                   ++ (show . descName . reflectDescriptorInfo $ initialMessage)
                   ++ "\n  at  (messageLength,start,here) == " ++ show (messageLength,start,here))
 
-{- saved
-getMessageWith updater = do
-  messageLength <- getVarInt
-  start <- bytesRead
-  let stop = messageLength+start
-      -- switch from go to go' once all the required fields have been found
-      go reqs message | Set.null reqs = go' message
-                      | otherwise = do
-        here <- bytesRead
-        case compare stop here of
-          EQ -> notEnoughData messageLength start
-          LT -> tooMuchData messageLength start here
-          GT -> do
-            wireTag <- fmap WireTag getVarInt -- get tag off wire
-            let -- (fieldId,wireType) = splitWireTag wireTag
-                reqs' = Set.delete wireTag reqs
-            updater wireTag {- fieldId wireType -} message >>= go reqs'
-      go' message = do
-        here <- bytesRead
-        case compare stop here of
-          EQ -> return message
-          LT -> tooMuchData messageLength start here
-          GT -> do
-            wireTag <- fmap WireTag getVarInt -- get tag off wire
---            let (fieldId,wireType) = splitWireTag wireTag
-            updater wireTag {- fieldId wireType -} message >>= go'
-  go required initialMessage
- where
-  initialMessage = defaultValue
-  (GetMessageInfo {requiredTags=required}) = getMessageInfo initialMessage
-  notEnoughData messageLength start =
-      throwError ("Text.ProtocolBuffers.WireMessage.getMessageWith: Required fields missing when processing "
-                  ++ (show . descName . reflectDescriptorInfo $ initialMessage)
-                  ++ "\n  at (messageLength,start) == " ++ show (messageLength,start))
-  tooMuchData messageLength start here =
-      throwError ("Text.ProtocolBuffers.WireMessage.getMessageWith: overran expected length when processing"
-                  ++ (show . descName . reflectDescriptorInfo $ initialMessage)
-                  ++ "\n  at  (messageLength,start,here) == " ++ show (messageLength,start,here))
--}
-
 -- | Used by generated code
 -- getBareMessageWith assumes the wireTag for the message, if it existed, has already been read.
 -- getBareMessageWith assumes that it does needs to read the Varint encoded length of the message.
 -- getBareMessageWith will consume the entire ByteString it is operating on, or until it
 -- finds any STOP_GROUP tag (wireType == 4)
-{- manyTAT.bin testing INLINE getBareMessageWith but made slower -}
 getBareMessageWith :: (Default message, ReflectDescriptor message)
 --                   => (WireTag -> FieldId -> WireType -> message -> Get message) -- handle wireTags that are unknown or produce errors
                    => (WireTag -> message -> Get message) -- handle wireTags that are unknown or produce errors
                    -> Get message
+{- manyTAT.bin testing INLINE getBareMessageWith but made slower -}
 getBareMessageWith updater = go required initialMessage
  where
   go reqs !message | Set.null reqs = go' message
@@ -479,6 +438,26 @@ wireGetErr ft = answer where
                                , " does not match internal type ", show (typeOf (undefined `asTypeOf` typeHack answer)) ]
   typeHack :: Get a -> a
   typeHack = undefined
+
+-- | The 'Wire' class is for internal use, and may change.  If there
+-- is a mis-match between the 'FieldType' and the type of @b@ then you
+-- will get a failure at runtime.
+--
+-- Users should stick to the message functions defined in
+-- "Text.ProtocolBuffers.WireMessage" and exported to use user by
+-- "Text.ProtocolBuffers".  These are less likely to change.
+class Wire b where
+  {-# INLINE wireSize #-}
+  wireSize :: FieldType -> b -> WireSize
+  {-# INLINE wirePut #-}
+  wirePut :: FieldType -> b -> Put
+  {-# INLINE wireGet #-}
+  wireGet :: FieldType -> Get b
+  {-# INLINE wireGetPacked #-}
+  wireGetPacked :: FieldType -> Get (Seq b)
+  wireGetPacked ft = throwError ("Text.ProtocolBuffers.ProtoCompile.Basic: wireGetPacked default:"
+                                 ++ "\n  There is no way to get a packed FieldType of "++show ft
+                                 ++ ".\n  Either there is a bug in this library or the wire format is has been updated.")
 
 instance Wire Double where
   wireSize {- TYPE_DOUBLE   -} 1      _ = 8

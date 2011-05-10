@@ -1,20 +1,18 @@
 {-# LANGUAGE DeriveDataTypeable,GeneralizedNewtypeDeriving #-}
 -- | "Text.ProtocolBuffers.Basic" defines or re-exports most of the
 -- basic field types; 'Maybe','Bool', 'Double', and 'Float' come from
--- the Prelude instead. This module also defined the 'Mergeable',
--- 'Default', and 'Wire' classes.
+-- the Prelude instead. This module also defined the 'Mergeable' and
+-- 'Default' classes. The 'Wire' class is not defined here to avoid orphans.
 module Text.ProtocolBuffers.Basic
   ( -- * Basic types for protocol buffer fields in Haskell
     Double,Float,Bool,Maybe,Seq,Utf8(Utf8),ByteString,Int32,Int64,Word32,Word64
     -- * Haskell types that act in the place of DescritorProto values
   , WireTag(..),FieldId(..),WireType(..),FieldType(..),EnumCode(..),WireSize
     -- * Some of the type classes implemented messages and fields
-  , Mergeable(..),Default(..),Wire(..)
+  , Mergeable(..),Default(..) -- ,Wire(..)
   , isValidUTF8, toUtf8, utf8, uToString, uFromString
   ) where
 
-import Control.Monad.Error.Class(throwError)
-import Data.Binary.Put(Put)
 import Data.Bits(Bits)
 import Data.ByteString.Lazy(ByteString)
 import Data.Foldable as F(Foldable(foldl))
@@ -22,10 +20,9 @@ import Data.Generics(Data(..))
 import Data.Int(Int32,Int64)
 import Data.Ix(Ix)
 import Data.Monoid(Monoid(..))
-import Data.Sequence(Seq)
+import Data.Sequence(Seq,(><))
 import Data.Typeable(Typeable(..))
 import Data.Word(Word8,Word32,Word64)
-import Text.ProtocolBuffers.Get(Get)
 
 import qualified Data.ByteString.Lazy as L(unpack)
 import Data.ByteString.Lazy.UTF8 as U (toString,fromString)
@@ -151,14 +148,19 @@ type WireSize = Int64
 -- left or right unit like 'mempty'.  The default 'mergeAppend' is to
 -- take the second parameter and discard the first one.  The
 -- 'mergeConcat' defaults to @foldl@ associativity.
-class Mergeable a where
+--
+-- NOTE: 'mergeEmpty' has been removed in protocol buffers version 2.
+-- Use defaultValue instead.  New strict fields would mean that required
+-- fields in messages will be automatic errors with 'mergeEmpty'.
+class Default a => Mergeable a where
+{-
   -- | The 'mergeEmpty' value of a basic type or a message with
   -- required fields will be undefined and a runtime error to
   -- evaluate.  These are only handy for reading the wire encoding and
   -- users should employ 'defaultValue' instead.
   mergeEmpty :: a
   mergeEmpty = error "You did not define Mergeable.mergeEmpty!"
-
+-}
   -- | 'mergeAppend' is the right-biased merge of two values.  A
   -- message (or group) is merged recursively.  Required field are
   -- always taken from the second message. Optional field values are
@@ -168,11 +170,11 @@ class Mergeable a where
   mergeAppend :: a -> a -> a
   mergeAppend _a b = b
 
-  -- | 'mergeConcat' is @ F.foldl mergeAppend mergeEmpty @ and this
+  -- | 'mergeConcat' is @ F.foldl mergeAppend defaultValue @ and this
   -- default definition is not overridden in any of the code except
   -- for the (Seq a) instance.
   mergeConcat :: F.Foldable t => t a -> a
-  mergeConcat = F.foldl mergeAppend mergeEmpty
+  mergeConcat = F.foldl mergeAppend defaultValue
 
 -- | The Default class has the default-default values of types.  See
 -- <http://code.google.com/apis/protocolbuffers/docs/proto.html#optional>
@@ -188,26 +190,6 @@ class Default a where
   -- default message all Optional field values are set to 'Nothing'
   -- and Repeated field values are empty.
   defaultValue :: a
-
--- | The 'Wire' class is for internal use, and may change.  If there
--- is a mis-match between the 'FieldType' and the type of @b@ then you
--- will get a failure at runtime.
---
--- Users should stick to the message functions defined in
--- "Text.ProtocolBuffers.WireMessage" and exported to use user by
--- "Text.ProtocolBuffers".  These are less likely to change.
-class Wire b where
-  {-# INLINE wireSize #-}
-  wireSize :: FieldType -> b -> WireSize
-  {-# INLINE wirePut #-}
-  wirePut :: FieldType -> b -> Put
-  {-# INLINE wireGet #-}
-  wireGet :: FieldType -> Get b
-  {-# INLINE wireGetPacked #-}
-  wireGetPacked :: FieldType -> Get (Seq b)
-  wireGetPacked ft = throwError ("Text.ProtocolBuffers.ProtoCompile.Basic: wireGetPacked default:"
-                                 ++ "\n  There is no way to get a packed FieldType of "++show ft
-                                 ++ ".\n  Either there is a bug in this library or the wire format is has been updated.")
 
 -- Returns Nothing if valid, and the position of the error if invalid
 isValidUTF8 :: ByteString -> Maybe Int
@@ -236,3 +218,43 @@ uToString (Utf8 bs) = U.toString bs
 
 uFromString :: String -> Utf8
 uFromString s = Utf8 (U.fromString s)
+
+
+-- Base types are not very mergeable, but their Maybe and Seq versions are:
+instance Mergeable a => Mergeable (Maybe a) where
+--    mergeEmpty = Nothing
+    mergeAppend = mayMerge
+
+{-# INLINE mayMerge #-}
+mayMerge :: (Mergeable b) => Maybe b -> Maybe b -> Maybe b
+mayMerge Nothing  y        = y
+mayMerge x        Nothing  = x
+mayMerge (Just x) (Just y) = Just (mergeAppend x y)
+
+instance Mergeable (Seq a) where
+--    mergeEmpty = empty
+    mergeAppend = (><)
+
+-- These all have errors as mergeEmpty and use the second paramater for mergeAppend
+instance Mergeable Bool
+instance Mergeable Utf8
+instance Mergeable ByteString
+instance Mergeable Double
+instance Mergeable Float
+instance Mergeable Int32
+instance Mergeable Int64
+instance Mergeable Word32
+instance Mergeable Word64
+
+instance Default Word64 where defaultValue = 0
+instance Default Word32 where defaultValue = 0
+instance Default Int64 where defaultValue = 0
+instance Default Int32 where defaultValue = 0
+instance Default Float where defaultValue = 0
+instance Default Double where defaultValue = 0
+instance Default Bool where defaultValue = False
+instance Default (Maybe a) where defaultValue = Nothing
+instance Default (Seq a) where defaultValue = mempty
+instance Default ByteString where defaultValue = mempty
+instance Default Utf8 where defaultValue = mempty
+

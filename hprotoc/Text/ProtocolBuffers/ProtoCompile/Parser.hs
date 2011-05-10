@@ -280,7 +280,7 @@ makeUninterpetedOption nameParts = defaultValue { D.UninterpretedOption.name = S
                                                              , D.NamePart.is_extension =  is_extension }
 
 fileOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
-  getOld = fmap (fromMaybe mergeEmpty . D.FileDescriptorProto.options) getState
+  getOld = fmap (fromMaybe defaultValue . D.FileDescriptorProto.options) getState
   setNew p = update' (\s -> s {D.FileDescriptorProto.options=Just p})
   setOption (Left uno,old) =
     return' (old {D.FileOptions.uninterpreted_option = D.FileOptions.uninterpreted_option old |> uno})
@@ -312,7 +312,7 @@ subMessage = (pChar '}') <|> (choice [ eol
         upExtField f    = update' (\s -> s {D.DescriptorProto.extension=D.DescriptorProto.extension s |> f})
 
 messageOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
-  getOld = fmap (fromMaybe mergeEmpty . D.DescriptorProto.options) getState
+  getOld = fmap (fromMaybe defaultValue . D.DescriptorProto.options) getState
   setNew p = update' (\s -> s {D.DescriptorProto.options=Just p})
   setOption (Left uno,old) =
     return' (old {D.MessageOptions.uninterpreted_option = D.MessageOptions.uninterpreted_option old |> uno })
@@ -420,7 +420,7 @@ constant (Just t) =
 
 fieldOption :: Label -> Maybe Type -> P D.FieldDescriptorProto ()
 fieldOption label mt = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where
-  getOld = fmap (fromMaybe mergeEmpty . D.FieldDescriptorProto.options) getState
+  getOld = fmap (fromMaybe defaultValue . D.FieldDescriptorProto.options) getState
   setNew p = update' (\s -> s { D.FieldDescriptorProto.options = Just p })
   setOption (Left uno,old) =
     return' (old {D.FieldOptions.uninterpreted_option = D.FieldOptions.uninterpreted_option old |> uno })
@@ -460,7 +460,7 @@ subEnum = eols >> rest -- Note: Must check enumOption before enumVal
   where rest = (enumOption <|> enumVal) >> eols >> (pChar '}' <|> rest)
 
 enumOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
-  getOld = fmap (fromMaybe mergeEmpty . D.EnumDescriptorProto.options) getState
+  getOld = fmap (fromMaybe defaultValue . D.EnumDescriptorProto.options) getState
   setNew p = update' (\s -> s {D.EnumDescriptorProto.options=Just p})
   setOption (Left uno,old) =
     return' $  (old {D.EnumOptions.uninterpreted_option = D.EnumOptions.uninterpreted_option old |> uno })
@@ -481,7 +481,7 @@ subEnumValue,enumValueOption :: P D.EnumValueDescriptorProto ()
 subEnumValue = enumValueOption >> ( (pChar ']' >> eol) <|> (pChar ',' >> subEnumValue) )
 
 enumValueOption = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where
-  getOld = fmap (fromMaybe mergeEmpty . D.EnumValueDescriptorProto.options) getState
+  getOld = fmap (fromMaybe defaultValue . D.EnumValueDescriptorProto.options) getState
   setNew p = update' (\s -> s {D.EnumValueDescriptorProto.options=Just p})
   setOption (Left uno,old) =
     return' $  (old {D.EnumValueOptions.uninterpreted_option = D.EnumValueOptions.uninterpreted_option old |> uno })
@@ -507,7 +507,7 @@ service = pName (U.fromString "service") >> do
 
 serviceOption,rpc :: P D.ServiceDescriptorProto ()
 serviceOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
-  getOld = fmap (fromMaybe mergeEmpty . D.ServiceDescriptorProto.options) getState
+  getOld = fmap (fromMaybe defaultValue . D.ServiceDescriptorProto.options) getState
   setNew p = update' (\s -> s {D.ServiceDescriptorProto.options=Just p})
   setOption (Left uno,old) =
     return' (old {D.ServiceOptions.uninterpreted_option = D.ServiceOptions.uninterpreted_option old |> uno })
@@ -530,7 +530,7 @@ subRpc,rpcOption :: P D.MethodDescriptorProto ()
 subRpc = pChar '}' <|> (choice [ eol, rpcOption ] >> subRpc)
 
 rpcOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
-  getOld = fmap (fromMaybe mergeEmpty . D.MethodDescriptorProto.options) getState
+  getOld = fmap (fromMaybe defaultValue . D.MethodDescriptorProto.options) getState
   setNew p = update' (\s -> s {D.MethodDescriptorProto.options=Just p})
   setOption (Left uno,old) =
     return' $  (old {D.MethodOptions.uninterpreted_option = D.MethodOptions.uninterpreted_option old |> uno })

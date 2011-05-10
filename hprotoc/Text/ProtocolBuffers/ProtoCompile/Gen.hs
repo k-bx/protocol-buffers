@@ -570,12 +570,13 @@ descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] de
                 where eFields = F.foldr ((:) . fieldX) end (fields di)
                       end = (if hasExt di then (extfield:) else id) 
                           $ (if storeUnknown di then [unknownField] else [])
+        bangType = if lazyFields di then UnBangedTy else BangedTy
         extfield :: ([Name],BangType)
-        extfield = ([Ident "ext'field"],BangedTy (TyCon (private "ExtField")))
+        extfield = ([Ident "ext'field"], bangType (TyCon (private "ExtField")))
         unknownField :: ([Name],BangType)
-        unknownField = ([Ident "unknown'field"],BangedTy (TyCon (private  "UnknownField")))
+        unknownField = ([Ident "unknown'field"], bangType (TyCon (private  "UnknownField")))
         fieldX :: FieldInfo -> ([Name],BangType)
-        fieldX fi = ([baseIdent' . fieldName $ fi],BangedTy (labeled (TyCon typed)))
+        fieldX fi = ([baseIdent' . fieldName $ fi], bangType (labeled (TyCon typed)))
           where labeled | canRepeat fi = typeApp "Seq"
                         | isRequired fi = id
                         | otherwise = typeApp "Maybe"
@@ -619,8 +620,8 @@ instanceUnknownMessage di
 instanceMergeable :: DescriptorInfo -> Decl
 instanceMergeable di
     = InstDecl src [] (private "Mergeable") [TyCon un]
-        [ inst "mergeEmpty" [] (foldl' App (Con un) (replicate len (pvar "mergeEmpty")))
-        , inst "mergeAppend" [PApp un patternVars1, PApp un patternVars2]
+        [ -- inst "mergeEmpty" [] (foldl' App (Con un) (replicate len (pvar "mergeEmpty"))),
+          inst "mergeAppend" [PApp un patternVars1, PApp un patternVars2]
                              (foldl' App (Con un) (zipWith append vars1 vars2))
         ]
   where un = unqualName (descName di)

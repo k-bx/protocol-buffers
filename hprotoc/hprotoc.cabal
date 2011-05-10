@@ -1,37 +1,45 @@
 name:           hprotoc
-version:        1.11.1
+version:        2.0.0
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
 license-file:   LICENSE
-copyright:      (c) 2008 Christopher Edward Kuklewicz
+copyright:      (c) 2008-2011 Christopher Edward Kuklewicz
 author:         Christopher Edward Kuklewicz
 maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
 stability:      Experimental
-homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
+homepage:       http://hackage.haskell.org/package/hprotoc
 package-url:    http://code.haskell.org/protocol-buffers/
 synopsis:       Parse Google Protocol Buffer specifications
-description:    Parse "http://code.google.com/apis/protocolbuffers/docs/proto.html" and perhaps general haskell code to use them
+description:    Parse language defined at "http://code.google.com/apis/protocolbuffers/docs/proto.html" and general haskell code to implement messages.
 category:       Text
-Tested-With:    GHC ==6.8.3
-extra-source-files:
+Tested-With:    GHC == 7.0.3
+extra-source-files: README,
+                    google-proto-files/google/protobuf/descriptor.proto,
+                    google-proto-files/google/protobuf/plugin.proto
 
 flag small_base
     description: Choose the new smaller, split-up base package.
 
 Executable hprotoc
   Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
-  Hs-Source-Dirs:  .,protoc-gen-haskell
+  Hs-Source-Dirs:  .,
+                   protoc-gen-haskell
   build-tools:     alex
   ghc-options:     -O2 -Wall -fspec-constr-count=10
   ghc-prof-options: -O2 -auto-all -prof
-  build-depends:   protocol-buffers == 1.11.1, protocol-buffers-descriptor == 1.11.1
-  build-depends:   binary, utf8-string
-  build-depends:   parsec < 3, haskell-src-exts >= 1.7.0,
-                   containers,bytestring,array,
-                   filepath >= 1.1.0.0,
+  build-depends:   protocol-buffers == 1.11.1,
+                   protocol-buffers-descriptor == 1.11.2
+  build-depends:   array,
+                   binary,
+                   bytestring,
+                   containers,
                    directory >= 1.0.0.1,
-                   mtl,QuickCheck
+                   filepath >= 1.1.0.0,
+                   haskell-src-exts >= 1.7.0,
+                   mtl,
+                   parsec < 3,
+                   utf8-string
 
   if flag(small_base)
         build-depends: base == 4.*

@@ -47,7 +47,7 @@ data Options = Options { optPrefix :: [MName String]
                        , optInclude :: [LocalFP]
                        , optProto :: LocalFP
                        , optDesc :: Maybe (LocalFP)
-                       , optImports,optVerbose,optUnknownFields,optDryRun :: Bool }
+                       , optImports,optVerbose,optUnknownFields,optLazy,optDryRun :: Bool }
   deriving Show
 
 setPrefix,setTarget,setInclude,setProto,setDesc :: String -> Options -> Options
@@ -60,6 +60,7 @@ setDesc     s o = o { optDesc = Just (LocalFP s) }
 setImports    o = o { optImports = True }
 setVerbose    o = o { optVerbose = True }
 setUnknown    o = o { optUnknownFields = True }
+setLazy       o = o { optLazy = True }
 setDryRun     o = o { optDryRun = True }
 
 toPrefix :: String -> [MName String]
@@ -104,6 +105,8 @@ optionList =
                "dotted Haskell MODULE name to use as a prefix (default is none); last flag used"
   , Option ['u'] ["unknown_fields"] (NoArg (Mutate setUnknown))
                "generated messages and groups all support unknown fields"
+  , Option ['l'] ["lazy_fields"] (NoArg (Mutate setLazy))
+               "new default is now messages with strict fields, this reverts to generating lazy fields"
   , Option ['v'] ["verbose"] (NoArg (Mutate  setVerbose))
                "increase amount of printed information"
   , Option [] ["version"]  (NoArg (Switch VersionInfo))
@@ -115,7 +118,7 @@ usageMsg = usageInfo "Usage: protoCompile [OPTION..] path-to-file.proto ..." opt
 
 versionInfo = unlines $
   [ "Welcome to protocol-buffers version "++showVersion version
-  , "Copyright (c) 2008, Christopher Kuklewicz."
+  , "Copyright (c) 2008-2011, Christopher Kuklewicz."
   , "Released under BSD3 style license, see LICENSE file for details."
   , "Some proto files, such as descriptor.proto and unittest*.proto"
   , "are from google's code and are under an Apache 2.0 license."
@@ -144,6 +147,7 @@ defaultOptions = do
                    , optImports = False
                    , optVerbose = False
                    , optUnknownFields = False
+                   , optLazy = False
                    , optDryRun = False }
 
 main :: IO ()
@@ -241,7 +245,7 @@ run' o@(Output print' writeFile') options env fdps = do
   unless (optDryRun options) $ dump o (optImports options) (optDesc options) fdp fdps
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
   print' "Haskell name mangling done"
-  let protoInfo = makeProtoInfo (optUnknownFields options) nameMap fdp
+  let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options) nameMap fdp
       result = makeResult protoInfo
   seq result (print' "Recursive modules resolved")
   let produceMSG di = do

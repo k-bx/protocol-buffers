@@ -66,8 +66,11 @@ toHaskell reMap k = case M.lookup k reMap of
                       Nothing -> imp $ "toHaskell failed to find "++show k++" among "++show (M.keys reMap)
                       Just pn -> pn
 
-makeProtoInfo :: Bool -> NameMap -> D.FileDescriptorProto -> ProtoInfo
-makeProtoInfo unknownField (NameMap (packageName,hPrefix,hParent) reMap)
+makeProtoInfo :: (Bool,Bool) -- unknownField and lazyFields for makeDescriptorInfo'
+              -> NameMap
+              -> D.FileDescriptorProto 
+              -> ProtoInfo
+makeProtoInfo (unknownField,lazyFields) (NameMap (packageName,hPrefix,hParent) reMap)
               fdp@(D.FileDescriptorProto { D.FileDescriptorProto.name = Just rawName })
      = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allKeys where
   protoName = case hParent of
@@ -89,7 +92,7 @@ makeProtoInfo unknownField (NameMap (packageName,hPrefix,hParent) reMap)
                                        (D.DescriptorProto.name x))
                             groups
         parent' = fqAppend parent [IName (fromJust (D.DescriptorProto.name msg))]
-    in makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup unknownField msg
+    in makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFields) msg
        : concatMap (\x -> processMSG parent' (checkGroup x) x)
                    (F.toList (D.DescriptorProto.nested_type msg))
   processENM parent msg = foldr ((:) . makeEnumInfo' reMap parent') nested
@@ -123,9 +126,10 @@ keyExtendee' reMap f = case D.FieldDescriptorProto.extendee f of
 
 makeDescriptorInfo' :: ReMap -> FIName Utf8
                     -> (ProtoName -> Seq FieldInfo)
-                    -> Bool -> Bool
+                    -> Bool -- msgIsGroup
+                    -> (Bool,Bool) -- unknownField and lazyFields
                     -> D.DescriptorProto -> DescriptorInfo
-makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup unknownField
+makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFields)
                     (D.DescriptorProto.DescriptorProto
                       { D.DescriptorProto.name = Just rawName
                       , D.DescriptorProto.field = rawFields
@@ -133,7 +137,7 @@ makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup unknownField
                       , D.DescriptorProto.extension_range = extension_range })
     = let di = DescriptorInfo protoName (pnPath protoName) msgIsGroup
                               fieldInfos keyInfos extRangeList (getKnownKeys protoName)
-                              unknownField
+                              unknownField lazyFields
       in di -- trace (toString rawName ++ "\n" ++ show di ++ "\n\n") $ di
   where protoName = toHaskell reMap $ fqAppend parent [IName rawName]
         fieldInfos = fmap (toFieldInfo' reMap (protobufName protoName)) rawFields

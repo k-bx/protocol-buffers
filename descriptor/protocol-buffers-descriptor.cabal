@@ -1,16 +1,16 @@
 name:           protocol-buffers-descriptor
-version:        1.11.1
+version:        2.0.0
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
 license-file:   LICENSE
-copyright:      (c) 2009-2010 Christopher Edward Kuklewicz
+copyright:      (c) 2009-2011 Christopher Edward Kuklewicz
 author:         Christopher Edward Kuklewicz
 maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
 stability:      Good
-homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
+homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers-descriptor
 package-url:    http://code.haskell.org/protocol-buffers/
-synopsis:       Text.DescriptorProto.Options and Google Protocol Buffer specifications
+synopsis:       Text.DescriptorProto.Options and code generated from the Google Protocol Buffer specification
 description:    Uses protocol-buffers package
 category:       Text
 Tested-With:    GHC == 7.0.2
@@ -26,8 +26,10 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Library
+  -- most files are in src-auto-generated
+  -- Options is from src-hand-writtern
   Hs-Source-Dirs:  src-auto-generated,src-hand-written
-  ghc-options:  -O2
+  ghc-options: -O2 -fspec-constr-count=10
   ghc-prof-options: -auto-all -prof
   exposed-modules: Text.DescriptorProtos.Options
                    Text.DescriptorProtos
@@ -56,9 +58,9 @@ Library
                    Text.DescriptorProtos.UninterpretedOption
                    Text.DescriptorProtos.UninterpretedOption.NamePart
 
-  build-depends:   protocol-buffers == 1.11.1,
+  build-depends:   bytestring,
                    containers,
-                   bytestring
+                   protocol-buffers == 2.0.0
 
   if flag(small_base)
         build-depends: base == 4.*
@@ -68,6 +70,3 @@ Library
   extensions:      DeriveDataTypeable,
                    FlexibleInstances,
                    MultiParamTypeClasses
-  -- extensions:      EmptyDataDecls,
-  --                  FunctionalDependencies,
-  --                  FlexibleContexts

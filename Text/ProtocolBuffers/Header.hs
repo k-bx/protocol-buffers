@@ -27,20 +27,19 @@ import Data.Set(fromDistinctAscList,member)
 import Data.Typeable(Typeable(..))
 
 import Text.ProtocolBuffers.Basic -- all
-import Text.ProtocolBuffers.Default()
 import Text.ProtocolBuffers.Extensions
   ( wireSizeExtField,wirePutExtField,loadExtension,notExtension
   , wireGetKeyToUnPacked, wireGetKeyToPacked
   , GPB,Key(..),ExtField,ExtendMessage(..),MessageAPI(..),ExtKey(wireGetKey),PackedSeq )
 import Text.ProtocolBuffers.Identifiers(FIName(..),MName(..),FName(..))
-import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections
   ( ReflectDescriptor(..),ReflectEnum(..),EnumInfo(..),ProtoName(..)
   , GetMessageInfo(GetMessageInfo),DescriptorInfo(extRanges),makePNF )
 import Text.ProtocolBuffers.Unknown
   ( UnknownField,UnknownMessage(..),wireSizeUnknownField,wirePutUnknownField,catch'Unknown )
 import Text.ProtocolBuffers.WireMessage
-  ( prependMessageSize,putSize,splitWireTag
+  ( Wire(..)
+  , prependMessageSize,putSize,splitWireTag
   , wireSizeReq,wireSizeOpt,wireSizeRep
   , wirePutReq,wirePutOpt,wirePutRep
   , wirePutPacked,wireSizePacked

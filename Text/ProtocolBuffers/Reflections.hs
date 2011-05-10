@@ -76,6 +76,7 @@ data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , extRanges :: [(FieldId,FieldId)]
                                      , knownKeys :: Seq FieldInfo
                                      , storeUnknown :: Bool
+                                     , lazyFields :: Bool
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 

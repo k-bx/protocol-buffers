@@ -35,7 +35,7 @@ data UnknownFieldValue = UFV {-# UNPACK #-} !WireTag !ByteString
   deriving (Eq,Ord,Show,Read,Data,Typeable)
 
 instance Mergeable UnknownField where
-  mergeEmpty = UnknownField mempty
+--  mergeEmpty = UnknownField mempty
   mergeAppend (UnknownField m1) (UnknownField m2) = UnknownField (mappend m1 m2)
 
 instance Default UnknownField where

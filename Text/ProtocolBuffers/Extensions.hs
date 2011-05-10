@@ -37,12 +37,11 @@ import Data.Map(Map)
 import qualified Data.Map as M
 import Data.Maybe(fromMaybe,isJust)
 import Data.Monoid(mappend,mconcat)
-import Data.Sequence((|>),(><))
+import Data.Sequence((|>),(><),viewl,ViewL(..))
 import qualified Data.Sequence as Seq(singleton,null,empty)
 import Data.Typeable()
 
 import Text.ProtocolBuffers.Basic
-import Text.ProtocolBuffers.Default()
 import Text.ProtocolBuffers.WireMessage
 import Text.ProtocolBuffers.Reflections
 import Text.ProtocolBuffers.Get as Get (Result(..),bytesRead)
@@ -325,7 +324,7 @@ instance GPB Word32
 instance GPB Word64
 
 instance Mergeable ExtField where
-  mergeEmpty = ExtField M.empty
+--  mergeEmpty = ExtField M.empty
   mergeAppend (ExtField m1) (ExtField m2) = ExtField (M.unionWith mergeExtFieldValue m1 m2)
 
 mergeExtFieldValue :: ExtFieldValue -> ExtFieldValue -> ExtFieldValue
@@ -524,7 +523,10 @@ parseWireExtMaybe k@(Key fi ft mv)  wt raw | wt /= toWireType ft =
 --      parsed = map (applyGet (wireGet ft)) . F.toList $ raw
       parsed = map (chooseGet ft) . F.toList $ raw
       errs = [ m | Left m <- parsed ]
-  if null errs then Right (fi,(ExtOptional ft (GPDyn witness (mergeConcat . mconcat $ [ a | Right a <- parsed ]))))
+  if null errs 
+    then case viewl (mconcat [ a | Right a <- parsed ]) of
+           EmptyL -> Left "Text.ProtocolBuffers.Extensions.parseWireExtMaybe: impossible empty parsed list"
+           x :< xs -> Right (fi,(ExtOptional ft (GPDyn witness (F.foldl' mergeAppend x xs))))
     else Left (unlines errs)
 
 -- 'chooseGet' is an intermediate handler between parseWireExt* and applyGet.  This does not know

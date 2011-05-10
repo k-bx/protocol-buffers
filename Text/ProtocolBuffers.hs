@@ -7,18 +7,16 @@ other modules in protocol-buffers.  The exposed parts are:
 import Text.ProtocolBuffers.Basic
   ( Seq,isValidUTF8,toUtf8,utf8,Utf8(Utf8),Int32,Int64,Word32,Word64
   , WireTag,FieldId,WireType,FieldType,EnumCode,WireSize
-  , Mergeable(mergeEmpty,mergeAppend,mergeConcat),Default(defaultValue),Wire)
-import Text.ProtocolBuffers.Default()
+  , Mergeable(mergeAppend,mergeConcat),Default(defaultValue))
 import Text.ProtocolBuffers.Extensions
   ( Key,ExtKey(getExt,putExt,clearExt),MessageAPI(getVal,isSet)
   , getKeyFieldId,getKeyFieldType,getKeyDefaultValue)
 import Text.ProtocolBuffers.Identifiers
-import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections
   ( ReflectDescriptor(..),ReflectEnum(..),ProtoName(..),HsDefault(..),EnumInfoApp
   , KeyInfo,FieldInfo(..),DescriptorInfo(..),EnumInfo(..),ProtoInfo(..),makePNF )
 import Text.ProtocolBuffers.WireMessage
-  ( Put,Get,runPut,runGet,runGetOnLazy
+  ( Wire,Put,Get,runPut,runGet,runGetOnLazy
   , messageSize,messagePut,messageGet,messagePutM,messageGetM
   , messageWithLengthSize,messageWithLengthPut,messageWithLengthGet,messageWithLengthPutM,messageWithLengthGetM
   , messageAsFieldSize,messageAsFieldPutM,messageAsFieldGetM)
@@ -51,18 +49,16 @@ module Text.ProtocolBuffers(
 import Text.ProtocolBuffers.Basic
   ( Seq,isValidUTF8,toUtf8,utf8,Utf8(Utf8),Int32,Int64,Word32,Word64
   , WireTag,FieldId,WireType,FieldType,EnumCode,WireSize
-  , Mergeable(mergeEmpty,mergeAppend,mergeConcat),Default(defaultValue),Wire)
-import Text.ProtocolBuffers.Default()
+  , Mergeable(mergeAppend,mergeConcat),Default(defaultValue))
 import Text.ProtocolBuffers.Extensions
   ( Key,ExtKey(getExt,putExt,clearExt),MessageAPI(getVal,isSet)
   , getKeyFieldId,getKeyFieldType,getKeyDefaultValue)
 import Text.ProtocolBuffers.Identifiers
-import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections
   ( ReflectDescriptor(..),ReflectEnum(..),ProtoName(..),HsDefault(..),EnumInfoApp
   , KeyInfo,FieldInfo(..),DescriptorInfo(..),EnumInfo(..),ProtoInfo(..),makePNF )
 import Text.ProtocolBuffers.WireMessage
-  ( Put,Get,runPut,runGet,runGetOnLazy
+  ( Wire,Put,Get,runPut,runGet,runGetOnLazy
   , messageSize,messagePut,messageGet,messagePutM,messageGetM
   , messageWithLengthSize,messageWithLengthPut,messageWithLengthGet,messageWithLengthPutM,messageWithLengthGetM
   , messageAsFieldSize,messageAsFieldPutM,messageAsFieldGetM)

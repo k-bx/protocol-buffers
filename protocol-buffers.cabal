@@ -1,10 +1,10 @@
 name:           protocol-buffers
-version:        1.11.1
+version:        2.0.0
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
 license-file:   LICENSE
-copyright:      (c) 2008-2010 Christopher Edward Kuklewicz
+copyright:      (c) 2008-2011 Christopher Edward Kuklewicz
 author:         Christopher Edward Kuklewicz
 maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
 stability:      Good
@@ -13,40 +13,35 @@ package-url:    http://code.haskell.org/protocol-buffers/
 synopsis:       Parse Google Protocol Buffer specifications
 description:    Parse proto files and generate Haskell code.
 category:       Text
-Tested-With:    GHC == 7.0.2
---data-files:     
+Tested-With:    GHC == 7.0.3
 extra-source-files: TODO
                     README
--- extra-tmp-files:
 
 flag small_base
     description: Choose the new smaller, split-up base package.
 
 Library
   -- Added -fspec-constr-count=10 to quiet ghc-7.0.2.
-  -- Being modular is more useful to me right now than no orphans
-  ghc-options:  -Wall -O2 -fspec-constr-count=10 -fno-warn-orphans
+  ghc-options:  -Wall -O2 -fspec-constr-count=10 
   ghc-prof-options: -auto-all -prof
   exposed-modules: Text.ProtocolBuffers
                    Text.ProtocolBuffers.Basic
-                   Text.ProtocolBuffers.Default
                    Text.ProtocolBuffers.Extensions
                    Text.ProtocolBuffers.Get
                    Text.ProtocolBuffers.Header
-                   Text.ProtocolBuffers.Mergeable
+                   Text.ProtocolBuffers.Identifiers
                    Text.ProtocolBuffers.Reflections
                    Text.ProtocolBuffers.Unknown
                    Text.ProtocolBuffers.WireMessage
-                   Text.ProtocolBuffers.Identifiers
 
-  build-depends: containers,
+  build-depends: array,
+                 binary,
                  bytestring,
-                 array,
-                 filepath,
+                 containers,
                  directory,
+                 filepath,
                  mtl,
-                 binary, parsec < 3, utf8-string, haskell-src,
-                 QuickCheck
+                 utf8-string
 
   if flag(small_base)
     build-depends: base == 4.*, syb
@@ -55,18 +50,35 @@ Library
 
 -- Most of these are needed for protocol-buffers (Get and WireMessage.hs)
 -- Nothing especially hazardous in this list
-  extensions:      DeriveDataTypeable,
+  extensions:      BangPatterns,
+                   CPP,
+                   DeriveDataTypeable,
                    EmptyDataDecls,
                    FlexibleInstances,
+                   FunctionalDependencies,
                    GADTs,
                    GeneralizedNewtypeDeriving,
                    MagicHash,
+                   MultiParamTypeClasses,
                    PatternGuards,
                    RankNTypes,
-                   ScopedTypeVariables,
-                   TypeSynonymInstances,
-                   MultiParamTypeClasses,
-                   FlexibleContexts,
-                   FunctionalDependencies,
-                   NamedFieldPuns,
                    RecordWildCards
+                   ScopedTypeVariables,
+                   TypeSynonymInstances
+
+-- {-
+--                   FlexibleContexts,
+--                   NamedFieldPuns,
+--                   PatternGuards,
+-- BangPatterns
+-- CPP
+-- DeriveDataTypeable
+-- FlexibleInstances
+-- FunctionalDependencies
+-- GADTs
+-- GeneralizedNewtypeDeriving
+-- MagicHash
+-- MultiParamTypeClasses
+-- RankNTypes
+-- ScopedTypeVariables
+-- TypeSynonymInstances-}
