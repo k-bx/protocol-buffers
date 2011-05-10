@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Text.DescriptorProtos.FieldOptions (FieldOptions(..)) where
 import Prelude ((+), (/), (==), (<=), (&&))
 import qualified Prelude as Prelude'
@@ -7,10 +7,10 @@ import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FieldOptions.CType as DescriptorProtos.FieldOptions (CType)
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
  
-data FieldOptions = FieldOptions{ctype :: P'.Maybe DescriptorProtos.FieldOptions.CType, packed :: P'.Maybe P'.Bool,
-                                 deprecated :: P'.Maybe P'.Bool, experimental_map_key :: P'.Maybe P'.Utf8,
-                                 uninterpreted_option :: P'.Seq DescriptorProtos.UninterpretedOption, ext'field :: P'.ExtField,
-                                 unknown'field :: P'.UnknownField}
+data FieldOptions = FieldOptions{ctype :: !(P'.Maybe DescriptorProtos.FieldOptions.CType), packed :: !(P'.Maybe P'.Bool),
+                                 deprecated :: !(P'.Maybe P'.Bool), experimental_map_key :: !(P'.Maybe P'.Utf8),
+                                 uninterpreted_option :: !(P'.Seq DescriptorProtos.UninterpretedOption), ext'field :: !P'.ExtField,
+                                 unknown'field :: !P'.UnknownField}
                   deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.ExtendMessage FieldOptions where
@@ -74,12 +74,12 @@ instance P'.Wire FieldOptions where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             8 -> Prelude'.fmap (\ new'Field -> old'Self{ctype = Prelude'.Just new'Field}) (P'.wireGet 14)
-             16 -> Prelude'.fmap (\ new'Field -> old'Self{packed = Prelude'.Just new'Field}) (P'.wireGet 8)
-             24 -> Prelude'.fmap (\ new'Field -> old'Self{deprecated = Prelude'.Just new'Field}) (P'.wireGet 8)
-             74 -> Prelude'.fmap (\ new'Field -> old'Self{experimental_map_key = Prelude'.Just new'Field}) (P'.wireGet 9)
+             8 -> Prelude'.fmap (\ !new'Field -> old'Self{ctype = Prelude'.Just new'Field}) (P'.wireGet 14)
+             16 -> Prelude'.fmap (\ !new'Field -> old'Self{packed = Prelude'.Just new'Field}) (P'.wireGet 8)
+             24 -> Prelude'.fmap (\ !new'Field -> old'Self{deprecated = Prelude'.Just new'Field}) (P'.wireGet 8)
+             74 -> Prelude'.fmap (\ !new'Field -> old'Self{experimental_map_key = Prelude'.Just new'Field}) (P'.wireGet 9)
              7994 -> Prelude'.fmap
-                      (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
+                      (\ !new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
                       (P'.wireGet 11)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in
                    if Prelude'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then

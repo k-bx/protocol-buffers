@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Text.DescriptorProtos (protoInfo, fileDescriptorProto) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'

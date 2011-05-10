@@ -3,6 +3,7 @@ module Main where
 
 import Prelude hiding (mapM_)
 import UnittestProto.TestAllTypes
+import UnittestProto.TestAllExtensions
 import Com.Google.Protobuf.Test.ImportEnum as Com.Google.Protobuf.Test (ImportEnum)
 import Com.Google.Protobuf.Test.ImportMessage as Com.Google.Protobuf.Test (ImportMessage)
 import UnittestProto.ForeignEnum as UnittestProto (ForeignEnum)
@@ -22,11 +23,29 @@ import Text.ProtocolBuffers.Reflections
 import qualified Data.Sequence as Seq
 import Data.Foldable
 
+joinMod :: [MName String] -> String
+joinMod [] = ""
+joinMod ms = Prelude.foldr1 (\a b -> a++"."++b) . map mName $ ms
+
+qualFName :: ProtoFName -> String
+qualFName p@(ProtoFName _ _prefix [] base) = fName base
+qualFName p@(ProtoFName _ _prefix parents _base) = joinMod parents ++ "."++ (fName . baseName' $ p)
+
+exts = do
+  let kksOf :: ReflectDescriptor m => m -> [FieldInfo]
+      kksOf = toList . knownKeys . reflectDescriptorInfo
+      fn = qualFName . fieldName
+      see fi@(FieldInfo {packedTag=Just (WireTag wt1, WireTag wt2),..}) =
+        if isPacked then "packedKey "++fn fi
+          else "unpackedKey "++fn fi
+      see fi@(FieldInfo {..}) | canRepeat = "repKey "++fn fi
+                              | otherwise = "optKey "++fn fi
+      format s = ", P'."++s
+  print (mName . baseName . descName . reflectDescriptorInfo $ (undefined :: TestAllExtensions))
+  mapM_ (putStrLn . format . see) $ kksOf (undefined :: TestAllExtensions)
+
 main = do
-  let di :: DescriptorInfo
-      di = reflectDescriptorInfo (undefined :: TestAllTypes)
-      fis = toList (fields di)
-      fisOf :: ReflectDescriptor m => m -> [FieldInfo]
+  let fisOf :: ReflectDescriptor m => m -> [FieldInfo]
       fisOf = toList . fields . reflectDescriptorInfo
       pre (FieldInfo {..}) = if canRepeat then "rep1" else (if isRequired then "req" else "opt")
       pre1 (FieldInfo {..}) = if canRepeat then "rep" else (if isRequired then "req" else "opt")
@@ -77,3 +96,4 @@ test = do
              Finished _ _ r' -> show r'
              Partial {} -> "wtf Partial")
   putStrLn (either id (show . fst) r2)
+

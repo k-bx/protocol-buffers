@@ -1,8 +1,10 @@
-{-# LANGUAGE CPP,MagicHash,ScopedTypeVariables,FlexibleInstances,RankNTypes,TypeSynonymInstances,MultiParamTypeClasses #-}
+{-# LANGUAGE CPP,MagicHash,ScopedTypeVariables,FlexibleInstances,RankNTypes,TypeSynonymInstances,MultiParamTypeClasses,BangPatterns #-}
 -- | By Chris Kuklewicz, drawing heavily from binary and binary-strict,
 -- but all the bugs are my own.
 --
 -- This file is under the usual BSD3 licence, copyright 2008.
+--
+-- Modified the monad to be strict for version 2.0.0
 --
 -- This started out as an improvement to
 -- "Data.Binary.Strict.IncrementalGet" with slightly better internals.
@@ -136,11 +138,13 @@ newtype Get a = Get {
 -- IMPORTANT: Any FutureFrame at the top level(s) is discarded by throwError.
 setCheckpoint,useCheckpoint,clearCheckpoint :: Get ()
 setCheckpoint = Get $ \ sc s pc -> sc () s (HandlerFrame Nothing s mempty pc)
+
 useCheckpoint = Get $ \ sc (S _ _ _) frame ->
   case frame of
     (HandlerFrame Nothing s future pc) -> let (S {top=ss, current=bs, consumed=n}) = collect s future
                                           in sc () (S ss bs n) pc
     _ -> error "Text.ProtocolBuffers.Get: Impossible useCheckpoint frame!"
+
 clearCheckpoint = Get $ \ sc s frame ->
    case frame of
      (HandlerFrame Nothing _s _future pc) -> sc () s pc
@@ -236,8 +240,8 @@ getAvailable = Get $ \ sc s@(S ss bs _) pc -> sc (L.chunk ss bs) s pc
 --
 -- WARNING : 'putAvailable' is still untested.
 putAvailable :: L.ByteString -> Get ()
-putAvailable bsNew = Get $ \ sc (S _ss _bs n) pc ->
-  let s' = case bsNew of
+putAvailable !bsNew = Get $ \ sc (S _ss _bs n) pc ->
+  let !s' = case bsNew of
              L.Empty -> S mempty mempty n
              L.Chunk ss' bs' -> S ss' bs' n
       rebuild (HandlerFrame catcher (S ss1 bs1 n1) future pc') =
@@ -251,12 +255,12 @@ putAvailable bsNew = Get $ \ sc (S _ss _bs n) pc ->
                                    L.Chunk ss2 bs2 -> S ss2 bs2 n1
       rebuild x@(ErrorFrame {}) = x
   in sc () s' (rebuild pc)
-
+         
 -- Internal access to full internal state, as helper functions
 getFull :: Get S
 getFull = Get $ \ sc s pc -> sc s s pc
 putFull :: S -> Get ()
-putFull s = Get $ \ sc _s pc -> sc () s pc
+putFull !s = Get $ \ sc _s pc -> sc () s pc
 
 -- | Keep calling 'suspend' until Nothing is passed to the 'Partial'
 -- continuation.  This ensures all the data has been loaded into the
@@ -297,7 +301,7 @@ getLazyByteString n | n<=0 = return mempty
        case rest of
          L.Empty -> putFull (S mempty mempty (offset + n))
          L.Chunk ss' bs' -> putFull (S ss' bs' (offset + n))
-       return consume
+       return $! consume
     Nothing -> suspendMsg ("getLazyByteString failed with "++show (n,(S.length ss,L.length bs,offset)))  >> getLazyByteString n
 {-# INLINE getLazyByteString #-} -- important
 
@@ -445,11 +449,11 @@ highBitRun = loop where
     (S ss bs _n) <- getFull
     let mi = S.findIndex (128>) ss
     case mi of
-      Just i -> return (fromIntegral i)
+      Just i -> return (succ $ fromIntegral i)
       Nothing -> do
         let mj = L.findIndex (128>) bs
         case mj of
-          Just j -> return (fromIntegral (S.length ss) + j)
+          Just j -> return (fromIntegral (S.length ss) + succ j)
           Nothing -> do
             continue <- suspend
             if continue then loop
@@ -482,10 +486,11 @@ getByteString nIn | nIn <= 0 = return mempty
   if nIn < S.length ss
     then do let (pre,post) = S.splitAt nIn ss
             putFull (S post bs (n+fromIntegral nIn))
-            return pre
+            return $! pre
     -- Expect nIn to be less than S.length ss the vast majority of times
     -- so do not worry about doing anything fancy here.
-    else fmap (S.concat . L.toChunks) (getLazyByteString (fromIntegral nIn))
+    else do now <- fmap (S.concat . L.toChunks) (getLazyByteString (fromIntegral nIn))
+            return $! now
 {-# INLINE getByteString #-} -- important
 
 getWordhost :: Get Word
@@ -591,9 +596,9 @@ instance Functor Get where
   {-# INLINE fmap #-}
 
 instance Monad Get where
-  return a = Get (\sc -> sc a)
+  return a = seq a $ Get (\sc -> sc a)
   {-# INLINE return #-}
-  m >>= k  = Get (\sc -> unGet m (\a -> unGet (k a) sc))
+  m >>= k  = Get (\sc -> unGet m (\ a -> seq a $ unGet (k a) sc))
   {-# INLINE (>>=) #-}
   fail = throwError . strMsg
 

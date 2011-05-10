@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Text.DescriptorProtos.FileDescriptorSet (FileDescriptorSet(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
@@ -6,7 +6,8 @@ import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FileDescriptorProto as DescriptorProtos (FileDescriptorProto)
  
-data FileDescriptorSet = FileDescriptorSet{file :: P'.Seq DescriptorProtos.FileDescriptorProto, unknown'field :: P'.UnknownField}
+data FileDescriptorSet = FileDescriptorSet{file :: !(P'.Seq DescriptorProtos.FileDescriptorProto),
+                                           unknown'field :: !P'.UnknownField}
                        deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.UnknownMessage FileDescriptorSet where
@@ -49,7 +50,7 @@ instance P'.Wire FileDescriptorSet where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             10 -> Prelude'.fmap (\ new'Field -> old'Self{file = P'.append (file old'Self) new'Field}) (P'.wireGet 11)
+             10 -> Prelude'.fmap (\ !new'Field -> old'Self{file = P'.append (file old'Self) new'Field}) (P'.wireGet 11)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in P'.unknown field'Number wire'Type old'Self
  
 instance P'.MessageAPI msg' (msg' -> FileDescriptorSet) FileDescriptorSet where

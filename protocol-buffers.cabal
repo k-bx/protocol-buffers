@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        1.9.0
+version:        1.11.1
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -32,7 +32,6 @@ Library
                    Text.ProtocolBuffers.Default
                    Text.ProtocolBuffers.Extensions
                    Text.ProtocolBuffers.Get
-                   Text.ProtocolBuffers.Generic
                    Text.ProtocolBuffers.Header
                    Text.ProtocolBuffers.Mergeable
                    Text.ProtocolBuffers.Reflections
@@ -69,4 +68,5 @@ Library
                    MultiParamTypeClasses,
                    FlexibleContexts,
                    FunctionalDependencies,
+                   NamedFieldPuns,
                    RecordWildCards

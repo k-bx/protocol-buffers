@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Text.DescriptorProtos.FileDescriptorProto (FileDescriptorProto(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
@@ -11,14 +11,15 @@ import qualified Text.DescriptorProtos.FileOptions as DescriptorProtos (FileOpti
 import qualified Text.DescriptorProtos.ServiceDescriptorProto as DescriptorProtos (ServiceDescriptorProto)
 import qualified Text.DescriptorProtos.SourceCodeInfo as DescriptorProtos (SourceCodeInfo)
  
-data FileDescriptorProto = FileDescriptorProto{name :: P'.Maybe P'.Utf8, package :: P'.Maybe P'.Utf8, dependency :: P'.Seq P'.Utf8,
-                                               message_type :: P'.Seq DescriptorProtos.DescriptorProto,
-                                               enum_type :: P'.Seq DescriptorProtos.EnumDescriptorProto,
-                                               service :: P'.Seq DescriptorProtos.ServiceDescriptorProto,
-                                               extension :: P'.Seq DescriptorProtos.FieldDescriptorProto,
-                                               options :: P'.Maybe DescriptorProtos.FileOptions,
-                                               source_code_info :: P'.Maybe DescriptorProtos.SourceCodeInfo,
-                                               unknown'field :: P'.UnknownField}
+data FileDescriptorProto = FileDescriptorProto{name :: !(P'.Maybe P'.Utf8), package :: !(P'.Maybe P'.Utf8),
+                                               dependency :: !(P'.Seq P'.Utf8),
+                                               message_type :: !(P'.Seq DescriptorProtos.DescriptorProto),
+                                               enum_type :: !(P'.Seq DescriptorProtos.EnumDescriptorProto),
+                                               service :: !(P'.Seq DescriptorProtos.ServiceDescriptorProto),
+                                               extension :: !(P'.Seq DescriptorProtos.FieldDescriptorProto),
+                                               options :: !(P'.Maybe DescriptorProtos.FileOptions),
+                                               source_code_info :: !(P'.Maybe DescriptorProtos.SourceCodeInfo),
+                                               unknown'field :: !P'.UnknownField}
                          deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.UnknownMessage FileDescriptorProto where
@@ -92,18 +93,18 @@ instance P'.Wire FileDescriptorProto where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             10 -> Prelude'.fmap (\ new'Field -> old'Self{name = Prelude'.Just new'Field}) (P'.wireGet 9)
-             18 -> Prelude'.fmap (\ new'Field -> old'Self{package = Prelude'.Just new'Field}) (P'.wireGet 9)
-             26 -> Prelude'.fmap (\ new'Field -> old'Self{dependency = P'.append (dependency old'Self) new'Field}) (P'.wireGet 9)
-             34 -> Prelude'.fmap (\ new'Field -> old'Self{message_type = P'.append (message_type old'Self) new'Field})
+             10 -> Prelude'.fmap (\ !new'Field -> old'Self{name = Prelude'.Just new'Field}) (P'.wireGet 9)
+             18 -> Prelude'.fmap (\ !new'Field -> old'Self{package = Prelude'.Just new'Field}) (P'.wireGet 9)
+             26 -> Prelude'.fmap (\ !new'Field -> old'Self{dependency = P'.append (dependency old'Self) new'Field}) (P'.wireGet 9)
+             34 -> Prelude'.fmap (\ !new'Field -> old'Self{message_type = P'.append (message_type old'Self) new'Field})
                     (P'.wireGet 11)
-             42 -> Prelude'.fmap (\ new'Field -> old'Self{enum_type = P'.append (enum_type old'Self) new'Field}) (P'.wireGet 11)
-             50 -> Prelude'.fmap (\ new'Field -> old'Self{service = P'.append (service old'Self) new'Field}) (P'.wireGet 11)
-             58 -> Prelude'.fmap (\ new'Field -> old'Self{extension = P'.append (extension old'Self) new'Field}) (P'.wireGet 11)
-             66 -> Prelude'.fmap (\ new'Field -> old'Self{options = P'.mergeAppend (options old'Self) (Prelude'.Just new'Field)})
+             42 -> Prelude'.fmap (\ !new'Field -> old'Self{enum_type = P'.append (enum_type old'Self) new'Field}) (P'.wireGet 11)
+             50 -> Prelude'.fmap (\ !new'Field -> old'Self{service = P'.append (service old'Self) new'Field}) (P'.wireGet 11)
+             58 -> Prelude'.fmap (\ !new'Field -> old'Self{extension = P'.append (extension old'Self) new'Field}) (P'.wireGet 11)
+             66 -> Prelude'.fmap (\ !new'Field -> old'Self{options = P'.mergeAppend (options old'Self) (Prelude'.Just new'Field)})
                     (P'.wireGet 11)
              74 -> Prelude'.fmap
-                    (\ new'Field ->
+                    (\ !new'Field ->
                       old'Self{source_code_info = P'.mergeAppend (source_code_info old'Self) (Prelude'.Just new'Field)})
                     (P'.wireGet 11)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in P'.unknown field'Number wire'Type old'Self

@@ -60,7 +60,7 @@ catch'Unknown update'Self = \wire'Tag old'Self -> catchError (update'Self wire'T
           let (fieldId,wireType) = splitWireTag tag
               (UnknownField uf) = getUnknownField msg
           bs <- wireGetFromWire fieldId wireType
-          let v' = UFV tag bs
-              uf' = uf |> v'
-          seq v' $ seq uf' $ return $ putUnknownField (UnknownField uf') msg
+          let v' = seq bs $ UFV tag bs
+              uf' = seq v' $ uf |> v'
+          seq uf' $ return $ putUnknownField (UnknownField uf') msg
   

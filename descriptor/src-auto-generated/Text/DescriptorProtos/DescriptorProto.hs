@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Text.DescriptorProtos.DescriptorProto (DescriptorProto(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
@@ -9,12 +9,12 @@ import qualified Text.DescriptorProtos.EnumDescriptorProto as DescriptorProtos (
 import qualified Text.DescriptorProtos.FieldDescriptorProto as DescriptorProtos (FieldDescriptorProto)
 import qualified Text.DescriptorProtos.MessageOptions as DescriptorProtos (MessageOptions)
  
-data DescriptorProto = DescriptorProto{name :: P'.Maybe P'.Utf8, field :: P'.Seq DescriptorProtos.FieldDescriptorProto,
-                                       extension :: P'.Seq DescriptorProtos.FieldDescriptorProto,
-                                       nested_type :: P'.Seq DescriptorProto,
-                                       enum_type :: P'.Seq DescriptorProtos.EnumDescriptorProto,
-                                       extension_range :: P'.Seq DescriptorProtos.DescriptorProto.ExtensionRange,
-                                       options :: P'.Maybe DescriptorProtos.MessageOptions, unknown'field :: P'.UnknownField}
+data DescriptorProto = DescriptorProto{name :: !(P'.Maybe P'.Utf8), field :: !(P'.Seq DescriptorProtos.FieldDescriptorProto),
+                                       extension :: !(P'.Seq DescriptorProtos.FieldDescriptorProto),
+                                       nested_type :: !(P'.Seq DescriptorProto),
+                                       enum_type :: !(P'.Seq DescriptorProtos.EnumDescriptorProto),
+                                       extension_range :: !(P'.Seq DescriptorProtos.DescriptorProto.ExtensionRange),
+                                       options :: !(P'.Maybe DescriptorProtos.MessageOptions), unknown'field :: !P'.UnknownField}
                      deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.UnknownMessage DescriptorProto where
@@ -75,14 +75,15 @@ instance P'.Wire DescriptorProto where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             10 -> Prelude'.fmap (\ new'Field -> old'Self{name = Prelude'.Just new'Field}) (P'.wireGet 9)
-             18 -> Prelude'.fmap (\ new'Field -> old'Self{field = P'.append (field old'Self) new'Field}) (P'.wireGet 11)
-             50 -> Prelude'.fmap (\ new'Field -> old'Self{extension = P'.append (extension old'Self) new'Field}) (P'.wireGet 11)
-             26 -> Prelude'.fmap (\ new'Field -> old'Self{nested_type = P'.append (nested_type old'Self) new'Field}) (P'.wireGet 11)
-             34 -> Prelude'.fmap (\ new'Field -> old'Self{enum_type = P'.append (enum_type old'Self) new'Field}) (P'.wireGet 11)
-             42 -> Prelude'.fmap (\ new'Field -> old'Self{extension_range = P'.append (extension_range old'Self) new'Field})
+             10 -> Prelude'.fmap (\ !new'Field -> old'Self{name = Prelude'.Just new'Field}) (P'.wireGet 9)
+             18 -> Prelude'.fmap (\ !new'Field -> old'Self{field = P'.append (field old'Self) new'Field}) (P'.wireGet 11)
+             50 -> Prelude'.fmap (\ !new'Field -> old'Self{extension = P'.append (extension old'Self) new'Field}) (P'.wireGet 11)
+             26 -> Prelude'.fmap (\ !new'Field -> old'Self{nested_type = P'.append (nested_type old'Self) new'Field})
                     (P'.wireGet 11)
-             58 -> Prelude'.fmap (\ new'Field -> old'Self{options = P'.mergeAppend (options old'Self) (Prelude'.Just new'Field)})
+             34 -> Prelude'.fmap (\ !new'Field -> old'Self{enum_type = P'.append (enum_type old'Self) new'Field}) (P'.wireGet 11)
+             42 -> Prelude'.fmap (\ !new'Field -> old'Self{extension_range = P'.append (extension_range old'Self) new'Field})
+                    (P'.wireGet 11)
+             58 -> Prelude'.fmap (\ !new'Field -> old'Self{options = P'.mergeAppend (options old'Self) (Prelude'.Just new'Field)})
                     (P'.wireGet 11)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in P'.unknown field'Number wire'Type old'Self
  

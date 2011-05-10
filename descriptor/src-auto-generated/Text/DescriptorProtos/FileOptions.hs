@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Text.DescriptorProtos.FileOptions (FileOptions(..)) where
 import Prelude ((+), (/), (==), (<=), (&&))
 import qualified Prelude as Prelude'
@@ -7,13 +7,13 @@ import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FileOptions.OptimizeMode as DescriptorProtos.FileOptions (OptimizeMode)
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
  
-data FileOptions = FileOptions{java_package :: P'.Maybe P'.Utf8, java_outer_classname :: P'.Maybe P'.Utf8,
-                               java_multiple_files :: P'.Maybe P'.Bool, java_generate_equals_and_hash :: P'.Maybe P'.Bool,
-                               optimize_for :: P'.Maybe DescriptorProtos.FileOptions.OptimizeMode,
-                               cc_generic_services :: P'.Maybe P'.Bool, java_generic_services :: P'.Maybe P'.Bool,
-                               py_generic_services :: P'.Maybe P'.Bool,
-                               uninterpreted_option :: P'.Seq DescriptorProtos.UninterpretedOption, ext'field :: P'.ExtField,
-                               unknown'field :: P'.UnknownField}
+data FileOptions = FileOptions{java_package :: !(P'.Maybe P'.Utf8), java_outer_classname :: !(P'.Maybe P'.Utf8),
+                               java_multiple_files :: !(P'.Maybe P'.Bool), java_generate_equals_and_hash :: !(P'.Maybe P'.Bool),
+                               optimize_for :: !(P'.Maybe DescriptorProtos.FileOptions.OptimizeMode),
+                               cc_generic_services :: !(P'.Maybe P'.Bool), java_generic_services :: !(P'.Maybe P'.Bool),
+                               py_generic_services :: !(P'.Maybe P'.Bool),
+                               uninterpreted_option :: !(P'.Seq DescriptorProtos.UninterpretedOption), ext'field :: !P'.ExtField,
+                               unknown'field :: !P'.UnknownField}
                  deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.ExtendMessage FileOptions where
@@ -98,16 +98,16 @@ instance P'.Wire FileOptions where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             10 -> Prelude'.fmap (\ new'Field -> old'Self{java_package = Prelude'.Just new'Field}) (P'.wireGet 9)
-             66 -> Prelude'.fmap (\ new'Field -> old'Self{java_outer_classname = Prelude'.Just new'Field}) (P'.wireGet 9)
-             80 -> Prelude'.fmap (\ new'Field -> old'Self{java_multiple_files = Prelude'.Just new'Field}) (P'.wireGet 8)
-             160 -> Prelude'.fmap (\ new'Field -> old'Self{java_generate_equals_and_hash = Prelude'.Just new'Field}) (P'.wireGet 8)
-             72 -> Prelude'.fmap (\ new'Field -> old'Self{optimize_for = Prelude'.Just new'Field}) (P'.wireGet 14)
-             128 -> Prelude'.fmap (\ new'Field -> old'Self{cc_generic_services = Prelude'.Just new'Field}) (P'.wireGet 8)
-             136 -> Prelude'.fmap (\ new'Field -> old'Self{java_generic_services = Prelude'.Just new'Field}) (P'.wireGet 8)
-             144 -> Prelude'.fmap (\ new'Field -> old'Self{py_generic_services = Prelude'.Just new'Field}) (P'.wireGet 8)
+             10 -> Prelude'.fmap (\ !new'Field -> old'Self{java_package = Prelude'.Just new'Field}) (P'.wireGet 9)
+             66 -> Prelude'.fmap (\ !new'Field -> old'Self{java_outer_classname = Prelude'.Just new'Field}) (P'.wireGet 9)
+             80 -> Prelude'.fmap (\ !new'Field -> old'Self{java_multiple_files = Prelude'.Just new'Field}) (P'.wireGet 8)
+             160 -> Prelude'.fmap (\ !new'Field -> old'Self{java_generate_equals_and_hash = Prelude'.Just new'Field}) (P'.wireGet 8)
+             72 -> Prelude'.fmap (\ !new'Field -> old'Self{optimize_for = Prelude'.Just new'Field}) (P'.wireGet 14)
+             128 -> Prelude'.fmap (\ !new'Field -> old'Self{cc_generic_services = Prelude'.Just new'Field}) (P'.wireGet 8)
+             136 -> Prelude'.fmap (\ !new'Field -> old'Self{java_generic_services = Prelude'.Just new'Field}) (P'.wireGet 8)
+             144 -> Prelude'.fmap (\ !new'Field -> old'Self{py_generic_services = Prelude'.Just new'Field}) (P'.wireGet 8)
              7994 -> Prelude'.fmap
-                      (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
+                      (\ !new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
                       (P'.wireGet 11)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in
                    if Prelude'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then

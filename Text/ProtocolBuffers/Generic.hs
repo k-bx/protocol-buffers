@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes,ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes,ScopedTypeVariables,NamedFieldPuns,RecordWildCards,DeriveDataTypeable #-}
 {-
 
 Loading 10MB of 20000 copies of random TestAllTypes shows way too much garbage collection pressure.
@@ -41,6 +41,9 @@ APPLICATIVE FOR THE WIN
 
 module Text.ProtocolBuffers.Generic
     ( GenMessage(genMessage)
+    , KeyRing(KeyRing)
+    , KeyGen
+    , Gen
     , getMessage
     , reqPrimitive
     , optPrimitive
@@ -54,11 +57,22 @@ module Text.ProtocolBuffers.Generic
     , repGroup
     , genUnknownField
     , genExtField
+    , genUnknownField'1
+    , genUnknownField'2
+    , optKey
+    , repKey
+    , unpackedKey
+    , packedKey
     )
     where
 
 import Data.IntMap(IntMap)
 import qualified Data.IntMap as I
+import Data.Set(Set)
+import qualified Data.Set as Set
+import Data.Map(Map)
+import qualified Data.Map as Map
+import Data.List(foldl')
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Get
@@ -69,21 +83,34 @@ import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.WireMessage
 import Data.Sequence((><),ViewR(EmptyR,(:>)))
 import qualified Data.Sequence as Seq
+import Control.Monad(forM)
 import Control.Monad.Error.Class(MonadError(throwError),Error(strMsg))
 import Data.Traversable(traverse)
-import Data.Foldable(fold,msum)
+import Data.Foldable(fold,msum,toList,foldlM)
 import qualified Data.ByteString.Lazy as L
 import Control.Applicative((<$>),(<*>))
+import Data.Typeable(cast,Typeable)
 
-import Debug.Trace(trace)
+--import Debug.Trace(trace)
+trace :: a -> b -> b
+trace _ s = s
 
+-- Gen is a map from WireTag
 type Gen = IntMap (Seq ByteString)
 
-class (Mergeable message, ReflectDescriptor message) => GenMessage message where
+-- Wrapped parseWireExtMaybe parseWireExtSeq parseWireExtPackedSeq
+type KeyGen = (Gen -> Either String (Maybe (FieldId,ExtFieldValue)))
+
+-- Use phantom message parameter to capture message type
+data KeyRing = KeyRing [KeyGen] [(FieldId,FieldId)] (Set WireTag)
+  deriving (Typeable)
+
+
+class (Wire message, Mergeable message, ReflectDescriptor message) => GenMessage message where
   genMessage :: Gen -> Either String message
 
 getMessage :: (GenMessage message) => Get message
-getMessage = do
+getMessage = {-# getMessage #-} do
   messageLength <- getVarInt
   start <- bytesRead
   let stop = messageLength+start
@@ -105,7 +132,7 @@ getMessage = do
 
 -- Skip wireType of 4 so that concatenated groups are processed just like concatenated messages
 getMessages :: (GenMessage message) => Get message
-getMessages = go I.empty where
+getMessages = {-# getMessages #-} go I.empty where
   go gen = do
     messageLength <- getVarInt
     start <- bytesRead
@@ -158,7 +185,7 @@ rightmost s = case Seq.viewr s of
 -- parse* shared by req/opt/rep variants
 
 parseOne :: (Show t,Wire t) => WireTag -> FieldType -> ByteString -> Either String t
-parseOne wt ft bs = trace (":parseOne: "++show (wt,ft,L.length bs, bs)) $ do
+parseOne wt ft bs = trace (":parseOne: "++show (wt,ft,L.length bs, bs)) $ {-# SCC "parseOne" #-}
   case runGetAll (wireGet ft) bs of
     Failed _i _s -> throwError "parse failed"
     Finished bs' i r | L.null bs' -> return r
@@ -166,7 +193,7 @@ parseOne wt ft bs = trace (":parseOne: "++show (wt,ft,L.length bs, bs)) $ do
     Partial {} -> throwError "parse overran" -- impossible case due to runGetAll
 
 parsePacked :: (Show t,Wire t) => WireTag -> FieldType -> ByteString -> Either String (Seq t)
-parsePacked wt ft bs = do
+parsePacked wt ft bs =  {-# SCC "parsePacked" #-}
   case runGetAll (genericPacked ft) bs of -- This might work on Enum....or not?
     Failed _i _s -> throwError "parse failed"
     Finished bs' i r | L.null bs' -> return r
@@ -174,15 +201,15 @@ parsePacked wt ft bs = do
     Partial {} -> throwError "parse overran" -- impossible case due to runGetAll
 
 parseOneMessage :: (GenMessage message) => ByteString -> Either String message
-parseOneMessage bs = trace (":parseOneMessage: "++show (L.length bs,bs)) $
-  case runGetAll getMessages bs of
+parseOneMessage bs = trace (":parseOneMessage: "++show (L.length bs,bs)) $ {-# SCC "parseOneMessage" #-}
+  case runGetAll (wireGet 11) {-XXXgetMessages-} bs of
     Failed i s -> throwError $ "parseOneMessage: parse failed "++show (i,s)
     Finished bs' i r | L.null bs' -> return r
                      | otherwise -> throwError $ "parseOneMessage: parse underran "++show (i,L.length bs,L.length bs')
     Partial {} -> throwError $ "parseOneMessage: parse overran" -- impossible case due to runGetAll
 
 parseOneGroup :: (GenMessage message) => ByteString -> Either String message
-parseOneGroup bs = trace (":parseOneGroup: "++show (L.length bs,bs)) $
+parseOneGroup bs = trace (":parseOneGroup: "++show (L.length bs,bs)) $ {-# SCC "parseOneGroup" #-}
   case runGetAll getBareGroup bs of
     Failed i s -> throwError $ "parseOneGroup: parse failed "++show (i,s)
     Finished bs' i r | L.null bs' -> return r
@@ -198,19 +225,19 @@ reqPrimitive wt ft gen =
     Just s -> parseOne wt ft =<< rightmost s
 
 optPrimitive :: (Show t,Wire t) => WireTag -> FieldType -> Gen -> Either String (Maybe t)
-optPrimitive wt ft gen = 
+optPrimitive wt ft gen = {-# SCC "optPrimitive" #-}
   case I.lookup (fromEnum wt) gen of
     Nothing -> return Nothing
     Just s -> fmap Just (parseOne wt ft =<< rightmost s)
 
 rep1Primitive :: (Show t,Wire t) => WireTag -> FieldType -> Gen -> Either String (Seq t)
-rep1Primitive wt ft gen =
+rep1Primitive wt ft gen = {-# SCC "rep1Primitive" #-}
   case I.lookup (fromEnum wt) gen of
     Nothing -> return Seq.empty
     Just s -> traverse (parseOne wt ft) s
 
 rep2Primitive :: (Show t,Wire t) => WireTag -> WireTag -> FieldType -> Gen -> Either String (Seq t)
-rep2Primitive wt1 wt2 ft gen = (><) <$> repUnpacked <*> repPacked
+rep2Primitive wt1 wt2 ft gen = {-# SCC "rep2Primitive" #-} ((><) <$> repUnpacked <*> repPacked)
  where
   repUnpacked :: (Show t,Wire t) => Either String (Seq t)
   repUnpacked =
@@ -226,44 +253,38 @@ rep2Primitive wt1 wt2 ft gen = (><) <$> repUnpacked <*> repPacked
                                         x = traverse (parsePacked wt1 ft) s
                                     in fmap msum x
                                         
--- | Handles both messages and groups
 reqMessage :: (GenMessage message) => WireTag -> Gen -> Either String message
-reqMessage wt gen =
+reqMessage wt gen = {-# SCC "reqMessage" #-} 
   case I.lookup (fromEnum wt) gen of
     Nothing -> throwError "missing required message field"
     Just s -> parseOneMessage (fold s)
 
--- | Handles both messages and groups
 optMessage :: (GenMessage message) => WireTag -> Gen -> Either String (Maybe message)
-optMessage wt gen = trace (":optMessage: "++show wt) $
+optMessage wt gen = trace (":optMessage: "++show wt) $ {-# SCC "optMessage" #-} 
   case I.lookup (fromEnum wt) gen of
     Nothing -> return Nothing
     Just s -> fmap Just (parseOneMessage (fold s))
 
--- | Handles both messages and groups
 repMessage :: (GenMessage message) => WireTag -> Gen -> Either String (Seq message)
-repMessage wt gen =
+repMessage wt gen = {-# SCC "repMessage" #-} 
   case I.lookup (fromEnum wt) gen of
     Nothing -> return Seq.empty
     Just s -> traverse parseOneMessage s
 
--- | Handles both messages and groups
 reqGroup :: (GenMessage message) => WireTag -> Gen -> Either String message
-reqGroup wt gen =
+reqGroup wt gen = {-# SCC "reqGroup" #-} 
   case I.lookup (fromEnum wt) gen of
     Nothing -> throwError "missing required message field"
     Just s -> parseOneGroup (fold s)
 
--- | Handles both messages and groups
 optGroup :: (GenMessage message) => WireTag -> Gen -> Either String (Maybe message)
-optGroup wt gen = trace (":optGroup: "++show wt) $
+optGroup wt gen = trace (":optGroup: "++show wt) $ {-# SCC "optGroup" #-} 
   case I.lookup (fromEnum wt) gen of
     Nothing -> return Nothing
     Just s -> fmap Just (parseOneGroup (fold s))
 
--- | Handles both messages and groups
 repGroup :: (GenMessage message) => WireTag -> Gen -> Either String (Seq message)
-repGroup wt gen =
+repGroup wt gen = {-# SCC "repGroup" #-} 
   case I.lookup (fromEnum wt) gen of
     Nothing -> return Seq.empty
     Just s -> traverse parseOneGroup s
@@ -272,5 +293,169 @@ repGroup wt gen =
 genUnknownField :: (GenMessage message) => message -> Gen -> Either String UnknownField
 genUnknownField _ _gen = Right defaultValue
 
+{-
 genExtField :: (GenMessage message) => message -> Gen -> Either String ExtField
-genExtField _ _gen = Right defaultValue
+genExtField this =
+  let -- (GetMessageInfo { allowedTags }) = getMessageInfo this
+      -- inRecognized x = Set.member x allowedTags
+      (DescriptorInfo { knownKeys, extRanges }) = reflectDescriptorInfo this
+      keys :: Map FieldId FieldInfo
+      keys = Map.fromList . map (\fi -> (fieldNumber fi,fi)) . toList $ knownKeys
+      inExtRanges x = any (\(lo,hi) -> lo<=x && x <=hi) extRanges
+      wt2fi :: (Int,Seq ByteString) -> (FieldId,(WireTag,Seq ByteString,Maybe FieldInfo))
+      wt2fi (wt,s) = let wt' = WireTag . toEnum $ wt
+                         fid = fst . splitWireTag $ wt'
+                     in ( fid, (wt',s,Map.lookup fid keys) )
+      f :: Map FieldId ExtFieldValue
+        -> (FieldId,(WireTag,Seq ByteString,Maybe FieldInfo))
+        -> Either String (Map FieldId ExtFieldValue)
+      f ef (fid,(wt,s,Nothing)) = 
+          let (_,wireTag) = splitWireTag wt
+              eps = fmap (EP wireTag) s
+          in case Map.lookup fid ef of
+               Nothing -> return $! Map.insert fid (ExtFromWire eps) ef
+               Just (ExtFromWire raw) -> let v' = ExtFromWire (raw >< eps)
+                                         in seq v' $ return $! (Map.insert fid v' ef)
+               _ -> throwError "genExtField.f: unexpected case, should not have known and unknown fid!"
+      f m (fid,(wt,s,Just (FieldInfo {..}))) = return m
+  in \ gen -> fmap ExtField
+              . foldlM f Map.empty
+              . filter (inExtRanges . fst)
+              . map wt2fi
+              $ I.toList gen
+-}
+
+genUnknownField'1 :: Set WireTag -> (Gen -> Either String UnknownField)
+genUnknownField'1 known = {-# SCC "genUnknownField'1" #-} 
+  let wrap (wt,s) = (WireTag (toEnum wt),s)
+      raw (wt,_) = Set.notMember wt known 
+      g2u (wt,s) = fmap (UFV wt) s
+  in \gen -> let s1 = msum . map g2u . filter raw . map wrap . I.toList $ gen
+             in return (UnknownField s1)
+
+genUnknownField'2 :: KeyRing -> (Gen -> Either String UnknownField)
+genUnknownField'2 (KeyRing keyGens extRanges known) = {-# SCC "genUnknownField'2" #-} 
+  let wrap (wt,s) = (fid,wt',s) where wt' = WireTag (toEnum wt)
+                                      (fid,_) = splitWireTag wt'
+      raw (fid,wt,_) = Set.notMember wt known && not (any (\(lo,hi) -> lo<=fid && fid <=hi) extRanges)
+      g2u (_,wt,s) = fmap (UFV wt) s
+  in \gen -> let s1 = msum . map g2u . filter raw . map wrap . I.toList $ gen
+             in return (UnknownField s1)
+
+genExtField :: KeyRing -> (Gen -> Either String ExtField)
+genExtField (KeyRing keyGens extRanges known) = {-# SCC "genExtField" #-} 
+  let wrap (wt,s) = (fid,wireType,wt',s) where wt' = WireTag (toEnum wt)
+                                               (fid,wireType) = splitWireTag wt'
+      raw (fid,_,wt,_) = Set.notMember wt known && any (\(lo,hi) -> lo<=fid && fid <=hi) extRanges
+      g2p (fid,wireTag,_,s) = (fid, ExtFromWire (fmap (EP wireTag) s))
+  in \gen -> do
+        maybePairs <- forM keyGens ($ gen)
+        let m0 = Map.fromList [ pair | Just pair <- maybePairs ]
+            m1 = Map.fromList (map g2p . filter raw . map wrap . I.toList $ gen)
+        return (ExtField (Map.union m0 m1))
+
+optKey :: Key Maybe msg v -> KeyGen
+optKey key@(Key fid ft _) =
+  let wireType = toWireType ft
+      wireTag = mkWireTag fid wireType
+      parse = parseWireExtMaybe key wireType
+  in \gen ->
+    case I.lookup (fromEnum wireTag) gen of
+      Nothing -> return Nothing
+      Just s ->
+        case parse (fmap (EP wireType) s) of
+          Left err -> throwError err
+          Right val -> return (Just val)
+
+-- Repeated Key for field type that cannot be packed
+repKey :: Key Seq msg v -> KeyGen
+repKey key@(Key fid ft _) =
+  let wireType = toWireType ft
+      wireTag = mkWireTag fid wireType
+      parse = parseWireExtSeq key wireType
+  in \gen ->
+    case I.lookup (fromEnum wireTag) gen of
+      Nothing -> return Nothing
+      Just s ->
+        case parse (fmap (EP wireType) s) of
+          Left err -> throwError err
+          Right val -> return (Just val)
+
+-- unpackedKey is for unpacked repeated field that might have to handle packed data on wire.
+-- Ultimately store in ExtRepeated.
+unpackedKey :: forall msg v . Key Seq msg v -> KeyGen
+unpackedKey normalKey@(Key fid ft dv) =
+  let wireType = toWireType ft
+      normalTag = mkWireTag fid wireType
+      packedTag = toPackedWireTag fid
+      packedKey :: Key PackedSeq msg v -- fake a packed version of the key
+      packedKey = Key fid ft dv
+      parseNormal = parseWireExtSeq normalKey wireType
+      parsePacked = parseWireExtPackedSeq packedKey wireType
+  in \gen -> do
+       normal <- case I.lookup (fromEnum normalTag) gen of
+                   Nothing -> return Nothing
+                   Just s ->
+                     case parseNormal (fmap (EP wireType) s) of
+                       Left err -> throwError err
+                       Right val -> return (Just val)
+       packed <- case I.lookup (fromEnum packedTag) gen of
+                   Nothing -> return Nothing
+                   Just s ->
+                     case parsePacked (fmap (EP wireType) s) of
+                       Left err -> throwError err
+                       Right val -> return (Just val)
+       case (normal,packed) of
+         (Nothing,Nothing) -> return Nothing
+         (Just {},Nothing) -> return normal
+         (Nothing,Just (i,ExtPacked ft ds2)) ->return (Just (i,ExtRepeated ft ds2))
+         ( Just (i,ExtRepeated ft (GPDynSeq x@GPWitness s1))
+           , Just (_,ExtPacked   _  (GPDynSeq GPWitness s2)) ) ->
+             case (cast s1, cast s2) of
+               (Just t1, Just t2) -> return (Just (i,ExtRepeated ft (GPDynSeq x (t1 >< t2))))
+               _ -> throwError $ "Text.ProtocolBuffers.Generic.unpackedKey: cast failed! " ++ show (normalKey,i,ft)
+         _ -> throwError $ "Text.ProtocolBuffers.Generic.unpackedKey: unexpected case! " ++ show normalKey
+
+-- unpackedKey is for packed repeated field that always have to handle unpacked data on wire.
+-- Ultimately store in ExtPacked.
+packedKey :: forall msg v. Key PackedSeq msg v -> KeyGen
+packedKey packedKey@(Key fid ft dv) = 
+  let wireType = toWireType ft
+      normalTag = mkWireTag fid wireType
+      packedTag = toPackedWireTag fid
+      normalKey :: Key Seq msg v -- fake a normal version of the key
+      normalKey = Key fid ft dv
+      parseNormal = parseWireExtSeq normalKey wireType
+      parsePacked = parseWireExtPackedSeq packedKey wireType
+  in \gen -> do
+       normal <- case I.lookup (fromEnum normalTag) gen of
+                   Nothing -> return Nothing
+                   Just s ->
+                     case parseNormal (fmap (EP wireType) s) of
+                       Left err -> throwError err
+                       Right val -> return (Just val)
+       packed <- case I.lookup (fromEnum packedTag) gen of
+                   Nothing -> return Nothing
+                   Just s ->
+                     case parsePacked (fmap (EP wireType) s) of
+                       Left err -> throwError err
+                       Right val -> return (Just val)
+       case (normal,packed) of
+         (Nothing,Nothing) -> return Nothing
+         (Just (i,ExtRepeated ft ds1),Nothing) -> return (Just (i,ExtPacked ft ds1))
+         (Nothing,Just {}) ->return packed
+         ( Just (i,ExtRepeated ft (GPDynSeq x@GPWitness s1))
+           , Just (_,ExtPacked   _  (GPDynSeq GPWitness s2)) ) ->
+             case (cast s1, cast s2) of
+               (Just t1, Just t2) -> return (Just (i,ExtPacked ft (GPDynSeq x (t1 >< t2))))
+               _ -> throwError $ "Text.ProtocolBuffers.Generic.packedKey: cast failed! " ++ show (packedKey,i,ft)
+         _ -> throwError $ "Text.ProtocolBuffers.Generic.packedKey: unexpected case! " ++ show packedKey
+
+-- current getting for keys has 4 flavors:
+-- wireGetKey for known keys and the expected WireTag
+-- wireGetKeyToPacked for known packed repeated keys and parsing unpacked WireTag
+-- wireGetKeyToUnPacked for known not-packed keys and parsing packed WireTag
+-- loadExtension for parsing WireTags for no known key
+--   this last one takes all tags not in allowedTags but still in extRanges
+--
+-- Unknown takes all tags not in allowedTags and not in extRanges

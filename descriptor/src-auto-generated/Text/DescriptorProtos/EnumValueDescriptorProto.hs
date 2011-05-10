@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Text.DescriptorProtos.EnumValueDescriptorProto (EnumValueDescriptorProto(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
@@ -6,9 +6,9 @@ import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.EnumValueOptions as DescriptorProtos (EnumValueOptions)
  
-data EnumValueDescriptorProto = EnumValueDescriptorProto{name :: P'.Maybe P'.Utf8, number :: P'.Maybe P'.Int32,
-                                                         options :: P'.Maybe DescriptorProtos.EnumValueOptions,
-                                                         unknown'field :: P'.UnknownField}
+data EnumValueDescriptorProto = EnumValueDescriptorProto{name :: !(P'.Maybe P'.Utf8), number :: !(P'.Maybe P'.Int32),
+                                                         options :: !(P'.Maybe DescriptorProtos.EnumValueOptions),
+                                                         unknown'field :: !P'.UnknownField}
                               deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.UnknownMessage EnumValueDescriptorProto where
@@ -53,9 +53,9 @@ instance P'.Wire EnumValueDescriptorProto where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             10 -> Prelude'.fmap (\ new'Field -> old'Self{name = Prelude'.Just new'Field}) (P'.wireGet 9)
-             16 -> Prelude'.fmap (\ new'Field -> old'Self{number = Prelude'.Just new'Field}) (P'.wireGet 5)
-             26 -> Prelude'.fmap (\ new'Field -> old'Self{options = P'.mergeAppend (options old'Self) (Prelude'.Just new'Field)})
+             10 -> Prelude'.fmap (\ !new'Field -> old'Self{name = Prelude'.Just new'Field}) (P'.wireGet 9)
+             16 -> Prelude'.fmap (\ !new'Field -> old'Self{number = Prelude'.Just new'Field}) (P'.wireGet 5)
+             26 -> Prelude'.fmap (\ !new'Field -> old'Self{options = P'.mergeAppend (options old'Self) (Prelude'.Just new'Field)})
                     (P'.wireGet 11)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in P'.unknown field'Number wire'Type old'Self
  

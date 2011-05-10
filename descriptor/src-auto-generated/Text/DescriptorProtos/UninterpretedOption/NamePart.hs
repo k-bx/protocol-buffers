@@ -1,11 +1,11 @@
-{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Text.DescriptorProtos.UninterpretedOption.NamePart (NamePart(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
  
-data NamePart = NamePart{name_part :: P'.Utf8, is_extension :: P'.Bool, unknown'field :: P'.UnknownField}
+data NamePart = NamePart{name_part :: !P'.Utf8, is_extension :: !P'.Bool, unknown'field :: !P'.UnknownField}
               deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.UnknownMessage NamePart where
@@ -49,8 +49,8 @@ instance P'.Wire NamePart where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             10 -> Prelude'.fmap (\ new'Field -> old'Self{name_part = new'Field}) (P'.wireGet 9)
-             16 -> Prelude'.fmap (\ new'Field -> old'Self{is_extension = new'Field}) (P'.wireGet 8)
+             10 -> Prelude'.fmap (\ !new'Field -> old'Self{name_part = new'Field}) (P'.wireGet 9)
+             16 -> Prelude'.fmap (\ !new'Field -> old'Self{is_extension = new'Field}) (P'.wireGet 8)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in P'.unknown field'Number wire'Type old'Self
  
 instance P'.MessageAPI msg' (msg' -> NamePart) NamePart where

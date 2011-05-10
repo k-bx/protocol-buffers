@@ -250,7 +250,7 @@ mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix pa
 -- Define LANGUAGE options as [ModulePramga]
 --------------------------------------------
 modulePragmas :: [ModulePragma]
-modulePragmas = [ LanguagePragma src (map Ident ["DeriveDataTypeable","MultiParamTypeClasses","FlexibleInstances"]) ]
+modulePragmas = [ LanguagePragma src (map Ident ["BangPatterns","DeriveDataTypeable","FlexibleInstances","MultiParamTypeClasses"]) ]
 
 --------------------------------------------
 -- EnumDescriptorProto module creation
@@ -571,11 +571,11 @@ descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] de
                       end = (if hasExt di then (extfield:) else id) 
                           $ (if storeUnknown di then [unknownField] else [])
         extfield :: ([Name],BangType)
-        extfield = ([Ident "ext'field"],UnBangedTy (TyCon (private "ExtField")))
+        extfield = ([Ident "ext'field"],BangedTy (TyCon (private "ExtField")))
         unknownField :: ([Name],BangType)
-        unknownField = ([Ident "unknown'field"],UnBangedTy (TyCon (private  "UnknownField")))
+        unknownField = ([Ident "unknown'field"],BangedTy (TyCon (private  "UnknownField")))
         fieldX :: FieldInfo -> ([Name],BangType)
-        fieldX fi = ([baseIdent' . fieldName $ fi],UnBangedTy (labeled (TyCon typed)))
+        fieldX fi = ([baseIdent' . fieldName $ fi],BangedTy (labeled (TyCon typed)))
           where labeled | canRepeat fi = typeApp "Seq"
                         | isRequired fi = id
                         | otherwise = typeApp "Maybe"
@@ -682,12 +682,14 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         mUnknown | storeUnknown di = Just (last vars)
                  | otherwise = Nothing
 
+-- reusable 'cases' generator
         -- first case is for Group behavior, second case is for Message behavior, last is error handler
         cases g m e = Case (lvar "ft'") [ Alt src (litIntP' 10) (UnGuardedAlt g) noWhere
                                         , Alt src (litIntP' 11) (UnGuardedAlt m) noWhere
                                         , Alt src PWildCard  (UnGuardedAlt e) noWhere
                                         ]
 
+-- wireSize generation
         sizeCases = UnGuardedRhs $ cases (lvar "calc'Size") 
                                          (pvar "prependMessageSize" $$ lvar "calc'Size")
                                          (pvar "wireSizeErr" $$ lvar "ft'" $$ lvar "self'")
@@ -708,6 +710,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                  , litInt (getFieldType (typeCode fi))
                                                  , var]
 
+-- wirePut generation
         putCases = UnGuardedRhs $ cases
           (lvar "put'Fields")
           (Do [ Qualifier $ pvar "putSize" $$
@@ -735,6 +738,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                           foldl' App (pvar f) [ litInt (getWireTag (wireTag fi))
                                                 , litInt (getFieldType (typeCode fi))
                                                 , var]
+-- wireGet generation
 -- new for 1.5.7, rewriting this a great deal!
         getCases = let param = if storeUnknown di
                                  then Paren (pvar "catch'Unknown" $$ lvar "update'Self")
@@ -769,7 +773,8 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                               else litInt lo <=! x )
                        allowedExts
 
--- nned to check isPacked and call appropriate wireGetKey[Un]Packed substitute function
+-- wireGetErr for known extensions
+-- need to check isPacked and call appropriate wireGetKey[Un]Packed substitute function
         toUpdateExt fi | Just (wt1,wt2) <- packedTag fi = [toUpdateExtUnpacked wt1, toUpdateExtPacked wt2]
                        | otherwise = [toUpdateExtUnpacked (wireTag fi)]
           where (getUnP,getP) | isPacked fi = (pvar "wireGetKeyToPacked",pvar "wireGetKey")
@@ -782,11 +787,13 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                   Alt src (litIntP . getWireTag $ wt2)
                       (UnGuardedAlt $ getP $$ Var (mayQualName protoName (fieldName fi)) $$ lvar "old'Self")
                       noWhere
+
+-- wireGet without extensions
         toUpdate fi | Just (wt1,wt2) <- packedTag fi = [toUpdateUnpacked wt1 fi, toUpdatePacked wt2 fi]
                     | otherwise                      = [toUpdateUnpacked (wireTag fi) fi]
         toUpdateUnpacked wt1 fi =
           Alt src (litIntP . getWireTag $ wt1) (UnGuardedAlt $ 
-            preludevar "fmap" $$ (Paren $ Lambda src [patvar "new'Field"] $
+            preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
                               RecUpdate (lvar "old'Self")
                                         [FieldUpdate (unqualFName . fieldName $ fi)
                                                      (labelUpdateUnpacked fi)])
@@ -803,7 +810,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                            | otherwise = x
         toUpdatePacked wt2 fi =
           Alt src (litIntP . getWireTag $ wt2) (UnGuardedAlt $ 
-            preludevar "fmap" $$ (Paren $ Lambda src [patvar "new'Field"] $
+            preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
                               RecUpdate (lvar "old'Self")
                                         [FieldUpdate (unqualFName . fieldName $ fi)
                                                      (labelUpdatePacked fi)])

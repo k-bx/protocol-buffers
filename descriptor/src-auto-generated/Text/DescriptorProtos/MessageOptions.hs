@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Text.DescriptorProtos.MessageOptions (MessageOptions(..)) where
 import Prelude ((+), (/), (==), (<=), (&&))
 import qualified Prelude as Prelude'
@@ -6,10 +6,10 @@ import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
  
-data MessageOptions = MessageOptions{message_set_wire_format :: P'.Maybe P'.Bool,
-                                     no_standard_descriptor_accessor :: P'.Maybe P'.Bool,
-                                     uninterpreted_option :: P'.Seq DescriptorProtos.UninterpretedOption, ext'field :: P'.ExtField,
-                                     unknown'field :: P'.UnknownField}
+data MessageOptions = MessageOptions{message_set_wire_format :: !(P'.Maybe P'.Bool),
+                                     no_standard_descriptor_accessor :: !(P'.Maybe P'.Bool),
+                                     uninterpreted_option :: !(P'.Seq DescriptorProtos.UninterpretedOption),
+                                     ext'field :: !P'.ExtField, unknown'field :: !P'.UnknownField}
                     deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.ExtendMessage MessageOptions where
@@ -64,10 +64,11 @@ instance P'.Wire MessageOptions where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             8 -> Prelude'.fmap (\ new'Field -> old'Self{message_set_wire_format = Prelude'.Just new'Field}) (P'.wireGet 8)
-             16 -> Prelude'.fmap (\ new'Field -> old'Self{no_standard_descriptor_accessor = Prelude'.Just new'Field}) (P'.wireGet 8)
+             8 -> Prelude'.fmap (\ !new'Field -> old'Self{message_set_wire_format = Prelude'.Just new'Field}) (P'.wireGet 8)
+             16 -> Prelude'.fmap (\ !new'Field -> old'Self{no_standard_descriptor_accessor = Prelude'.Just new'Field})
+                    (P'.wireGet 8)
              7994 -> Prelude'.fmap
-                      (\ new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
+                      (\ !new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
                       (P'.wireGet 11)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in
                    if Prelude'.or [1000 <= field'Number && field'Number <= 18999, 20000 <= field'Number] then

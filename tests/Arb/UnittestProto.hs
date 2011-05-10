@@ -1,10 +1,12 @@
+{-# LANGUAGE RankNTypes #-}
 -- everything passes version 0.2.7
 -- ghci  -fcontext-stack=100 -XRankNTypes -XMultiParamTypeClasses  -XFlexibleInstances -isrc-auto-generated/ Arb/UnittestProto.hs
 
 module Arb.UnittestProto where
 
 import Arb
-import Manytat.ManyTAT(ManyTAT(..))
+import qualified Manytat.ManyTAT as TAT
+import qualified Manytat.ManyTR as TR
 
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Foldable as F
@@ -31,6 +33,7 @@ import UnittestProto.TestAllTypes.OptionalGroup(OptionalGroup(..))
 import UnittestProto.TestAllTypes.RepeatedGroup(RepeatedGroup(..))
 
 import UnittestProto.TestAllTypes(TestAllTypes(..))
+import UnittestProto.TestRequired(TestRequired(..))
 
 import UnittestProto
 import UnittestProto.TestRequired
@@ -254,6 +257,18 @@ makeFile outfile size = do
   xs <- samples a1
   L.writeFile outfile (go 0 xs)
 
+makeManyTRFile outfile size = do
+  let go s (x:xs) | s > size = []
+                  | otherwise = x : go (s+messageWithLengthSize x) xs
+
+  let a1 = arbitrary :: Gen UnittestProto.TestRequired.TestRequired
+  xs <- samples a1
+  let ys = go 0 xs
+      manyTR :: TR.ManyTR
+      manyTR = defaultValue { TR.tats = Seq.fromList ys }
+  L.writeFile outfile (messagePut manyTR)
+
+
 makeManyTATFile outfile size = do
   let go s (x:xs) | s > size = []
                   | otherwise = x : go (s+messageWithLengthSize x) xs
@@ -261,6 +276,8 @@ makeManyTATFile outfile size = do
   let a1 = arbitrary :: Gen UnittestProto.TestAllTypes.TestAllTypes
   xs <- samples a1
   let ys = go 0 xs
-      manyTAT :: ManyTAT
-      manyTAT = defaultValue { tats = Seq.fromList ys }
+      manyTAT :: TAT.ManyTAT
+      manyTAT = defaultValue { TAT.tats = Seq.fromList ys }
   L.writeFile outfile (messagePut manyTAT)
+
+

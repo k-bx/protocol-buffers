@@ -1,11 +1,11 @@
-{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Text.DescriptorProtos.DescriptorProto.ExtensionRange (ExtensionRange(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
  
-data ExtensionRange = ExtensionRange{start :: P'.Maybe P'.Int32, end :: P'.Maybe P'.Int32, unknown'field :: P'.UnknownField}
+data ExtensionRange = ExtensionRange{start :: !(P'.Maybe P'.Int32), end :: !(P'.Maybe P'.Int32), unknown'field :: !P'.UnknownField}
                     deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
  
 instance P'.UnknownMessage ExtensionRange where
@@ -49,8 +49,8 @@ instance P'.Wire ExtensionRange where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
-             8 -> Prelude'.fmap (\ new'Field -> old'Self{start = Prelude'.Just new'Field}) (P'.wireGet 5)
-             16 -> Prelude'.fmap (\ new'Field -> old'Self{end = Prelude'.Just new'Field}) (P'.wireGet 5)
+             8 -> Prelude'.fmap (\ !new'Field -> old'Self{start = Prelude'.Just new'Field}) (P'.wireGet 5)
+             16 -> Prelude'.fmap (\ !new'Field -> old'Self{end = Prelude'.Just new'Field}) (P'.wireGet 5)
              _ -> let (field'Number, wire'Type) = P'.splitWireTag wire'Tag in P'.unknown field'Number wire'Type old'Self
  
 instance P'.MessageAPI msg' (msg' -> ExtensionRange) ExtensionRange where

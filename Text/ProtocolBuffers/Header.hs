@@ -10,7 +10,6 @@ module Text.ProtocolBuffers.Header
     , module Data.Typeable
     , module Text.ProtocolBuffers.Basic
     , module Text.ProtocolBuffers.Extensions
-    , module Text.ProtocolBuffers.Generic
     , module Text.ProtocolBuffers.Identifiers
     , module Text.ProtocolBuffers.Reflections
     , module Text.ProtocolBuffers.Unknown
@@ -33,7 +32,6 @@ import Text.ProtocolBuffers.Extensions
   ( wireSizeExtField,wirePutExtField,loadExtension,notExtension
   , wireGetKeyToUnPacked, wireGetKeyToPacked
   , GPB,Key(..),ExtField,ExtendMessage(..),MessageAPI(..),ExtKey(wireGetKey),PackedSeq )
-import Text.ProtocolBuffers.Generic -- all
 import Text.ProtocolBuffers.Identifiers(FIName(..),MName(..),FName(..))
 import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections

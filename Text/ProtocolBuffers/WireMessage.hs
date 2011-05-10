@@ -1,3 +1,4 @@
+{-# Language BangPatterns #-}
 {- | 
 Here are the serialization and deserialization functions.
 
@@ -33,7 +34,6 @@ module Text.ProtocolBuffers.WireMessage
     , unknownField,unknown,wireGetFromWire
     , castWord64ToDouble,castWord32ToFloat,castDoubleToWord64,castFloatToWord32
     , zzEncode64,zzEncode32,zzDecode64,zzDecode32
-    , genericPacked
     ) where
 
 import Control.Monad(when)
@@ -55,7 +55,7 @@ import Data.Typeable (Typeable(..))
 -- This has been superceded by the ST array trick (ugly, but promised to work)
 --import GHC.Exts (Double(D#),Float(F#),unsafeCoerce#)
 --import GHC.Word (Word64(W64#)) -- ,Word32(W32#))
-import Debug.Trace
+--import Debug.Trace
 
 -- binary package
 import Data.Binary.Put (Put,runPut,putWord8,putWord32le,putWord64le,putLazyByteString)
@@ -67,6 +67,9 @@ import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,runGetAll,bytesRea
 import Text.ProtocolBuffers.Mergeable()
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
                                        ,DescriptorInfo(..),GetMessageInfo(..))
+
+trace :: a -> b -> b
+trace _ s = s
 
 -- External user API for writing and reading messages
 
@@ -270,14 +273,14 @@ wireGetPackedEnum toMaybe'Enum = do
   packedLength <- getVarInt
   start <- bytesRead
   let stop = packedLength+start
-      next soFar = do
+      next !soFar = do
         here <- bytesRead
         case compare stop here of
           EQ -> return soFar
           LT -> tooMuchData packedLength soFar start here
           GT -> do
             value <- wireGetEnum toMaybe'Enum
-            next $! soFar |> value
+            seq value $ next (soFar |> value)
   next Seq.empty
  where
   Just e = undefined `asTypeOf` (toMaybe'Enum undefined)
@@ -292,14 +295,14 @@ genericPacked ft = do
   packedLength <- getVarInt
   start <- bytesRead
   let stop = packedLength+start
-      next soFar = do
+      next !soFar = do
         here <- bytesRead
         case compare stop here of
           EQ -> return soFar
           LT -> tooMuchData packedLength soFar start here
           GT -> do
             value <- wireGet ft
-            next $! soFar |> value
+            seq value $! next $! soFar |> value
   next Seq.empty
  where
   tooMuchData packedLength soFar start here =
@@ -310,7 +313,7 @@ genericPacked ft = do
 -- getMessageWith assumes the wireTag for the message, if it existed, has already been read.
 -- getMessageWith assumes that it still needs to read the Varint encoded length of the message.
 {- manyTAT.bin testing INLINE getMessageWith but made slower -}
-getMessageWith :: (Mergeable message, ReflectDescriptor message)
+getMessageWith :: (Default message, ReflectDescriptor message)
 --               => (WireTag -> FieldId -> WireType -> message -> Get message)
                => (WireTag -> message -> Get message)
                -> Get message
@@ -319,8 +322,8 @@ getMessageWith updater = do
   start <- bytesRead
   let stop = messageLength+start
       -- switch from go to go' once all the required fields have been found
-      go reqs message | Set.null reqs = go' message
-                      | otherwise = do
+      go reqs !message | Set.null reqs = go' message
+                       | otherwise = do
         here <- bytesRead
         case compare stop here of
           EQ -> notEnoughData messageLength start
@@ -330,7 +333,7 @@ getMessageWith updater = do
             let -- (fieldId,wireType) = splitWireTag wireTag
                 reqs' = Set.delete wireTag reqs
             updater wireTag {- fieldId wireType -} message >>= go reqs'
-      go' message = do
+      go' !message = do
         here <- bytesRead
         case compare stop here of
           EQ -> return message
@@ -341,7 +344,7 @@ getMessageWith updater = do
             updater wireTag {- fieldId wireType -} message >>= go'
   go required initialMessage
  where
-  initialMessage = mergeEmpty
+  initialMessage = defaultValue
   (GetMessageInfo {requiredTags=required}) = getMessageInfo initialMessage
   notEnoughData messageLength start =
       throwError ("Text.ProtocolBuffers.WireMessage.getMessageWith: Required fields missing when processing "
@@ -380,7 +383,7 @@ getMessageWith updater = do
             updater wireTag {- fieldId wireType -} message >>= go'
   go required initialMessage
  where
-  initialMessage = mergeEmpty
+  initialMessage = defaultValue
   (GetMessageInfo {requiredTags=required}) = getMessageInfo initialMessage
   notEnoughData messageLength start =
       throwError ("Text.ProtocolBuffers.WireMessage.getMessageWith: Required fields missing when processing "
@@ -398,14 +401,14 @@ getMessageWith updater = do
 -- getBareMessageWith will consume the entire ByteString it is operating on, or until it
 -- finds any STOP_GROUP tag (wireType == 4)
 {- manyTAT.bin testing INLINE getBareMessageWith but made slower -}
-getBareMessageWith :: (Mergeable message, ReflectDescriptor message)
+getBareMessageWith :: (Default message, ReflectDescriptor message)
 --                   => (WireTag -> FieldId -> WireType -> message -> Get message) -- handle wireTags that are unknown or produce errors
                    => (WireTag -> message -> Get message) -- handle wireTags that are unknown or produce errors
                    -> Get message
 getBareMessageWith updater = go required initialMessage
  where
-  go reqs message | Set.null reqs = go' message
-                  | otherwise = do
+  go reqs !message | Set.null reqs = go' message
+                   | otherwise = do
     done <- isReallyEmpty
     if done then notEnoughData
       else do
@@ -414,7 +417,7 @@ getBareMessageWith updater = go required initialMessage
         if wireType == 4 then notEnoughData -- END_GROUP too soon
           else let reqs' = Set.delete wireTag reqs
                in updater wireTag {- fieldId wireType -} message >>= go reqs'
-  go' message = do
+  go' !message = do
     done <- isReallyEmpty
     if done then return message
       else do
@@ -422,7 +425,7 @@ getBareMessageWith updater = go required initialMessage
         let (_fieldId,wireType) = splitWireTag wireTag
         if wireType == 4 then return message
           else updater wireTag {- fieldId wireType -} message >>= go'
-  initialMessage = mergeEmpty
+  initialMessage = defaultValue
   (GetMessageInfo {requiredTags=required}) = getMessageInfo initialMessage
   notEnoughData = throwError ("Text.ProtocolBuffers.WireMessage.getBareMessageWith: Required fields missing when processing "
                               ++ (show . descName . reflectDescriptorInfo $ initialMessage))
@@ -617,7 +620,7 @@ wireGetEnum :: (Typeable e, Enum e) => (Int -> Maybe e) -> Get e
 wireGetEnum toMaybe'Enum = do
   int <- wireGet 14 -- uses the "instance Wire Int" defined above
   case toMaybe'Enum int of
-    Just v -> return v
+    Just !v -> return v
     Nothing -> throwError (msg ++ show int)
  where msg = "Bad wireGet of Enum "++show (typeOf (undefined `asTypeOf` typeHack toMaybe'Enum))++", unrecognized Int value is "
        typeHack :: (Int -> Maybe e) -> e
@@ -713,7 +716,7 @@ putVarUInt b = let go i | i < 0x80 = putWord8 (fromIntegral i)
 wireGetFromWire :: FieldId -> WireType -> Get ByteString
 wireGetFromWire fi wt = getLazyByteString =<< calcLen where
   calcLen = case wt of
-              0 -> lenOf (spanOf (>=128) >> skip 1) -- highBitRun
+              0 -> highBitRun -- lenOf (spanOf (>=128) >> skip 1)
               1 -> return 8
               2 -> lookAhead $ do
                      here <- bytesRead
@@ -727,7 +730,7 @@ wireGetFromWire fi wt = getLazyByteString =<< calcLen where
   lenOf g = do here <- bytesRead
                there <- lookAhead (g >> bytesRead)
                trace (":wireGetFromWire.lenOf: "++show ((fi,wt),(here,there,there-here))) $ return (there-here)
-          
+
 -- | After a group start tag with the given 'FieldId' this will skip
 -- ahead in the stream past the end tag of that group.  Used by
 -- 'wireGetFromWire' to help compule the length of an unknown field
