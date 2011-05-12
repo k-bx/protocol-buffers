@@ -39,7 +39,7 @@ import qualified Text.DescriptorProtos.FileDescriptorProto            as D.FileD
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections
-import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag,toPackedWireTag,runPut)
+import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag,toPackedWireTag,runPut,Wire(..))
 import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..))
 
 import qualified Data.Foldable as F(foldr,toList)

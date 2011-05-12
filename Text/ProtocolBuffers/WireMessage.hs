@@ -61,7 +61,7 @@ import Data.Typeable (Typeable(..))
 import Data.Binary.Put (Put,runPut,putWord8,putWord32le,putWord64le,putLazyByteString)
 
 import Text.ProtocolBuffers.Basic
-import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,runGetAll,bytesRead,isReallyEmpty
+import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,runGetAll,bytesRead,isReallyEmpty,decode7,decode7unrolled
                                        ,spanOf,skip,lookAhead,highBitRun -- ,getByteString
                                        ,getWord8,getWord32le,getWord64le,getLazyByteString)
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
@@ -547,14 +547,15 @@ instance Wire Bool where
   wireSize {- TYPE_BOOL     -} 8      _ = 1
   wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_BOOL     -} 8  False = putWord8 0
-  wirePut  {- TYPE_BOOL     -} 8  True  = putWord8 1 -- google's wire_format_inl.h
+  wirePut  {- TYPE_BOOL     -} 8  True  = putWord8 1 -- google's wire_format_lite_inl.h
   wirePut ft x = wirePutErr ft x
   wireGet  {- TYPE_BOOL     -} 8        = do
-    x <- getVarInt :: Get Int32 -- google's wire_format_inl.h line 97
+    x <- getVarInt :: Get Int32 -- google's wire_format_lit_inl.h line 155
     case x of
       0 -> return False
-      x' | x' < 128 -> return True
-      _ -> throwError ("TYPE_BOOL read failure : " ++ show x)
+      _ -> return True
+--      x' | x' < 128 -> return True
+--      _ -> throwError ("TYPE_BOOL read failure : " ++ show x)
   wireGet ft = wireGetErr ft
   wireGetPacked 8 = genericPacked 8
   wireGetPacked ft = wireGetErr ft
@@ -630,7 +631,7 @@ zzDecode32 w = (fromIntegral (w `shiftR` 1)) `xor` (negate (fromIntegral (w .&. 
 zzDecode64 :: Word64 -> Int64
 zzDecode64 w = (fromIntegral (w `shiftR` 1)) `xor` (negate (fromIntegral (w .&. 1)))
 
-{-
+
 -- The above is tricky, so the testing roundtrips and versus examples is needed:
 testZZ :: Bool
 testZZ = and (concat testsZZ)
@@ -648,10 +649,12 @@ testZZ = and (concat testsZZ)
                     ] ]
         values :: (Bounded a,Integral a) => [a]
         values = [minBound,div minBound 2,-3,-2,-1,0,1,2,3,div maxBound 2, maxBound]
--}
 
-{-# INLINE getVarInt #-}
+
 getVarInt :: (Integral a, Bits a) => Get a
+{-# INLINE getVarInt #-}
+getVarInt = decode7unrolled -- decode7 -- getVarInt below
+{-
 getVarInt = do -- optimize first read instead of calling (go 0 0)
   b <- getWord8
   if testBit b 7 then go 7 (fromIntegral (b .&. 0x7F))
@@ -661,6 +664,7 @@ getVarInt = do -- optimize first read instead of calling (go 0 0)
     b <- getWord8
     if testBit b 7 then go (n+7) (val .|. ((fromIntegral (b .&. 0x7F)) `shiftL` n))
       else return (val .|. ((fromIntegral b) `shiftL` n))
+-}
 
 -- This can be used on any Integral type and is needed for signed types; unsigned can use putVarUInt below.
 -- This has been changed to handle only up to 64 bit integral values (to match documentation).

@@ -51,7 +51,7 @@ data Options = Options { optPrefix :: [MName String]
   deriving Show
 
 setPrefix,setTarget,setInclude,setProto,setDesc :: String -> Options -> Options
-setImports,setVerbose,setUnknown,setDryRun :: Options -> Options
+setImports,setVerbose,setUnknown,setLazy,setDryRun :: Options -> Options
 setPrefix   s o = o { optPrefix = toPrefix s }
 setTarget   s o = o { optTarget = (LocalFP s) }
 setInclude  s o = o { optInclude = LocalFP s : optInclude o }

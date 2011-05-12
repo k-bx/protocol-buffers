@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        2.0.0
+version:        2.0.2
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -60,7 +60,7 @@ Library
 
   build-depends:   bytestring,
                    containers,
-                   protocol-buffers == 2.0.0
+                   protocol-buffers == 2.0.2
 
   if flag(small_base)
         build-depends: base == 4.*

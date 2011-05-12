@@ -56,6 +56,8 @@ module Text.ProtocolBuffers.Get
     ,getWord16be,getWord32be,getWord64be
     ,getWord16le,getWord32le,getWord64le
     ,getWordhost,getWord16host,getWord32host,getWord64host
+    --
+    ,scan,decode7,decode7size,decode7unrolled
     ) where
 
 -- The Get monad is an instance of binary-strict's BinaryParser:
@@ -69,22 +71,23 @@ import Control.Monad.Error.Class(MonadError(throwError,catchError),Error(strMsg)
 -- implementation imports
 import Control.Monad(ap)                             -- instead of Functor.fmap; ap for Applicative
 --import Control.Monad(replicateM,(>=>))               -- XXX testing
-import Data.Bits(Bits((.|.)))
+import Data.Bits(Bits((.|.),(.&.)),shiftL)
 import qualified Data.ByteString as S(concat,length,null,splitAt,findIndex)
 --import qualified Data.ByteString as S(unpack) -- XXX testing
-import qualified Data.ByteString.Internal as S(ByteString,toForeignPtr,inlinePerformIO)
-import qualified Data.ByteString.Unsafe as S(unsafeIndex)
+import qualified Data.ByteString.Internal as S(ByteString(..),toForeignPtr,inlinePerformIO)
+import qualified Data.ByteString.Unsafe as S(unsafeIndex,unsafeTake,unsafeDrop)
 import qualified Data.ByteString.Lazy as L(take,drop,length,span,toChunks,fromChunks,null,findIndex)
 --import qualified Data.ByteString.Lazy as L(pack) -- XXX testing
 import qualified Data.ByteString.Lazy.Internal as L(ByteString(..),chunk)
 import qualified Data.Foldable as F(foldr,foldr1)    -- used with Seq
-import Data.Int(Int64)                               -- index type for L.ByteString
+import Data.Int(Int32,Int64)                         -- index type for L.ByteString
 import Data.Monoid(Monoid(mempty,mappend))           -- Writer has a Monoid contraint
 import Data.Sequence(Seq,null,(|>))                  -- used for future queue in handler state
 import Data.Word(Word,Word8,Word16,Word32,Word64)
 import Foreign.ForeignPtr(withForeignPtr)
-import Foreign.Ptr(castPtr,plusPtr)
+import Foreign.Ptr(Ptr,castPtr,plusPtr,minusPtr)
 import Foreign.Storable(Storable(peek,sizeOf))
+import System.IO.Unsafe(unsafePerformIO)
 #if defined(__GLASGOW_HASKELL__) && !defined(__HADDOCK__)
 import GHC.Base(Int(..),uncheckedShiftL#)
 import GHC.Word(Word16(..),Word32(..),Word64(..),uncheckedShiftL64#)
@@ -100,6 +103,322 @@ data S = S { top :: {-# UNPACK #-} !S.ByteString
            , current :: !L.ByteString
            , consumed :: {-# UNPACK #-} !Int64
            } deriving Show
+
+
+data T s = T {-# UNPACK #-} !Int s
+
+-- | A stateful scanner.  The predicate consumes and transforms a
+-- state argument, and each transformed state is passed to successive
+-- invocations of the predicate on each byte of the input until one
+-- returns 'Nothing' or the input ends.
+--
+-- This parser does not fail.  It will return an empty string if the
+-- predicate returns 'Nothing' on the first byte of input.
+--
+-- /Note/: Because this parser does not fail, do not use it with
+-- combinators such as 'many', because such parsers loop until a
+-- failure occurs.  Careless use will thus result in an infinite loop.
+scan :: s -> (s -> Word8 -> Maybe s) -> Get (S.ByteString,s)
+scan s0 p = do
+  (chunks,s) <- go [] s0
+  case chunks of
+    [x] -> return (x,s)
+    xs  -> return (S.concat . reverse $ xs, s)
+ where
+  go acc s1 = do
+    let scanner (S.PS fp off len) =
+          withForeignPtr fp $ \ptr0 -> do
+            let start = ptr0 `plusPtr` off
+                end   = start `plusPtr` len
+                inner ptr !s
+                  | ptr < end = do
+                      w <- peek ptr
+                      case p s w of
+                        Just s' -> inner (ptr `plusPtr` 1) s'
+                        _       -> done (ptr `minusPtr` start) s
+                  | otherwise = done (ptr `minusPtr` start) s
+                done !i !s = return (T i s)
+            inner start s1
+    (S ss bs n) <- getFull
+    let T i s' = unsafePerformIO $ scanner ss
+        h = S.unsafeTake i ss
+        t = S.unsafeDrop i ss
+        n' = n + fromIntegral i
+    if S.null t
+      then do
+        case bs of
+          L.Empty -> do
+            putFull (S mempty mempty n')
+            continue <- suspend
+            if continue
+              then go (h:acc) s'
+              else return (h:acc,s')
+          L.Chunk ss' bs' -> do
+            putFull (S ss' bs' n')
+            go (h:acc) s'
+      else do
+        putFull (S t bs n')
+        return ((h:acc),s')
+
+
+data T3 s = T3 !Int !s !Int
+
+--data TU s = TU'OK !s !Int | TU'DO (Get s)
+data TU s = TU'OK !s !Int
+
+{-# SPECIALIZE decode7unrolled :: Get Int64 #-}
+{-# SPECIALIZE decode7unrolled :: Get Int32 #-}
+{-# SPECIALIZE decode7unrolled :: Get Word64 #-}
+{-# SPECIALIZE decode7unrolled :: Get Word32 #-}
+{-# SPECIALIZE decode7unrolled :: Get Int #-}
+{-# SPECIALIZE decode7unrolled :: Get Integer #-}
+decode7unrolled :: forall s. (Num s,Integral s, Bits s) => Get s
+{-# NOINLINE decode7unrolled #-}
+decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc ->
+  let (TU'OK x i) = 
+        unsafePerformIO $ withForeignPtr fp $ \ptr0 -> do
+            let ok :: s -> Int -> IO (TU s)
+                ok x0 i0 = return (TU'OK x0 i0)
+                more,err :: IO (TU s)
+                more = return (TU'OK 0 0)  -- decode7
+                err = return (TU'OK 0 (-1))  -- throwError
+                {-# INLINE ok #-}
+                {-# INLINE more #-}
+                {-# INLINE err #-}
+
+            let start = ptr0 `plusPtr` off :: Ptr Word8
+            b'1 <- peek start
+            if b'1 < 128 then ok (fromIntegral b'1) 1 else do
+            let !val'1 = fromIntegral (b'1 .&. 0x7F)
+                !end = start `plusPtr` len
+                !ptr2 = start `plusPtr` 1 :: Ptr Word8
+            if ptr2 >= end then more else do
+
+            b'2 <- peek ptr2
+            if b'2 < 128 then ok (val'1 .|. (fromIntegral b'2 `shiftL` 7)) 2 else do
+            let !val'2 = (val'1 .|. (fromIntegral (b'2 .&. 0x7F) `shiftL` 7))
+                !ptr3 = ptr2 `plusPtr` 1
+            if ptr3 >= end then more else do
+
+            b'3 <- peek ptr3
+            if b'3 < 128 then ok (val'2 .|. (fromIntegral b'3 `shiftL` 14)) 3 else do
+            let !val'3 = (val'2 .|. (fromIntegral (b'3 .&. 0x7F) `shiftL` 14))
+                !ptr4 = ptr3 `plusPtr` 1
+            if ptr4 >= end then more else do
+
+            b'4 <- peek ptr4
+            if b'4 < 128 then ok (val'3 .|. (fromIntegral b'4 `shiftL` 21)) 4 else do
+            let !val'4 = (val'3 .|. (fromIntegral (b'4 .&. 0x7F) `shiftL` 21))
+                !ptr5 = ptr4 `plusPtr` 1
+            if ptr5 >= end then more else do
+
+            b'5 <- peek ptr5
+            if b'5 < 128 then ok (val'4 .|. (fromIntegral b'5 `shiftL` 28)) 5 else do
+            let !val'5 = (val'4 .|. (fromIntegral (b'5 .&. 0x7F) `shiftL` 28))
+                !ptr6 = ptr5 `plusPtr` 1
+            if ptr6 >= end then more else do
+               
+            b'6 <- peek ptr6
+            if b'6 < 128 then ok (val'5 .|. (fromIntegral b'6 `shiftL` 35)) 6 else do
+            let !val'6 = (val'5 .|. (fromIntegral (b'6 .&. 0x7F) `shiftL` 35))
+                !ptr7 = ptr6 `plusPtr` 1
+            if ptr7 >= end then more else do
+               
+            b'7 <- peek ptr7
+            if b'7 < 128 then ok (val'6 .|. (fromIntegral b'7 `shiftL` 42)) 7 else do
+            let !val'7 = (val'6 .|. (fromIntegral (b'7 .&. 0x7F) `shiftL` 42))
+                !ptr8 = ptr7 `plusPtr` 1
+            if ptr8 >= end then more else do
+               
+            b'8 <- peek ptr8
+            if b'8 < 128 then ok (val'7 .|. (fromIntegral b'8 `shiftL` 49)) 8 else do
+            let !val'8 = (val'7 .|. (fromIntegral (b'8 .&. 0x7F) `shiftL` 49))
+                !ptr9 = ptr8 `plusPtr` 1
+            if ptr9 >= end then more else do
+               
+            b'9 <- peek ptr9
+            if b'9 < 128 then ok (val'8 .|. (fromIntegral b'9 `shiftL` 56)) 9 else do
+            let !val'9 = (val'8 .|. (fromIntegral (b'9 .&. 0x7F) `shiftL` 56))
+                !ptrA = ptr9 `plusPtr` 1
+            if ptrA >= end then more else do
+
+            b'A <- peek ptrA
+            if b'A < 128 then ok (val'9 .|. (fromIntegral b'A `shiftL` 63)) 10 else do
+            err
+
+  in if i > 0
+       then let ss' = (S.unsafeDrop i ss)
+                n' = n+fromIntegral i
+            in case S.null ss' of
+                 False -> sc x (S ss' bs n') pc
+                 True -> case bs of
+                           L.Empty -> sc x (S mempty mempty n') pc
+                           L.Chunk ss'2 bs'2 -> sc x (S ss'2 bs'2 n') pc
+        else if i==0 then unGet decode7 sc sIn pc
+               else unGet (throwError $ "Text.ProtocolBuffers.Get.decode7unrolled: more than 10 bytes needed at bytes read of "++show n) sc sIn pc
+
+{- used up till bench-024
+decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc ->
+  let r = unsafePerformIO $ withForeignPtr fp $ \ptr0 -> do
+            let ok :: s -> Int -> IO (TU s)
+                ok x i = return (TU'OK x i)
+                bad :: Get s -> IO (TU s)
+                bad y = return (TU'DO y)
+            let start = ptr0 `plusPtr` off :: Ptr Word8
+            b'1 <- peek start
+            if b'1 < 128 then ok (fromIntegral b'1) 1 else do
+            let !val'1 = fromIntegral (b'1 .&. 0x7F)
+                !end = start `plusPtr` len
+                !ptr2 = start `plusPtr` 1 :: Ptr Word8
+            if ptr2 >= end then bad decode7 else do
+
+            b'2 <- peek ptr2
+            if b'2 < 128 then ok (val'1 .|. (fromIntegral b'2 `shiftL` 7)) 2 else do
+            let !val'2 = (val'1 .|. (fromIntegral (b'2 .&. 0x7F) `shiftL` 7))
+                !ptr3 = ptr2 `plusPtr` 1
+            if ptr3 >= end then bad decode7 else do
+
+            b'3 <- peek ptr3
+            if b'3 < 128 then ok (val'2 .|. (fromIntegral b'3 `shiftL` 14)) 3 else do
+            let !val'3 = (val'2 .|. (fromIntegral (b'3 .&. 0x7F) `shiftL` 14))
+                !ptr4 = ptr3 `plusPtr` 1
+            if ptr4 >= end then bad decode7 else do
+
+            b'4 <- peek ptr4
+            if b'4 < 128 then ok (val'3 .|. (fromIntegral b'4 `shiftL` 21)) 4 else do
+            let !val'4 = (val'3 .|. (fromIntegral (b'4 .&. 0x7F) `shiftL` 21))
+                !ptr5 = ptr4 `plusPtr` 1
+            if ptr5 >= end then bad decode7 else do
+
+            b'5 <- peek ptr5
+            if b'5 < 128 then ok (val'4 .|. (fromIntegral b'5 `shiftL` 28)) 5 else do
+            let !val'5 = (val'4 .|. (fromIntegral (b'5 .&. 0x7F) `shiftL` 28))
+                !ptr6 = ptr5 `plusPtr` 1
+            if ptr6 >= end then bad decode7 else do
+               
+            b'6 <- peek ptr6
+            if b'6 < 128 then ok (val'5 .|. (fromIntegral b'6 `shiftL` 35)) 6 else do
+            let !val'6 = (val'5 .|. (fromIntegral (b'6 .&. 0x7F) `shiftL` 35))
+                !ptr7 = ptr6 `plusPtr` 1
+            if ptr7 >= end then bad decode7 else do
+               
+            b'7 <- peek ptr7
+            if b'7 < 128 then ok (val'6 .|. (fromIntegral b'7 `shiftL` 42)) 7 else do
+            let !val'7 = (val'6 .|. (fromIntegral (b'7 .&. 0x7F) `shiftL` 42))
+                !ptr8 = ptr7 `plusPtr` 1
+            if ptr8 >= end then bad decode7 else do
+               
+            b'8 <- peek ptr8
+            if b'8 < 128 then ok (val'7 .|. (fromIntegral b'8 `shiftL` 49)) 8 else do
+            let !val'8 = (val'7 .|. (fromIntegral (b'8 .&. 0x7F) `shiftL` 49))
+                !ptr9 = ptr8 `plusPtr` 1
+            if ptr9 >= end then bad decode7 else do
+               
+            b'9 <- peek ptr9
+            if b'9 < 128 then ok (val'8 .|. (fromIntegral b'9 `shiftL` 56)) 9 else do
+            let !val'9 = (val'8 .|. (fromIntegral (b'9 .&. 0x7F) `shiftL` 56))
+                !ptrA = ptr9 `plusPtr` 1
+            if ptrA >= end then bad decode7 else do
+
+            b'A <- peek ptrA
+            if b'A < 128 then ok (val'9 .|. (fromIntegral b'A `shiftL` 63)) 10 else do
+
+            bad (throwError $ "Text.ProtocolBuffers.Get.decode7unrolled: more than 10 bytes needed at bytes read of "++show n)
+  in case r of
+    TU'OK x i -> let ss' = (S.unsafeDrop i ss)
+                     n' = n+fromIntegral i
+                 in case S.null ss' of
+                      False -> sc x (S ss' bs n') pc
+                      True -> case bs of
+                                L.Empty -> sc x (S mempty mempty n') pc
+                                L.Chunk ss'2 bs'2 -> sc x (S ss'2 bs'2 n') pc
+    TU'DO y -> unGet y sc sIn pc
+-}
+{-# SPECIALIZE decode7 :: Get Int64 #-}
+{-# SPECIALIZE decode7 :: Get Int32 #-}
+{-# SPECIALIZE decode7 :: Get Word64 #-}
+{-# SPECIALIZE decode7 :: Get Word32 #-}
+{-# SPECIALIZE decode7 :: Get Int #-}
+{-# SPECIALIZE decode7 :: Get Integer #-}
+decode7 :: forall s. (Integral s, Bits s) => Get s
+{-# NOINLINE decode7 #-}
+decode7 = go 0 0
+ where
+  go !s1 !shift1 = do
+    let scanner (S.PS fp off len) =
+          withForeignPtr fp $ \ptr0 -> do
+            let start = ptr0 `plusPtr` off
+                end   = start `plusPtr` len
+                inner :: (Ptr Word8) -> s -> Int -> IO (T3 s)
+                inner !ptr !s !shift
+                  | ptr < end = do
+                      w <- peek ptr
+                      if (128>) w
+                        then return $ T3 (succ (ptr `minusPtr` start) )
+                                         (s .|. ((fromIntegral w) `shiftL` shift))
+                                         (-1) -- negative shift indicates satisfied
+                        else inner (ptr `plusPtr` 1) (s .|. ((fromIntegral (w .&. 0x7F)) `shiftL` shift)) (shift+7)
+                  | otherwise = return $ T3 (ptr `minusPtr` start) s shift
+            inner start s1 shift1
+    (S ss bs n) <- getFull
+    let (T3 i sOut shiftOut) = unsafePerformIO $ scanner ss
+        t = S.unsafeDrop i ss
+        n' = n + fromIntegral i
+    if 0 <= shiftOut
+      then do
+        case bs of
+          L.Empty -> do
+            putFull (S mempty mempty n')
+            continue <- suspend
+            if continue
+              then go sOut shiftOut
+              else return sOut
+          L.Chunk ss' bs' -> do
+            putFull (S ss' bs' n')
+            go sOut shiftOut
+      else do
+        putFull (S t bs n')
+        return sOut
+
+data T2 = T2 !Int64 !Bool
+
+decode7size :: Get Int64
+decode7size = go 0
+ where
+  go !len1 = do
+    let scanner (S.PS fp off len) =
+          withForeignPtr fp $ \ptr0 -> do
+            let start = ptr0 `plusPtr` off
+                end   = start `plusPtr` len
+                inner :: (Ptr Word8) -> IO T2
+                inner !ptr
+                  | ptr < end = do
+                      w <- peek ptr
+                      if (128>) w
+                        then return $ T2 (fromIntegral (ptr `minusPtr` start)) True
+                        else inner (ptr `plusPtr` 1)
+                  | otherwise = return $ T2 (fromIntegral (ptr `minusPtr` start)) False
+            inner start
+    (S ss bs n) <- getFull
+    let (T2 i ok) = unsafePerformIO $ scanner ss
+        t = S.unsafeDrop (fromIntegral i) ss
+        n' = n + i
+        len2 = len1 + i
+    if ok
+      then do
+        putFull (S t bs n')
+        return len2
+      else do
+        case bs of
+          L.Empty -> do
+            putFull (S mempty mempty n')
+            continue <- suspend
+            if continue
+              then go len2
+              else return len2
+          L.Chunk ss' bs' -> do
+            putFull (S ss' bs' n')
+            go len2
 
 -- Private Internal error handling stack type
 -- This must NOT be exposed by this module
