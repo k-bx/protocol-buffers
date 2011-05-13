@@ -1,5 +1,5 @@
 name:           hprotoc
-version:        2.0.2
+version:        2.0.3
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -22,14 +22,14 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Executable hprotoc
+  build-depends:   protocol-buffers == 2.0.3,
+                   protocol-buffers-descriptor == 2.0.3
   Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell
   build-tools:     alex
   ghc-options:     -O2 -Wall -fspec-constr-count=10
   ghc-prof-options: -O2 -auto-all -prof
-  build-depends:   protocol-buffers == 2.0.2,
-                   protocol-buffers-descriptor == 2.0.2
   build-depends:   array,
                    binary,
                    bytestring,

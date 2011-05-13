@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        2.0.2
+version:        2.0.3
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -26,6 +26,11 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Library
+  build-depends: protocol-buffers == 2.0.3,
+                 bytestring,
+                 containers
+                 
+
   -- most files are in src-auto-generated
   -- Options is from src-hand-writtern
   Hs-Source-Dirs:  src-auto-generated,src-hand-written
@@ -57,10 +62,6 @@ Library
                    Text.DescriptorProtos.SourceCodeInfo.Location
                    Text.DescriptorProtos.UninterpretedOption
                    Text.DescriptorProtos.UninterpretedOption.NamePart
-
-  build-depends:   bytestring,
-                   containers,
-                   protocol-buffers == 2.0.2
 
   if flag(small_base)
         build-depends: base == 4.*

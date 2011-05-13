@@ -69,15 +69,15 @@ import Control.Monad.Error.Class(MonadError(throwError,catchError),Error(strMsg)
 -- It can be a MonadCont, but the semantics are too broken without a ton of work.
 
 -- implementation imports
+--import Control.Monad(replicateM,(>=>))           -- XXX testing
+--import qualified Data.ByteString as S(unpack)    -- XXX testing
+--import qualified Data.ByteString.Lazy as L(pack) -- XXX testing
 import Control.Monad(ap)                             -- instead of Functor.fmap; ap for Applicative
---import Control.Monad(replicateM,(>=>))               -- XXX testing
 import Data.Bits(Bits((.|.),(.&.)),shiftL)
 import qualified Data.ByteString as S(concat,length,null,splitAt,findIndex)
---import qualified Data.ByteString as S(unpack) -- XXX testing
 import qualified Data.ByteString.Internal as S(ByteString(..),toForeignPtr,inlinePerformIO)
 import qualified Data.ByteString.Unsafe as S(unsafeIndex,unsafeTake,unsafeDrop)
 import qualified Data.ByteString.Lazy as L(take,drop,length,span,toChunks,fromChunks,null,findIndex)
---import qualified Data.ByteString.Lazy as L(pack) -- XXX testing
 import qualified Data.ByteString.Lazy.Internal as L(ByteString(..),chunk)
 import qualified Data.Foldable as F(foldr,foldr1)    -- used with Seq
 import Data.Int(Int32,Int64)                         -- index type for L.ByteString
@@ -655,7 +655,7 @@ Text/ProtocolBuffers/Get.hs:304:15:
       addFuture :: L.ByteString -> FrameStack b1 -> FrameStack b1
         (bound at Text/ProtocolBuffers/Get.hs:315:12)
 -}
--- XXX I am worried this may change the allocation behavior of the program.
+-- I am worried this may change the allocation behavior of the program. But suspend rarely gets called.
       let checkBool (ErrorFrame _ b) = b
           checkBool (HandlerFrame _ _ _ pc) = checkBool pc
           -- addFuture puts the new data in 'future' where throwError's collect can find and use it

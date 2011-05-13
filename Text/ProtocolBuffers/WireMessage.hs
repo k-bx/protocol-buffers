@@ -25,7 +25,7 @@ module Text.ProtocolBuffers.WireMessage
       -- * The Wire monad itself.  Users should beware that passing an incompatible 'FieldType' is a runtime error or fail
     , Wire(..)
       -- * The internal exports, for use by generated code and the "Text.ProtcolBuffer.Extensions" module
-    , size'Varint,toWireType,toWireTag,toPackedWireTag,mkWireTag
+    , size'WireTag,toWireType,toWireTag,toPackedWireTag,mkWireTag
     , prependMessageSize,putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag,fieldIdOf
     , wireSizeReq,wireSizeOpt,wireSizeRep,wireSizePacked
     , wirePutReq,wirePutOpt,wirePutRep,wirePutPacked
@@ -61,9 +61,9 @@ import Data.Typeable (Typeable(..))
 import Data.Binary.Put (Put,runPut,putWord8,putWord32le,putWord64le,putLazyByteString)
 
 import Text.ProtocolBuffers.Basic
-import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,runGetAll,bytesRead,isReallyEmpty,decode7,decode7unrolled
-                                       ,spanOf,skip,lookAhead,highBitRun -- ,getByteString
-                                       ,getWord8,getWord32le,getWord64le,getLazyByteString)
+import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,runGetAll,bytesRead,isReallyEmpty,decode7unrolled
+                                       ,spanOf,skip,lookAhead,highBitRun -- ,getByteString,getWord8,decode7
+                                       ,getWord32le,getWord64le,getLazyByteString)
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
                                        ,DescriptorInfo(..),GetMessageInfo(..))
 
@@ -88,7 +88,7 @@ messageWithLengthSize msg = wireSize 11 msg
 -- | This computes the size of the 'messageWithLengthSize' and then
 -- adds the length an initial tag with the given 'FieldId'.
 messageAsFieldSize :: (ReflectDescriptor msg,Wire msg) => FieldId -> msg -> WireSize
-messageAsFieldSize fi msg = let headerSize = size'Varint (getWireTag (toWireTag fi 11))
+messageAsFieldSize fi msg = let headerSize = size'WireTag (toWireTag fi 11)
                             in headerSize + messageWithLengthSize msg
 
 -- | This is 'runPut' applied to 'messagePutM'. It result in a
@@ -192,7 +192,7 @@ runGetOnLazy parser bs = resolve (runGetAll parser bs)
 
 -- | Used in generated code.
 prependMessageSize :: WireSize -> WireSize
-prependMessageSize n = n + size'Varint n
+prependMessageSize n = n + size'WireSize n
 
 {-# INLINE wirePutReq #-}
 -- | Used in generated code.
@@ -244,6 +244,7 @@ wireSizeRep tagSize i vs = F.foldl' (\n v -> n + wireSizeReq tagSize i v) 0 vs
 wireSizePacked :: Wire v => Int64 -> FieldType -> Seq v -> Int64
 wireSizePacked tagSize i vs = tagSize + prependMessageSize (F.foldl' (\n v -> n + wireSize i v) 0 vs)
 
+{-# INLINE putSize #-}
 -- | Used in generated code.
 putSize :: WireSize -> Put
 putSize = putVarUInt
@@ -480,8 +481,8 @@ instance Wire Float where
   wireGetPacked ft = wireGetErr ft
 
 instance Wire Int64 where
-  wireSize {- TYPE_INT64    -} 3      x = size'Varint x
-  wireSize {- TYPE_SINT64   -} 18     x = size'Varint (zzEncode64 x)
+  wireSize {- TYPE_INT64    -} 3      x = size'Int64 x
+  wireSize {- TYPE_SINT64   -} 18     x = size'Word64 (zzEncode64 x)
   wireSize {- TYPE_SFIXED64 -} 16     _ = 8
   wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_INT64    -} 3      x = putVarSInt x
@@ -498,8 +499,8 @@ instance Wire Int64 where
   wireGetPacked ft = wireGetErr ft
 
 instance Wire Int32 where
-  wireSize {- TYPE_INT32    -} 5      x = size'Varint x
-  wireSize {- TYPE_SINT32   -} 17     x = size'Varint (zzEncode32 x)
+  wireSize {- TYPE_INT32    -} 5      x = size'Int32 x
+  wireSize {- TYPE_SINT32   -} 17     x = size'Word32 (zzEncode32 x)
   wireSize {- TYPE_SFIXED32 -} 15     _ = 4
   wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_INT32    -} 5      x = putVarSInt x
@@ -516,7 +517,7 @@ instance Wire Int32 where
   wireGetPacked ft = wireGetErr ft
 
 instance Wire Word64 where
-  wireSize {- TYPE_UINT64   -} 4      x = size'Varint x
+  wireSize {- TYPE_UINT64   -} 4      x = size'Word64 x
   wireSize {- TYPE_FIXED64  -} 6      _ = 8
   wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_UINT64   -} 4      x = putVarUInt x
@@ -530,7 +531,7 @@ instance Wire Word64 where
   wireGetPacked ft = wireGetErr ft
 
 instance Wire Word32 where
-  wireSize {- TYPE_UINT32   -} 13     x = size'Varint x
+  wireSize {- TYPE_UINT32   -} 13     x = size'Word32 x
   wireSize {- TYPE_FIXED32  -} 7      _ = 4
   wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_UINT32   -} 13     x = putVarUInt x
@@ -580,7 +581,7 @@ instance Wire ByteString where
 
 -- Wrap a protocol-buffer Enum in fromEnum or toEnum and serialize the Int:
 instance Wire Int where
-  wireSize {- TYPE_ENUM    -} 14      x = size'Varint x
+  wireSize {- TYPE_ENUM    -} 14      x = size'Int x
   wireSize ft x = wireSizeErr ft x
   wirePut  {- TYPE_ENUM    -} 14      x = putVarSInt x
   wirePut ft x = wirePutErr ft x
@@ -607,18 +608,71 @@ wireGetEnum toMaybe'Enum = do
        typeHack f = fromMaybe undefined (f undefined)
 
 -- This will have to examine the value of positive numbers to get the size
+size'WireTag :: WireTag -> Int64
+size'WireTag = size'Word32 . getWireTag
+
+size'Word32 :: Word32 -> Int64
+size'Word32 b | b <= 0x7F = 1
+              | b <= 0x3FFF = 2
+              | b <= 0x1FFFFF = 3
+              | b <= 0xFFFFFFF = 4
+              | otherwise = 5
+
+size'Int32 :: Int32 -> Int64
+size'Int32 b | b < 0 = 10
+             | b <= 0x7F = 1
+             | b <= 0x3FFF = 2
+             | b <= 0x1FFFFF = 3
+             | b <= 0xFFFFFFF = 4
+             | otherwise = 5
+
+
+size'Word64 :: Word64 -> Int64
+size'Word64 b | b <= 0x7F = 1
+              | b <= 0x3FFF = 2
+              | b <= 0x1FFFFF = 3
+              | b <= 0xFFFFFFF = 4
+              | b <= 0X7FFFFFFFF = 5
+              | b <= 0x3FFFFFFFFFF = 6
+              | b <= 0x1FFFFFFFFFFFF = 7
+              | b <= 0xFFFFFFFFFFFFFF = 8
+              | b <= 0x7FFFFFFFFFFFFFFF = 9
+              | otherwise = 10
+
+-- Should work for Int of 32 and 64 bits
+size'Int :: Int -> Int64
+size'Int b | b < 0 = 10
+           | b <= 0x7F = 1
+           | b <= 0x3FFF = 2
+           | b <= 0x1FFFFF = 3
+           | b <= 0xFFFFFFF = 4
+           | b <= 0x7FFFFFFF = 5  -- maxBound :: Int32
+           | b <= 0x7FFFFFFFF = 5
+           | b <= 0x3FFFFFFFFFF = 6
+           | b <= 0x1FFFFFFFFFFFF = 7
+           | b <= 0xFFFFFFFFFFFFFF = 8
+           | otherwise = 9
+
+size'Int64,size'WireSize :: Int64 -> Int64
+size'WireSize = size'Int64
+size'Int64 b | b < 0 = 10
+             | b <= 0x7F = 1
+             | b <= 0x3FFF = 2
+             | b <= 0x1FFFFF = 3
+             | b <= 0xFFFFFFF = 4
+             | b <= 0x7FFFFFFFF = 5
+             | b <= 0x3FFFFFFFFFF = 6
+             | b <= 0x1FFFFFFFFFFFF = 7
+             | b <= 0xFFFFFFFFFFFFFF = 8
+             | otherwise = 9
+
+{-
+size'Varint :: (Integral b, Bits b) => b -> Int64
 {-# INLINE size'Varint #-}
-size'Varint :: (Bits a,Integral a) => a -> Int64
 size'Varint b = case compare b 0 of
                   LT -> 10 -- fromIntegral (divBy (bitSize b) 7)
                   EQ -> 1
                   GT -> genericLength . takeWhile (0<) . iterate (`shiftR` 7) $ b
-
-{- unused since I started casting all negative values to Int64
-{-# INLINE divBy #-}
-divBy :: (Ord a, Integral a) => a -> a -> a
-divBy a b = let (q,r) = quotRem (abs a) b
-            in if r==0 then q else succ q
 -}
 
 -- Taken from google's code, but I had to explcitly add fromIntegral in the right places:
@@ -631,7 +685,7 @@ zzDecode32 w = (fromIntegral (w `shiftR` 1)) `xor` (negate (fromIntegral (w .&. 
 zzDecode64 :: Word64 -> Int64
 zzDecode64 w = (fromIntegral (w `shiftR` 1)) `xor` (negate (fromIntegral (w .&. 1)))
 
-
+{-
 -- The above is tricky, so the testing roundtrips and versus examples is needed:
 testZZ :: Bool
 testZZ = and (concat testsZZ)
@@ -647,9 +701,8 @@ testZZ = and (concat testsZZ)
                     , zzEncode64 (-1) == 1, zzEncode32 (-1) == 1
                     , zzEncode64 1 == 2,    zzEncode32 1 == 2
                     ] ]
-        values :: (Bounded a,Integral a) => [a]
-        values = [minBound,div minBound 2,-3,-2,-1,0,1,2,3,div maxBound 2, maxBound]
-
+let values :: (Bounded a,Integral a) => [a]; values = [minBound,div minBound 2 - 1,div minBound 2, div minBound 2 + 1,-257,-256,-255,-129,-128,-127,-3,-2,-1,0,1,2,3,127,128,129,255,256,257,div maxBound 2 - 1, div maxBound 2, div maxBound 2 + 1, maxBound]
+-}
 
 getVarInt :: (Integral a, Bits a) => Get a
 {-# INLINE getVarInt #-}
@@ -669,20 +722,16 @@ getVarInt = do -- optimize first read instead of calling (go 0 0)
 -- This can be used on any Integral type and is needed for signed types; unsigned can use putVarUInt below.
 -- This has been changed to handle only up to 64 bit integral values (to match documentation).
 {-# INLINE putVarSInt #-}
-putVarSInt :: (Typeable a, Integral a, Bits a) => a -> Put
+putVarSInt :: (Integral a, Bits a) => a -> Put
 putVarSInt bIn =
   case compare bIn 0 of
     LT -> let b :: Int64 -- upcast to 64 bit to match documentation of 10 bytes for all negative values
               b = fromIntegral bIn
---               len = divBy (bitSize b) 7               -- (pred len)*7 < bitSize b <= len*7
---               last'Size = (bitSize b)-((pred len)*7)  -- at least 1 and at most 7
---               last'Mask = pred (1 `shiftL` last'Size) -- at least 1 and at most 255
               len :: Int
               len = 10                                -- (pred 10)*7 < 64 <= 10*7
---            last'Size = 1                           -- 64 - (pred 10)*7
               last'Mask = 1                           -- pred (1 `shiftL` 1)
-              go i 1 = putWord8 (fromIntegral (i .&. last'Mask))
-              go i n = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7) (pred n)
+              go !i 1 = putWord8 (fromIntegral (i .&. last'Mask))
+              go !i n = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7) (pred n)
           in go b len
     EQ -> putWord8 0
     GT -> putVarUInt bIn
@@ -690,9 +739,8 @@ putVarSInt bIn =
 -- This should be used on unsigned Integral types only (not checked)
 {-# INLINE putVarUInt #-}
 putVarUInt :: (Integral a, Bits a) => a -> Put
-putVarUInt b = let go i | i < 0x80 = putWord8 (fromIntegral i)
-                        | otherwise = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> go (i `shiftR` 7)
-               in go b
+putVarUInt i | i < 0x80 = putWord8 (fromIntegral i)
+             | otherwise = putWord8 (fromIntegral (i .&. 0x7F) .|. 0x80) >> putVarUInt (i `shiftR` 7)
 
 -- | This reads in the raw bytestring corresponding to an field known
 -- only through the wiretag's 'FieldId' and 'WireType'.
@@ -741,6 +789,7 @@ skipGroup start_fi = go where
     WIRETYPE_END_GROUP        = 4,
     WIRETYPE_FIXED32          = 5, };
 
+  FieldType is
     TYPE_DOUBLE         = 1;
     TYPE_FLOAT          = 2;
     TYPE_INT64          = 3;
@@ -760,6 +809,7 @@ skipGroup start_fi = go where
     TYPE_SINT32         = 17;
     TYPE_SINT64         = 18; -}
 -- http://code.google.com/apis/protocolbuffers/docs/encoding.html
+
 toWireType :: FieldType -> WireType
 toWireType  1 =  1
 toWireType  2 =  5

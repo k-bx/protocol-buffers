@@ -706,21 +706,21 @@ parseWireExtPackedSeq k@(Key i t mv) wt raw | wt /= 2 {- packed wire type is 2, 
 wireSizeExtField :: ExtField -> WireSize
 wireSizeExtField (ExtField m) = F.foldl' aSize 0 (M.assocs m)  where
   aSize old (fi,(ExtFromWire raw)) =
-    let toSize (EP wt bs) = (size'Varint (getWireTag (mkWireTag fi wt))) + L.length bs
+    let toSize (EP wt bs) = size'WireTag (mkWireTag fi wt) + L.length bs
     in F.foldl' (\oldVal new -> oldVal + toSize new) old raw
 {-
   aSize old (fi,(ExtFromWire raw)) = old +
-    let tagSize = size'Varint (getWireTag (mkWireTag fi wt))
+    let tagSize = size'WireTag (mkWireTag fi wt)
     in F.foldl' (\oldVal new -> oldVal + L.length new) (fromIntegral (Seq.length raw) * tagSize) raw
 -}
   aSize old (fi,(ExtOptional ft (GPDyn GPWitness d))) = old +
-    let tagSize = size'Varint (getWireTag (toWireTag fi ft))
+    let tagSize = size'WireTag (toWireTag fi ft)
     in wireSizeReq tagSize ft d
   aSize old (fi,(ExtRepeated ft (GPDynSeq GPWitness s))) = old +
-    let tagSize = size'Varint (getWireTag (toWireTag fi ft))
+    let tagSize = size'WireTag (toWireTag fi ft)
     in wireSizeRep tagSize ft s
   aSize old (fi,(ExtPacked ft (GPDynSeq GPWitness s))) = old +
-    let tagSize = size'Varint (getWireTag (toPackedWireTag fi))
+    let tagSize = size'WireTag (toPackedWireTag fi)
     in wireSizePacked tagSize ft s
 
 -- | This is used by the generated code. The data is serialized in

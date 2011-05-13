@@ -39,7 +39,7 @@ import qualified Text.DescriptorProtos.FileDescriptorProto            as D.FileD
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections
-import Text.ProtocolBuffers.WireMessage(size'Varint,toWireTag,toPackedWireTag,runPut,Wire(..))
+import Text.ProtocolBuffers.WireMessage(size'WireTag,toWireTag,toPackedWireTag,runPut,Wire(..))
 import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..))
 
 import qualified Data.Foldable as F(foldr,toList)
@@ -70,7 +70,7 @@ makeProtoInfo :: (Bool,Bool) -- unknownField and lazyFields for makeDescriptorIn
               -> NameMap
               -> D.FileDescriptorProto 
               -> ProtoInfo
-makeProtoInfo (unknownField,lazyFields) (NameMap (packageName,hPrefix,hParent) reMap)
+makeProtoInfo (unknownField,lazyFieldsOpt) (NameMap (packageName,hPrefix,hParent) reMap)
               fdp@(D.FileDescriptorProto { D.FileDescriptorProto.name = Just rawName })
      = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allKeys where
   protoName = case hParent of
@@ -92,7 +92,7 @@ makeProtoInfo (unknownField,lazyFields) (NameMap (packageName,hPrefix,hParent) r
                                        (D.DescriptorProto.name x))
                             groups
         parent' = fqAppend parent [IName (fromJust (D.DescriptorProto.name msg))]
-    in makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFields) msg
+    in makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFieldsOpt) msg
        : concatMap (\x -> processMSG parent' (checkGroup x) x)
                    (F.toList (D.DescriptorProto.nested_type msg))
   processENM parent msg = foldr ((:) . makeEnumInfo' reMap parent') nested
@@ -129,7 +129,7 @@ makeDescriptorInfo' :: ReMap -> FIName Utf8
                     -> Bool -- msgIsGroup
                     -> (Bool,Bool) -- unknownField and lazyFields
                     -> D.DescriptorProto -> DescriptorInfo
-makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFields)
+makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFieldsOpt)
                     (D.DescriptorProto.DescriptorProto
                       { D.DescriptorProto.name = Just rawName
                       , D.DescriptorProto.field = rawFields
@@ -137,7 +137,7 @@ makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyField
                       , D.DescriptorProto.extension_range = extension_range })
     = let di = DescriptorInfo protoName (pnPath protoName) msgIsGroup
                               fieldInfos keyInfos extRangeList (getKnownKeys protoName)
-                              unknownField lazyFields
+                              unknownField lazyFieldsOpt
       in di -- trace (toString rawName ++ "\n" ++ show di ++ "\n\n") $ di
   where protoName = toHaskell reMap $ fqAppend parent [IName rawName]
         fieldInfos = fmap (toFieldInfo' reMap (protobufName protoName)) rawFields
@@ -179,7 +179,7 @@ toFieldInfo' reMap parent
                         wt2 | validPacked = Just (toWireTag fieldId fieldType      -- read unpacked
                                                  ,toPackedWireTag fieldId)         -- read packed
                             | otherwise = Nothing
-                        wtLength = size'Varint (getWireTag wt)
+                        wtLength = size'WireTag wt
                         packedOption = case mayOpt of
                                          Just (D.FieldOptions { D.FieldOptions.packed = Just True }) -> True
                                          _ -> False

@@ -44,7 +44,7 @@ instance Default UnknownField where
 -- | This is used by the generated code
 wireSizeUnknownField :: UnknownField -> WireSize
 wireSizeUnknownField (UnknownField m) = F.foldl' aSize 0 m  where
-  aSize old (UFV tag bs) = old + size'Varint (getWireTag tag) + L.length bs
+  aSize old (UFV tag bs) = old + size'WireTag tag + L.length bs
 
 -- | This is used by the generated code
 wirePutUnknownField :: UnknownField -> Put

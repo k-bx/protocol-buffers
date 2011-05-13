@@ -966,12 +966,12 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
 --    (fid',ExtFromWire wt' raw') <- go (Just entity) (eName entity) next rest
     (fid',ExtFromWire raw') <- go (Just entity) (eName entity) next rest
     -- wrap old tag + inner result with outer info
-    let tag' = getWireTag (mkWireTag fid' wt')
+    let tag@(WireTag tag') = mkWireTag fid' wt'
         (EP wt' bs') = Seq.index raw' 0
     let fid = fNumber fk
         wt = toWireType (FieldType (fromEnum t))
         bs = runPut $
-          case t of TYPE_MESSAGE -> do putSize (size'Varint tag' + LC.length bs')
+          case t of TYPE_MESSAGE -> do putSize (size'WireTag tag + LC.length bs')
                                        putVarUInt tag'
                                        putLazyByteString bs'
                     TYPE_GROUP -> do putVarUInt tag'
