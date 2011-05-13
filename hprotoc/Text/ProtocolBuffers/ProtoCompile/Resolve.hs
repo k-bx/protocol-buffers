@@ -14,6 +14,9 @@
 -- The makeNameMaps command makes the translator from proto name to
 -- Haskell name.  Many possible errors in the proto data are caught
 -- and reported by these operations.
+--
+-- hprotoc will actually resolve more unqualified imported names than Google's protoc which requires
+-- more qualified names.  I do not have the obsessive nature to fix this.
 module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadCodeGenRequest,makeNameMap,makeNameMaps,getTLS
                                                 ,Env(..),TopLevel(..),ReMap,NameMap(..),LocalFP(..),CanonFP(..)) where
 
@@ -171,7 +174,10 @@ getExtRanges d = concatMap check unchecked
 -- by 1 or more Global TopLevel namespaces (self and imported files).
 -- Entities in first Global TopLevel namespace can refer to each other
 -- and to Entities in the list of directly imported TopLevel namespaces only.
-data Env = Local Entity {- E'Message -} Env | Global TopLevel [TopLevel]  deriving Show
+data Env = Local Entity {- E'Message -} Env 
+         | Global TopLevel [TopLevel]
+  deriving Show
+
 -- | TopLevel corresponds to all items defined in a .proto file. This
 -- includes the FileOptions since this will be consulted when
 -- generating the Haskel module names, and the imported files are only
@@ -180,8 +186,10 @@ data TopLevel = TopLevel { top'Path :: FilePath
                          , top'Package :: [IName String]
                          , top'FDP :: Either ErrStr D.FileDescriptorProto -- resolvedFDP'd
                          , top'mVals :: EMap } deriving Show
+
 -- | The EMap type is a local namespace attached to an entity
 type EMap = Map (IName String) Entity
+
 -- | An Entity is some concrete item in the namespace of a proto file.
 -- All Entity values have a leading-dot fully-qualified with the package "eName".
 -- The E'Message,Group,Service have EMap namespaces to inner Entity items.
@@ -210,9 +218,10 @@ fpCanonToLocal :: CanonFP -> LocalFP
 fpCanonToLocal | Canon.pathSeparator == Local.pathSeparator = LocalFP . unCanonFP
                | otherwise = LocalFP . Local.joinPath . Canon.splitDirectories . unCanonFP
 
-allowed :: Env -> [([IName String],[IName String])]
-allowed (Local entity env) = allowedE entity : allowed env
-allowed (Global t ts) = map allowedT (t:ts)
+-- Used to create optimal error messages
+allowedGlobal :: Env -> [([IName String],[IName String])]
+allowedGlobal (Local _entity env) = allowedGlobal env
+allowedGlobal (Global t ts) = map allowedT (t:ts)
 allowedE :: Entity -> ([IName String], [IName String])
 allowedE entity = ((,)  (eName entity)) $
   case get'mVals entity of
@@ -220,6 +229,11 @@ allowedE entity = ((,)  (eName entity)) $
     Just m -> M.keys m
 allowedT :: TopLevel -> ([IName String], [IName String])
 allowedT tl = (top'Package tl,M.keys (top'mVals tl))
+
+-- Used to create optional error messages
+allowedLocal :: Env -> [([IName String],[IName String])]
+allowedLocal (Local entity env) = allowedE entity : allowedLocal env
+allowedLocal (Global t _ts) = []
 
 data NameMap = NameMap (FIName Utf8,[MName String],[MName String]) ReMap
 
@@ -279,62 +293,47 @@ resolveHere parent nameU = do
                    Nothing -> rFail ("because there is no such name here:  "++show (eName parent))
     Nothing -> rFail ("because environment has no local names:\n"++ishow (eName parent))
 
-{-
--- | 'resolveEnv' is the query operation for the Env namespace.  It
--- recorgnizes names beginning with a '.' as already being
--- fully-qualified names. This is called from the different monads via
--- resolveRE, resolveSE, or getType.
-resolveEnv :: Utf8 -> Env -> Either ErrStr Entity
-resolveEnv nameU envIn = do
-  (isGlobal,xs) <- checkDIUtf8 nameU
-  let mResult = if isGlobal then lookupEnv (map iToString xs) (toGlobal envIn)
-                            else lookupEnv (map iToString xs) envIn
-  case mResult of
-    Nothing -> throw . unlines $ [ "resolveEnv: Could not lookup "++show nameU
-                                 , "which parses as "++show (isGlobal,xs)
-                                 , "in environment: "++(whereEnv envIn)
-                                 , "allowed: "++show (allowed envIn)]
-    Just (E'Error s _es) -> throw s
-    Just e -> return e
--}
-
-resolveEnv :: Utf8 -> Env -> Either ErrStr Entity
-resolveEnv = resolvePredEnv "Any item" (const True)
-
 -- | 'resolvePred Env' is the query operation for the Env namespace.  It recognizes names beginning
 -- with a '.' as already being fully-qualified names. This is called from the different monads via
--- resolveMGE and resolveM
+-- resolveEnv, resolveMGE,  and resolveM
+--
+-- The returned (Right _::Entity) will never be an E'Error, which results in (Left _::ErrStr) instead
 resolvePredEnv :: String -> (Entity -> Bool) -> Utf8 -> Env -> Either ErrStr Entity
 resolvePredEnv userMessage accept nameU envIn = do
   (isGlobal,xs) <- checkDIUtf8 nameU
   let mResult = if isGlobal then lookupEnv (map iToString xs) (toGlobal envIn)
                             else lookupEnv (map iToString xs) envIn
   case mResult of
-    Nothing -> throw . unlines $ [ "resolvePredEnv: Could not lookup "++show nameU
-                                 , "which parses as "++show (isGlobal,xs)
-                                 , "in environment: "++(whereEnv envIn)
-                                 , "looking for: "++userMessage
-                                 , "allowed: "++show (allowed envIn)]
     Just (E'Error s _es) -> throw s
     Just e -> return e
+    Nothing -> throw . unlines $ [ "resolvePredEnv: Could not lookup " ++ show nameU
+                                 , "which parses as "                  ++ show (isGlobal,xs)
+                                 , "in environment: "                  ++ (whereEnv envIn)
+                                 , "looking for: "                     ++ userMessage
+                                 , "allowed (local):"                  ++ show (allowedLocal envIn)
+                                 , "allowed (global): "                ++ show (allowedGlobal envIn)]
  where
   lookupEnv :: [IName String] -> Env -> Maybe Entity
-  lookupEnv xs (Global tl tls) = lookupTopLevel xs tl <|> msum (map (lookupTopLevel xs) tls)
+  lookupEnv xs (Global tl tls) = let main = top'Package tl
+                                     findThis = lookupTopLevel main xs
+                                 in msum (map findThis (tl:tls))
   lookupEnv _xs (Local e@(E'Error {}) _env) = return e
   lookupEnv xs (Local entity env) = case get'mVals entity of
                                       Just vals -> filteredLookup vals xs <|> lookupEnv xs env
                                       Nothing -> Nothing
 
-  lookupTopLevel :: [IName String] -> TopLevel -> Maybe Entity
-  lookupTopLevel xs tl =
-    filteredLookup (top'mVals tl) xs <|> (stripPrefix (top'Package tl) xs >>= filteredLookup (top'mVals tl))
+  lookupTopLevel :: [IName String] -> [IName String] -> TopLevel -> Maybe Entity
+  lookupTopLevel main xs tl = 
+    (if main == top'Package tl then filteredLookup (top'mVals tl) xs else Nothing)
+    <|>
+    (stripPrefix (top'Package tl) xs >>= filteredLookup (top'mVals tl))
 
   filteredLookup valsIn namesIn =
     let lookupVals :: EMap -> [IName String] -> Maybe Entity
         lookupVals _vals [] = Nothing
         lookupVals vals [x] = M.lookup x vals
         lookupVals vals (x:xs) = do
-          entity <-  M.lookup x vals
+          entity <- M.lookup x vals
           case get'mVals entity of
             Just vals' -> lookupVals vals' xs
             Nothing -> Nothing
@@ -343,12 +342,14 @@ resolvePredEnv userMessage accept nameU envIn = do
          Just entity | accept entity -> m'x
          _ -> Nothing
 
+-- Used in resolveRE and getType.resolveSE.  Accepts all types and so commits to first hit, but
+-- caller may reject some types later.
+resolveEnv :: Utf8 -> Env -> Either ErrStr Entity
+resolveEnv = resolvePredEnv "Any item" (const True)
+
+-- resolveRE is the often used workhorse of the fq* family of functions
 resolveRE :: Utf8 -> RE Entity
 resolveRE nameU = lift . (resolveEnv nameU) =<< ask
-
--- All uses of this then apply expectMGE or expectM, so provide predicate 'skip' support.
-resolveSE :: Utf8 -> SE (Either ErrStr Entity)
-resolveSE nameU = fmap (resolveEnv nameU) (asks my'Env)
 
 -- | 'getType' is used to lookup the type strings in service method records.
 getType :: Show a => String -> (a -> Maybe Utf8) -> a -> SE (Maybe (Either ErrStr Entity))
@@ -358,14 +359,10 @@ getType s f a = do
     Just _ -> return Nothing
     Nothing -> do ee <- resolveSE typeU
                   return (Just (expectMGE ee))
-
-resolveMGE :: Utf8 -> SE (Either ErrStr Entity)
-resolveMGE nameU = fmap (resolvePredEnv "Message or Group or Enum" isMGE nameU) (asks my'Env)
-  where isMGE e' = case e' of E'Message {} -> True
-                              E'Group {} -> True
-                              E'Enum {} -> True
-                              _ -> False
-
+ where
+  -- All uses of this then apply expectMGE or expectM, so provide predicate 'skip' support.
+  resolveSE :: Utf8 -> SE (Either ErrStr Entity)
+  resolveSE nameU = fmap (resolveEnv nameU) (asks my'Env)
 
 -- | 'expectMGE' is used by getType and 'entityField'
 expectMGE :: Either ErrStr Entity -> Either ErrStr Entity
@@ -376,23 +373,6 @@ expectMGE ee@(Right e) = if isMGE e then ee
                               E'Group {} -> True
                               E'Enum {} -> True
                               _ -> False
-
-
--- To be used for key extendee name resolution, but not part of the official protobuf-2.1.0 update
-resolveM :: Utf8 -> SE (Either ErrStr Entity)
-resolveM nameU = fmap (resolvePredEnv "Message" isM nameU) (asks my'Env)
-  where isM e' = case e' of E'Message {} -> True
-                            _ -> False
-
-{-
--- | 'expectM' is used by 'entityField'
-expectM :: Either ErrStr Entity -> Either ErrStr Entity
-expectM ee@(Left {}) = ee
-expectM ee@(Right e) = if isM e then ee
-                         else Left $ "expectM: Name resolution failed to find a Message:\n"++ishow (eName e) -- cannot show all of "e" because this will loop and hang the hprotoc program
-  where isM e' = case e' of E'Message {} -> True
-                            _ -> False
--}
 
 expectFK :: Entity -> RE Entity
 expectFK e = if isFK e then return e
@@ -405,30 +385,6 @@ expectFK e = if isFK e then return e
 whereEnv :: Env -> String
 whereEnv (Local entity env) = fiName (joinDot (eName entity)) ++ " in "++show (top'Path . getTL $ env)
 whereEnv (Global tl _) = fiName (joinDot (top'Package tl)) ++ " in " ++ show (top'Path tl)
-
-{-
--- | lookupEnv is used only by resolveEnv
-lookupEnv :: [IName String] -> Env -> Maybe Entity
-lookupEnv xs (Global tl tls) = lookupTopLevel xs tl <|> msum (map (lookupTopLevel xs) tls)
-lookupEnv _xs (Local e@(E'Error {}) _env) = return e
-lookupEnv xs (Local entity env) = case get'mVals entity of
-                                    Just vals -> lookupVals vals xs <|> lookupEnv xs env
-                                    Nothing -> Nothing
-
--- | lookupTopLevel is used only by lookupEnv
-lookupTopLevel :: [IName String] -> TopLevel -> Maybe Entity
-lookupTopLevel xs tl =
-  lookupVals (top'mVals tl) xs <|> (stripPrefix (top'Package tl) xs >>= lookupVals (top'mVals tl))
-
--- | lookupVals is used by lookupEnv and lookupTopLevel
-lookupVals :: EMap -> [IName String] -> Maybe Entity
-lookupVals _vals [] = Nothing
-lookupVals vals [x] = M.lookup x vals
-lookupVals vals (x:xs) = do entity <-  M.lookup x vals
-                            case get'mVals entity of
-                              Just vals' -> lookupVals vals' xs
-                              Nothing -> Nothing
--}
 
 -- | 'partEither' separates the Left errors and Right success in the obvious way.
 partEither :: [Either a b] -> ([a],[b])
@@ -536,9 +492,9 @@ mrmName s f a = do
 getNames :: String -> (a -> Maybe Utf8) -> a -> SE (IName String,[IName String])
 getNames errorMessage accessor record = do
   parent <- asks my'Parent
-  iSelf <- getJust errorMessage (validI =<< accessor record)
-  let names = parent ++ [ iToString iSelf ]
-  return (iToString iSelf,names)
+  iSelf <- fmap iToString $ getJust errorMessage (validI =<< accessor record)
+  let names = parent ++ [ iSelf ]
+  return (iSelf,names)
 
 descend :: [IName String] -> Entity -> SE a -> SE a
 descend names entity act = local mutate act
@@ -654,6 +610,18 @@ entityField isKey fdp = annErr ("entityField FieldDescriptorProto name is "++sho
   if isKey then do extendee <- resolveM =<< getJust "entityField.extendee" (D.FieldDescriptorProto.extendee fdp)
                    return (self,E'Key names extendee (FieldId number) mType typeName)
            else return (self,E'Field names (FieldId number) mType typeName)
+ where
+  resolveMGE :: Utf8 -> SE (Either ErrStr Entity)
+  resolveMGE nameU = fmap (resolvePredEnv "Message or Group or Enum" isMGE nameU) (asks my'Env)
+    where isMGE e' = case e' of E'Message {} -> True
+                                E'Group {} -> True
+                                E'Enum {} -> True
+                                _ -> False
+  -- To be used for key extendee name resolution, but not part of the official protobuf-2.1.0 update, since made official
+  resolveM :: Utf8 -> SE (Either ErrStr Entity)
+  resolveM nameU = fmap (resolvePredEnv "Message" isM nameU) (asks my'Env)
+    where isM e' = case e' of E'Message {} -> True
+                              _ -> False
 
 entityEnum :: D.EnumDescriptorProto -> SE (IName String,Entity)
 entityEnum edp@(D.EnumDescriptorProto {D.EnumDescriptorProto.value=vs}) = do
@@ -708,6 +676,9 @@ The UninterpretedOption fields are converted by the resolveFDP code below.
 
 These should be total functions with no 'error' or 'undefined' values
 possible.
+
+It seems this allows unqualified access to names in imported proto files while
+Google requires qualified access.  Oh well.
 
 *** -}
 
@@ -770,11 +741,10 @@ fqMethod mdp = do
                       consumeUNO mdp2
     _ -> fqFail "fqMethod.entity: did not resolve to a Method:" mdp entity
 
--- The field is a bit more complicated to resolve.  The Key variant
--- needs to resolve the extendee.  The type code from Parser.hs might
--- be Nothing and this needs to be resolved to TYPE_MESSAGE or
--- TYPE_ENUM, and if it is the latter then any default value string is
--- checked for validity.
+-- The field is a bit more complicated to resolve.  The Key variant needs to resolve the extendee.
+-- The type code from Parser.hs might be Nothing and this needs to be resolved to TYPE_MESSAGE or
+-- TYPE_ENUM (at last!), and if it is the latter then any default value string is checked for
+-- validity.
 fqField :: Bool -> D.FieldDescriptorProto -> RE D.FieldDescriptorProto
 fqField isKey fdp = annErr ("fqField FieldDescriptorProto name is "++show (D.FieldDescriptorProto.name fdp)) $ do
   let isKey' = maybe False (const True) (D.FieldDescriptorProto.extendee fdp)
