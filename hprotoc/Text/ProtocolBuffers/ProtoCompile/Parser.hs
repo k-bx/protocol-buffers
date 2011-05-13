@@ -263,6 +263,7 @@ pOptionE = do
 pOptionWith :: P s t -> P s (Either D.UninterpretedOption String, t)
 pOptionWith = liftM2 (,) (pName (U.fromString "option") >> pOptionE)
 
+-- This does not handle D.UninterpretedOption.aggregate_value yet
 pUnValue :: D.UninterpretedOption -> P s D.UninterpretedOption
 pUnValue uno = getNextToken >>= storeLexed where
   storeLexed (L_Name _ bs) = return $ uno {D.UninterpretedOption.identifier_value = Just (Utf8 bs)}
@@ -286,10 +287,14 @@ fileOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
     return' (old {D.FileOptions.uninterpreted_option = D.FileOptions.uninterpreted_option old |> uno})
   setOption (Right optName,old) =
     case optName of
-      "java_package"         -> strLit  >>= \p -> return' (old {D.FileOptions.java_package        =Just p})
-      "java_outer_classname" -> strLit  >>= \p -> return' (old {D.FileOptions.java_outer_classname=Just p})
-      "java_multiple_files"  -> boolLit >>= \p -> return' (old {D.FileOptions.java_multiple_files =Just p})
-      "optimize_for"         -> enumLit >>= \p -> return' (old {D.FileOptions.optimize_for        =Just p})
+      "java_package"          -> strLit  >>= \p -> return' (old {D.FileOptions.java_package        =Just p})
+      "java_outer_classname"  -> strLit  >>= \p -> return' (old {D.FileOptions.java_outer_classname=Just p})
+      "java_multiple_files"   -> boolLit >>= \p -> return' (old {D.FileOptions.java_multiple_files =Just p})
+      "java_generate_equals_and_hash" -> boolLit >>= \p -> return' (old {D.FileOptions.java_generate_equals_and_hash =Just p})
+      "optimize_for"          -> enumLit >>= \p -> return' (old {D.FileOptions.optimize_for        =Just p})
+      "cc_generic_services"   -> boolLit >>= \p -> return' (old {D.FileOptions.cc_generic_services =Just p})
+      "java_generic_services" -> boolLit >>= \p -> return' (old {D.FileOptions.java_generic_services =Just p})
+      "py_generic_services"   -> boolLit >>= \p -> return' (old {D.FileOptions.py_generic_services =Just p})
       _ -> unexpected $ "FileOptions has no option named " ++ optName
 
 message :: (D.DescriptorProto -> P s ()) -> P s ()
@@ -319,6 +324,7 @@ messageOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
   setOption (Right optName,old) =
     case optName of
       "message_set_wire_format" -> boolLit >>= \p -> return' (old {D.MessageOptions.message_set_wire_format=Just p})
+      "no_standard_descriptor_accessor" -> boolLit >>= \p -> return' (old {D.MessageOptions.no_standard_descriptor_accessor=Just p})
       _ -> unexpected $ "MessageOptions has no option named "++optName
 
 extend :: (D.DescriptorProto -> P s ()) -> (D.FieldDescriptorProto -> P s ()) -> P s ()
