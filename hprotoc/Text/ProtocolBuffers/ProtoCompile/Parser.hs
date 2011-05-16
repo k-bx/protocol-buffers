@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 -- | This "Parser" module takes a filename and its contents as a
 -- bytestring, and uses Lexer.hs to make a stream of tokens that it
 -- parses. No IO is performed and the error function is not used.
@@ -54,6 +55,7 @@ import Text.ProtocolBuffers.ProtoCompile.Instances(parseLabel,parseType)
 -- import Text.ProtocolBuffers.Reflections()
 
 import Control.Monad(when,liftM2,liftM3)
+import qualified Data.ByteString.Lazy as L(unpack)
 import qualified Data.ByteString.Lazy.Char8 as LC(notElem,head)
 import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.Char(isUpper,toLower)
@@ -62,13 +64,13 @@ import Data.Maybe(fromMaybe)
 import Data.Monoid(mconcat)
 import Data.Sequence((|>))
 import qualified Data.Sequence as Seq(fromList)
+import Data.Word(Word8)
+import Numeric(showOct)
 --import System.FilePath(takeFileName)
 import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName,anyToken,many1,lookAhead,try
-                                    ,getInput,setInput,getPosition,setPosition,getState,setState,pzero
+                                    ,getInput,setInput,getPosition,setPosition,getState,setState
                                     ,(<?>),(<|>),token,choice,between,eof,unexpected,skipMany)
 import Text.ParserCombinators.Parsec.Pos(newPos)
-
--- import Debug.Trace(trace)
 
 default ()
 
@@ -79,14 +81,10 @@ parseProto filename fileContents = do
   let initial_line_number = case lexed of
                               [] -> setPosition (newPos filename 0 0)
                               (l:_) -> setPosition (newPos filename (getLinePos l) 0)
-      initState = defaultValue {D.FileDescriptorProto.name=utf8FromString filename}
+      initState = defaultValue {D.FileDescriptorProto.name=Just (uFromString filename)}
       lexed = alexScanTokens fileContents
   runParser (initial_line_number >> parser) initState filename lexed
 
-utf8FromString :: String -> Maybe Utf8
-utf8FromString = Just . Utf8 . U.fromString
-utf8ToString :: Utf8 -> String
-utf8ToString = U.toString . utf8
 
 {-# INLINE mayRead #-}
 mayRead :: ReadS a -> String -> Maybe a
@@ -117,6 +115,28 @@ rawStrMany = fmap mconcat (many1 singleStringLit)
   where singleStringLit :: P s (ByteString,ByteString)
         singleStringLit = tok (\l-> case l of L_String _ raw x -> return (raw,x)
                                               _ -> Nothing) <?> "expected string literal in single or double quotes"
+
+-- In Google's version 2.4.0 there can be default message values which are curly-brace delimited
+-- aggregates.  The lexer eats these fine, and this parser routine should recognized a balanced
+-- expression.  Used with 'undoLexer'.
+--
+-- This assumes the initial (L _ '{' ) has already been parsed.
+getAggregate :: P s [Lexed]
+getAggregate = do
+  input <- getInput      
+  let count :: Int -> Int -> P s [Lexed]
+      count !n !depth = do
+        -- Not using getNextToken so that the value of 'n' in count is correct.
+        t <- anyToken
+        case t  of
+          L _ '{' -> count (succ n) (succ depth)
+          L _ '}' -> let n' = succ n
+                         depth' = pred depth
+                     in if 0==depth' then return (take n' input)
+                          else count n' depth'
+          _ -> count (succ n) depth
+  ls <- count 0 1
+  return ls
 
 getNextToken :: P s Lexed -- used in storing value for UninterpretedOption
 getNextToken = do
@@ -179,7 +199,7 @@ boolLit = tok (\l-> case l of L_Name _ x | x == true -> return True
 
 enumLit :: forall s a. (Read a,ReflectEnum a) => P s a -- This is very polymorphic, and with a good error message
 enumLit = do
-  s <- fmap' utf8ToString ident1
+  s <- fmap' uToString ident1
   case mayRead reads s of
     Just x -> return x
     Nothing -> let self = enumName (reflectEnumInfo (undefined :: a))
@@ -199,7 +219,7 @@ subParser doSub inSub = do
           anyTok i | i<=0 = return []
                    | otherwise = try (liftM2 (:) anyToken (anyTok (pred i))) <|> (return [])
       context <- anyTok 10
-      fail ( unlines [ "The error message from the nested subParser was:\n"++indent (show pe) 
+      fail ( unlines [ "The error message from the nested subParser was:\n"++indent (show pe)
                      , "  The next 10 tokens were "++show context ] )
     Right (outSub,in2,pos2) -> setInput in2 >> setPosition pos2 >> return outSub
  where getStatus = liftM3 (,,) getState getInput getPosition
@@ -217,7 +237,7 @@ fmap' f m = m >>= \a -> seq a (return $! (f a))
 update' :: (s -> s) -> P s ()
 update' f = getState >>= \s -> setState $! (f s)
 
-parser :: P D.FileDescriptorProto D.FileDescriptorProto 
+parser :: P D.FileDescriptorProto D.FileDescriptorProto
 parser = proto >> getState
   where proto = eof <|> (choice [ eol
                                 , importFile
@@ -256,7 +276,7 @@ pOptionE = do
                               , pChar '.' >> withParens ] )
   nameParts <- pieces
   case nameParts of
-    [(optName,False)] -> return (Right (utf8ToString optName))
+    [(optName,False)] -> return (Right (uToString optName))
     _ -> do uno <- pUnValue (makeUninterpetedOption nameParts)
             return (Left uno)
 
@@ -273,7 +293,10 @@ pUnValue uno = getNextToken >>= storeLexed where
     return $ uno { D.UninterpretedOption.negative_int_value = Just (fromInteger i) }
   storeLexed (L_Double _ d) = return $ uno {D.UninterpretedOption.double_value = Just d }
   storeLexed (L_String _ _raw bs) = return $ uno {D.UninterpretedOption.string_value = Just bs }
-  storeLexed _ = pzero
+  storeLexed l@(L _ '{') = do ls <- getAggregate
+                              let bs = uFromString . concatMap undoLexer $ l:ls
+                              return $ uno {D.UninterpretedOption.aggregate_value = Just bs }
+  storeLexed _ = fail $ "Could not the parse value of an custom (uninterpreted) option"
 
 makeUninterpetedOption :: [(Utf8,Bool)] -> D.UninterpretedOption
 makeUninterpetedOption nameParts = defaultValue { D.UninterpretedOption.name = Seq.fromList . map makeNamePart $ nameParts }
@@ -335,15 +358,15 @@ extend upGroup upField = pName (U.fromString "extend") >> do
   eols >> rest
 
 field :: (D.DescriptorProto -> P s ()) -> Maybe Utf8 -> P s D.FieldDescriptorProto
-field upGroup maybeExtendee = do 
+field upGroup maybeExtendee = do
   let allowedLabels = case maybeExtendee of
                         Nothing -> ["optional","repeated","required"]
                         Just {} -> ["optional","repeated"] -- cannot declare a required extension
   sLabel <- choice . map (pName . U.fromString) $ allowedLabels
-  theLabel <- maybe (fail ("not a valid Label :"++show sLabel)) return (parseLabel (utf8ToString sLabel))
+  theLabel <- maybe (fail ("not a valid Label :"++show sLabel)) return (parseLabel (uToString sLabel))
   sType <- ident
   -- parseType may return Nothing, this is fixed up in Text.ProtocolBuffers.ProtoCompile.Resolve.fqField
-  let (maybeTypeCode,maybeTypeName) = case parseType (utf8ToString sType) of
+  let (maybeTypeCode,maybeTypeName) = case parseType (uToString sType) of
                                         Just t -> (Just t,Nothing)
                                         Nothing -> (Nothing, Just sType)
   name <- ident1
@@ -355,11 +378,11 @@ field upGroup maybeExtendee = do
                         , D.FieldDescriptorProto.type_name = maybeTypeName
                         , D.FieldDescriptorProto.extendee = maybeExtendee }
   if maybeTypeCode == Just TYPE_GROUP
-    then do let nameString = utf8ToString name
+    then do let nameString = uToString name
             when (null nameString) (fail "Impossible? ident1 for field name was empty")
             when (not (isUpper (head nameString))) (fail $ "Group names must start with an upper case letter: "++show name)
             upGroup =<< subParser (pChar '{' >> subMessage) (defaultValue {D.DescriptorProto.name=Just name})
-            let fieldName = utf8FromString (map toLower nameString)  -- down-case the whole name
+            let fieldName = Just $ uFromString (map toLower nameString)  -- down-case the whole name
                 v = v1 { D.FieldDescriptorProto.name = fieldName
                        , D.FieldDescriptorProto.type_name = Just name }
             return v
@@ -367,7 +390,7 @@ field upGroup maybeExtendee = do
 
 subField,defaultConstant :: Label -> Maybe Type -> P D.FieldDescriptorProto ()
 subField label mt = do
-  defaultConstant label mt <|> fieldOption label mt
+  (defaultConstant label mt <|> fieldOption label mt) <?> "expected \"default\" or a fieldOption"
   (pChar ']' >> eol) <|> (pChar ',' >> subField label mt)
 
 defaultConstant LABEL_REPEATED _ = pName (U.fromString "default") >> fail "Repeated fields cannot have a default value"
@@ -384,13 +407,15 @@ defaultConstant _ mt = do
 -- Double and Float are checked to be not-Nan and not-Inf.  The
 -- int-like types are checked to be within the corresponding range.
 constant :: Maybe Type -> P s ByteString
-constant Nothing = fmap utf8 ident1 -- hopefully a matching enum; forget about Utf8
+-- With Nothing the next item may be an enum constant or a '{' and an aggregate.
+constant Nothing = enumIdent <?> "expected the name of an enum or a curly-brace-enclosed aggregate value"
+  where enumIdent = fmap utf8 ident1 -- hopefully a matching enum; forget about Utf8
 constant (Just t) =
   case t of
     TYPE_DOUBLE  -> do d <- doubleLit
 --                       when (isNaN d || isInfinite d)
 --                            (fail $ "default floating point literal "++show d++" is out of range for type "++show t)
-                       return' (U.fromString . showRF $ d)
+                       return' (utf8 . uFromString . showRF $ d)
     TYPE_FLOAT   -> do fl <- floatLit
 {-
                        let fl :: Float
@@ -400,7 +425,7 @@ constant (Just t) =
                        when (isNaN fl /= isNaN d || isInfinite fl /= isInfinite d  || (d==0) /= (fl==0))
                             (fail $ "default floating point literal "++show d++" is out of range for type "++show t)
 -}
-                       return' (U.fromString . showRF $ fl)
+                       return' (utf8 . uFromString . showRF $ fl)
     TYPE_BOOL    -> boolLit >>= \b -> return' $ if b then true else false
     TYPE_STRING  -> strLit >>= return . utf8
     TYPE_BYTES   -> bsLit
@@ -422,7 +447,7 @@ constant (Just t) =
                  i <- intLit
                  when (not (inRange range i))
                       (fail $ "default integer value "++show i++" is out of range for type "++show t)
-                 return' (U.fromString . show $ i)
+                 return' (utf8 . uFromString . show $ i)
 
 fieldOption :: Label -> Maybe Type -> P D.FieldDescriptorProto ()
 fieldOption label mt = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where
@@ -544,7 +569,6 @@ rpcOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
     case optName of
       _ -> unexpected $ "MethodOptions has no option named "++optName
 
-{-
 -- see google's stubs/strutil.cc lines 398-449/1121 and C99 specification
 -- This mainly targets three digit octal codes
 cEncode :: [Word8] -> [Char]
@@ -565,9 +589,32 @@ cEncode = concatMap one where
         | x < 64 = '\\':'0':(showOct x "")
         | otherwise = '\\':(showOct x "")
   sl c = ['\\',c]
--}
 
 showRF :: (RealFloat a) => a -> String
 showRF x | isNaN x = "nan"
          | isInfinite x = if 0 < x then "inf" else "-inf"
          | otherwise = show x
+
+-- Aggregate
+{-
+data Lexed = L_Integer !Int !Integer
+           | L_Double !Int !Double
+           | L_Name !Int !L.ByteString
+           | L_String !Int !L.ByteString !L.ByteString
+           | L !Int !Char
+           | L_Error !Int !String
+           -}
+
+undoLexer :: Lexed -> String
+undoLexer (L_Integer _ integer) = ' ':show integer
+undoLexer (L_Double _ double) = ' ':showRF double
+undoLexer (L_Name _ bs) = ' ':U.toString bs
+undoLexer (L_String _ _ bs) = let middle = L.unpack bs
+                                  encoded = cEncode middle  -- escapes both quote and double-quote
+                                  s = '\'' : encoded ++ "'"
+                              in ' ':s
+undoLexer (L _ '{') = " {\n"
+undoLexer (L _ '}') = " }\n"
+undoLexer (L _ ';') = ";\n"
+undoLexer (L _ char) = ' ':[char]
+undoLexer (L_Error _ errorMessage) = error ("Lexer failure found when parsing aggregate default value\n:"++errorMessage) -- XXX improve error reporting?
