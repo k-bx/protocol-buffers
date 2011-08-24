@@ -3,6 +3,7 @@ module Text.DescriptorProtos (protoInfo, fileDescriptorProto) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import Text.DescriptorProtos.FileDescriptorProto (FileDescriptorProto)
 import Text.ProtocolBuffers.Reflections (ProtoInfo)

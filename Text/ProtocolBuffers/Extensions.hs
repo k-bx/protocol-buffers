@@ -39,7 +39,7 @@ import Data.Maybe(fromMaybe,isJust)
 import Data.Monoid(mappend,mconcat)
 import Data.Sequence((|>),(><),viewl,ViewL(..))
 import qualified Data.Sequence as Seq(singleton,null,empty)
-import Data.Typeable()
+import Data.Data -- all
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.WireMessage
@@ -136,12 +136,61 @@ data ExtFieldValue = ExtFromWire !(Seq EP) -- XXX must store wiretype with ByteS
                    | ExtRepeated !FieldType !GPDynSeq
                    | ExtPacked   !FieldType !GPDynSeq
   deriving (Typeable,Ord,Show)
+           
+-- For making a Data instance for ExtField
+data ExtDataPair = ExtDataPair FieldId (Seq EP)
+  deriving (Typeable,Data,Show)
 
 data EP = EP {-# UNPACK #-} !WireType  !ByteString
-  deriving (Typeable,Eq,Ord,Show)
+  deriving (Typeable,Data,Eq,Ord,Show)
 
 data DummyMessageType deriving (Typeable)
 
+-- | ExtField is a newtype'd map from the numeric FieldId key to the
+-- ExtFieldValue.  This allows for the needed class instances.
+newtype ExtField = ExtField (Map FieldId ExtFieldValue)
+  deriving (Eq,Ord,Show)
+
+-- Used only in gfoldl for Data instance of ExtField
+dataToList :: ExtField -> [ExtDataPair]
+dataToList (ExtField ef) = map toEDP . M.toList $ ef where
+  toEDP (fi,ExtFromWire eps) = ExtDataPair fi eps
+  toEDP (fi,ExtOptional ft (GPDyn GPWitness d)) =
+    let p = wirePutOpt (toWireTag fi ft) ft (Just d)
+        ep = EP (toWireType ft) (runPut p)
+    in ExtDataPair fi (Seq.singleton ep)
+  toEDP (fi,ExtRepeated ft (GPDynSeq GPWitness s)) =
+    let f :: forall w. Wire w => w -> EP
+        f = EP (toWireType ft) . runPut . wirePutReq (toWireTag fi ft) ft
+    in ExtDataPair fi (fmap f s)
+  toEDP (fi,ExtPacked ft (GPDynSeq GPWitness s)) =
+    let p = wirePutPacked (toPackedWireTag fi) ft s
+        ep = EP (snd. splitWireTag $ toPackedWireTag fi) (runPut p)
+    in ExtDataPair fi (Seq.singleton ep)
+
+-- Used only in gfoldl and gunfold for Data instance of ExtField
+dataFromList :: [ExtDataPair] -> ExtField
+dataFromList = ExtField . M.fromList . map fromEDP where
+  fromEDP (ExtDataPair fid eps) = (fid,ExtFromWire eps)
+
+instance Typeable ExtField where
+  typeOf _ = tr_ExtField
+
+tr_ExtField :: TypeRep
+tr_ExtField = mkTyConApp (mkTyCon "Text.ProtocolBuffers.Extensions.ExtField") []
+
+ty_ExtField :: DataType
+ty_ExtField = mkDataType "Text.ProtocolBuffers.Extensions.ExtField" [con_ExtField]
+con_ExtField :: Constr
+con_ExtField = mkConstr ty_ExtField "ExtField" [] Prefix
+
+instance Data ExtField where
+  gfoldl f z m = z dataFromList `f` dataToList m
+  gunfold k z c = case constrIndex c of
+                    _ -> k (z dataFromList)
+  toConstr (ExtField _) = con_ExtField
+  dataTypeOf _ = ty_ExtField
+  
 instance ExtendMessage DummyMessageType where
   getExtField = undefined
   putExtField = undefined
@@ -189,11 +238,6 @@ instance Eq ExtFieldValue where
   (==) y@(ExtFromWire {}) x@(ExtPacked {})  = x == y
   (==) _ _ = False
 
--- | ExtField is a newtype'd map from the numeric FieldId key to the
--- ExtFieldValue.  This allows for the needed class instances.
-newtype ExtField = ExtField (Map FieldId ExtFieldValue)
-  deriving (Typeable,Eq,Ord,Show)
-
 -- | 'ExtendMessage' abstracts the operations of storing and
 -- retrieving the 'ExtField' from the message, and provides the
 -- reflection needed to know the valid field numbers.
@@ -203,7 +247,6 @@ class Typeable msg => ExtendMessage msg where
   getExtField :: msg -> ExtField
   putExtField :: ExtField -> msg -> msg
   validExtRanges :: msg -> [(FieldId,FieldId)]
-
 
 -- wireKeyToUnPacked is used to load a repeated packed format into a repeated non-packed extension key
 -- wireKeyToPacked is used to load a repeated unpacked format into a repeated packed extension key

@@ -3,6 +3,7 @@ module Text.DescriptorProtos.FileOptions (FileOptions(..)) where
 import Prelude ((+), (/), (==), (<=), (&&))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FileOptions.OptimizeMode as DescriptorProtos.FileOptions (OptimizeMode)
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
@@ -14,7 +15,7 @@ data FileOptions = FileOptions{java_package :: !(P'.Maybe P'.Utf8), java_outer_c
                                py_generic_services :: !(P'.Maybe P'.Bool),
                                uninterpreted_option :: !(P'.Seq DescriptorProtos.UninterpretedOption), ext'field :: !P'.ExtField,
                                unknown'field :: !P'.UnknownField}
-                 deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
+                 deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.ExtendMessage FileOptions where
   getExtField = ext'field

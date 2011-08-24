@@ -3,10 +3,11 @@ module Text.DescriptorProtos.SourceCodeInfo.Location (Location(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
  
 data Location = Location{path :: !(P'.Seq P'.Int32), span :: !(P'.Seq P'.Int32), unknown'field :: !P'.UnknownField}
-              deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
+              deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.UnknownMessage Location where
   getUnknownField = unknown'field

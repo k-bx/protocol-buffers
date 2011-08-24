@@ -11,7 +11,7 @@
 -- a Descriptor are listed in that Descriptor.
 -- 
 -- In building the reflection info new things are computed. It changes
--- dotted names to ProtoName useing the translator from
+-- dotted names to ProtoName using the translator from
 -- 'makeNameMaps'.  It parses the default value from the ByteString to
 -- a Haskell type.  For fields, the value of the tag on the wire is
 -- computed and so is its size on the wire.
@@ -40,7 +40,7 @@ import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections
 import Text.ProtocolBuffers.WireMessage(size'WireTag,toWireTag,toPackedWireTag,runPut,Wire(..))
-import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..))
+import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..),PackageID(..))
 
 import qualified Data.Foldable as F(foldr,toList)
 import qualified Data.Sequence as Seq(fromList,empty,singleton,null)
@@ -70,9 +70,10 @@ makeProtoInfo :: (Bool,Bool) -- unknownField and lazyFields for makeDescriptorIn
               -> NameMap
               -> D.FileDescriptorProto 
               -> ProtoInfo
-makeProtoInfo (unknownField,lazyFieldsOpt) (NameMap (packageName,hPrefix,hParent) reMap)
+makeProtoInfo (unknownField,lazyFieldsOpt) (NameMap (packageID,hPrefix,hParent) reMap)
               fdp@(D.FileDescriptorProto { D.FileDescriptorProto.name = Just rawName })
      = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allKeys where
+  packageName = getPackageID packageID
   protoName = case hParent of
                 [] -> case hPrefix of
                         [] -> imp $ "makeProtoInfo: no hPrefix or hParent in NameMap for: "++show fdp

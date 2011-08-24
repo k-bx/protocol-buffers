@@ -90,7 +90,7 @@ data Flag = VersionInfo
 optionList :: [OptDescr OptionAction]
 optionList =
   [ Option ['a'] ["as"] (ReqArg (Mutate . setAs) "FILEPATH=MODULE")
-               "assign prefix module to imported prot file: --as descriptor.proto=Text"
+               "assign prefix module to imported proto file: --as descriptor.proto=Text"
   , Option ['I'] ["proto_path"] (ReqArg (Mutate . setInclude) "DIR")
                "directory from which to search for imported proto files (default is pwd); all DIR searched"
   , Option ['d'] ["haskell_out"] (ReqArg (Mutate . setTarget) "DIR")
@@ -239,10 +239,13 @@ runPlugin options req = execState (run' pluginOutput options env fdps) defaultVa
         }
   requestedFiles = map (LocalFP . LC.unpack . utf8) . toList . file_to_generate $ req
 
+-- This run' operates for both runStandalone and runPlugin
 run' :: (Monad m) => Output m -> Options -> Env -> [D.FileDescriptorProto] -> m ()
 run' o@(Output print' writeFile') options env fdps = do
   let fdp = either error id . top'FDP . fst . getTLS $ env
   unless (optDryRun options) $ dump o (optImports options) (optDesc options) fdp fdps
+  -- Compute the nameMap that determine how to translate from proto names to haskell names
+  -- This is the part that uses the (optional) package name
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
   print' "Haskell name mangling done"
   let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options) nameMap fdp

@@ -3,6 +3,7 @@ module Text.DescriptorProtos.ServiceDescriptorProto (ServiceDescriptorProto(..))
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.MethodDescriptorProto as DescriptorProtos (MethodDescriptorProto)
 import qualified Text.DescriptorProtos.ServiceOptions as DescriptorProtos (ServiceOptions)
@@ -11,7 +12,7 @@ data ServiceDescriptorProto = ServiceDescriptorProto{name :: !(P'.Maybe P'.Utf8)
                                                      method :: !(P'.Seq DescriptorProtos.MethodDescriptorProto),
                                                      options :: !(P'.Maybe DescriptorProtos.ServiceOptions),
                                                      unknown'field :: !P'.UnknownField}
-                            deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
+                            deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.UnknownMessage ServiceDescriptorProto where
   getUnknownField = unknown'field

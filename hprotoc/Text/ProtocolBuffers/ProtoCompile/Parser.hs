@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, RankNTypes, ScopedTypeVariables #-}
 -- | This "Parser" module takes a filename and its contents as a
 -- bytestring, and uses Lexer.hs to make a stream of tokens that it
 -- parses. No IO is performed and the error function is not used.

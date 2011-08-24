@@ -3,6 +3,7 @@ module Text.DescriptorProtos.MessageOptions (MessageOptions(..)) where
 import Prelude ((+), (/), (==), (<=), (&&))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
  
@@ -10,7 +11,7 @@ data MessageOptions = MessageOptions{message_set_wire_format :: !(P'.Maybe P'.Bo
                                      no_standard_descriptor_accessor :: !(P'.Maybe P'.Bool),
                                      uninterpreted_option :: !(P'.Seq DescriptorProtos.UninterpretedOption),
                                      ext'field :: !P'.ExtField, unknown'field :: !P'.UnknownField}
-                    deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
+                    deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.ExtendMessage MessageOptions where
   getExtField = ext'field

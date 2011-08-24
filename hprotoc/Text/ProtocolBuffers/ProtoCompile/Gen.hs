@@ -151,8 +151,8 @@ compose = mkOp "."
 fqMod :: ProtoName -> String
 fqMod (ProtoName _ a b c) = joinMod $ a++b++[c]
 
--- importPN takes the Result to look up the target info it takes the
--- current MKey (pKey of protoName, no 'Key appended) and Part to
+-- importPN takes the Result to look up the target info, it takes the
+-- current MKey (pKey of protoName, no 'Key appended), and Part to
 -- identify the module being created.  The ProtoName is the target
 -- TYPE that is needed.
 importPN :: Result -> ModuleName -> Part -> ProtoName -> Maybe ImportDecl
@@ -438,7 +438,7 @@ descriptorBootModule :: DescriptorInfo -> Module
 descriptorBootModule di
   = let protoName = descName di
         un = unqualName protoName
-        classes = [prelude "Show",prelude "Eq",prelude "Ord",prelude "Typeable"
+        classes = [prelude "Show",prelude "Eq",prelude "Ord",prelude "Typeable",prelude "Data"
                   ,private "Mergeable",private "Default",private "Wire",private "GPB",private "ReflectDescriptor"]
                   ++ if hasExt di then [private "ExtendMessage"] else []
                   ++ if storeUnknown di then [private "UnknownMessage"] else []
@@ -499,6 +499,7 @@ minimalImports :: [ImportDecl]
 minimalImports =
   [ ImportDecl src (ModuleName "Prelude") True False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Data.Typeable") True False Nothing (Just (ModuleName "Prelude'")) Nothing
+  , ImportDecl src (ModuleName "Data.Data") True False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False Nothing (Just (ModuleName "P'")) Nothing ]
 
 standardImports :: Bool -> Bool -> [ImportDecl]
@@ -506,6 +507,7 @@ standardImports isEnumMod ext =
   [ ImportDecl src (ModuleName "Prelude") False False Nothing Nothing (Just (False,ops))
   , ImportDecl src (ModuleName "Prelude") True False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Data.Typeable") True False Nothing (Just (ModuleName "Prelude'")) Nothing
+  , ImportDecl src (ModuleName "Data.Data") True False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False Nothing (Just (ModuleName "P'")) Nothing ]
  where ops | ext = map (IVar . Symbol) $ base ++ ["==","<=","&&"]
            | otherwise = map (IVar . Symbol) base
@@ -852,8 +854,8 @@ instanceReflectDescriptor di
 ------------------------------------------------------------------
 
 derives,derivesEnum :: [Deriving]
-derives = map (\ x -> (prelude x,[])) ["Show","Eq","Ord","Typeable"]
-derivesEnum = map (\ x -> (prelude x,[])) ["Read","Show","Eq","Ord","Typeable"]
+derives = map (\ x -> (prelude x,[])) ["Show","Eq","Ord","Typeable","Data"]
+derivesEnum = map (\ x -> (prelude x,[])) ["Read","Show","Eq","Ord","Typeable","Data"]
 
 -- All of these type names are also exported by Text.ProtocolBuffers.Header via Text.ProtocolBuffers.Basic
 useType :: Int -> Maybe String

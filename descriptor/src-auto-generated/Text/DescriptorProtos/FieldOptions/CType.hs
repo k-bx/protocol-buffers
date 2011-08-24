@@ -3,12 +3,13 @@ module Text.DescriptorProtos.FieldOptions.CType (CType(..)) where
 import Prelude ((+), (/), (.))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
  
 data CType = STRING
            | CORD
            | STRING_PIECE
-           deriving (Prelude'.Read, Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
+           deriving (Prelude'.Read, Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.Mergeable CType
  

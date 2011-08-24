@@ -3,6 +3,7 @@ module Text.DescriptorProtos.FieldDescriptorProto (FieldDescriptorProto(..)) whe
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Label as DescriptorProtos.FieldDescriptorProto (Label)
 import qualified Text.DescriptorProtos.FieldDescriptorProto.Type as DescriptorProtos.FieldDescriptorProto (Type)
@@ -15,7 +16,7 @@ data FieldDescriptorProto = FieldDescriptorProto{name :: !(P'.Maybe P'.Utf8), nu
                                                  default_value :: !(P'.Maybe P'.Utf8),
                                                  options :: !(P'.Maybe DescriptorProtos.FieldOptions),
                                                  unknown'field :: !P'.UnknownField}
-                          deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
+                          deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.UnknownMessage FieldDescriptorProto where
   getUnknownField = unknown'field

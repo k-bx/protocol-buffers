@@ -3,12 +3,13 @@ module Text.DescriptorProtos.FileDescriptorSet (FileDescriptorSet(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FileDescriptorProto as DescriptorProtos (FileDescriptorProto)
  
 data FileDescriptorSet = FileDescriptorSet{file :: !(P'.Seq DescriptorProtos.FileDescriptorProto),
                                            unknown'field :: !P'.UnknownField}
-                       deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
+                       deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.UnknownMessage FileDescriptorSet where
   getUnknownField = unknown'field

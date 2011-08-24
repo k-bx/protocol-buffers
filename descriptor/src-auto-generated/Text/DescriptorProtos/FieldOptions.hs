@@ -3,6 +3,7 @@ module Text.DescriptorProtos.FieldOptions (FieldOptions(..)) where
 import Prelude ((+), (/), (==), (<=), (&&))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.FieldOptions.CType as DescriptorProtos.FieldOptions (CType)
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
@@ -11,7 +12,7 @@ data FieldOptions = FieldOptions{ctype :: !(P'.Maybe DescriptorProtos.FieldOptio
                                  deprecated :: !(P'.Maybe P'.Bool), experimental_map_key :: !(P'.Maybe P'.Utf8),
                                  uninterpreted_option :: !(P'.Seq DescriptorProtos.UninterpretedOption), ext'field :: !P'.ExtField,
                                  unknown'field :: !P'.UnknownField}
-                  deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
+                  deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.ExtendMessage FieldOptions where
   getExtField = ext'field

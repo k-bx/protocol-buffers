@@ -186,6 +186,9 @@ decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc ->
                 {-# INLINE more #-}
                 {-# INLINE err #-}
 
+            -- Next line is segfault fix for null bytestrings from Nathan Howell <nhowell@alphaheavy.com>
+            if ptr0 == nullPtr then more else do
+
             let start = ptr0 `plusPtr` off :: Ptr Word8
             b'1 <- peek start
             if b'1 < 128 then ok (fromIntegral b'1) 1 else do

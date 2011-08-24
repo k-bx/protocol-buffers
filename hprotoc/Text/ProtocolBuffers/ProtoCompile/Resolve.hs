@@ -1,6 +1,19 @@
+{-# LANGUAGE RankNTypes, FlexibleContexts, ScopedTypeVariables #-}
 {-  fixing resolution.  This is a large beast of a module.  Sorry.
   updated for version 2.0.3 to match protoc's namespace resolution better
   updated for version 2.0.4 to differentiate Entity and E'Entity, this makes eName a total selector
+  updated after version 2.0.5 to fix problem when package name was not specified in proto file.
+    main calls either runStandalone or runPlugin which call loadProto or loadStandalone which both call loadProto'
+      loadProto' uses getPackage to make packageName and pass this to makeTopLevel
+
+    Then loadProto or loadStandalone both call run' which calls makeNameMaps
+      makeNameMaps calls makeNameMap on each top level fdp from each TopLevel in the Env made by loadProto'
+        makeNameMap calls getPackage to form packageName, and unless overridden it is also used for hParent
+
+    The nameMap this computes is passed by run' to makeProtoInfo from MakeReflections
+
+    The bug is being reported by main>runStandalon>loadStandalone>loadProto'>makeTopLevel>resolveFDP>fqFileDP>fqMessage>fqField>resolvePredEnv
+    
 
   entityField uses resolveMGE instead of expectMGE and resolveEnv : this should allow field types to resolve just to MGE insteadof other field names.
 
@@ -68,7 +81,7 @@
 -- hprotoc will actually resolve more unqualified imported names than Google's protoc which requires
 -- more qualified names.  I do not have the obsessive nature to fix this.
 module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadCodeGenRequest,makeNameMap,makeNameMaps,getTLS
-                                                ,Env(..),TopLevel(..),ReMap,NameMap(..),LocalFP(..),CanonFP(..)) where
+                                                ,Env(..),TopLevel(..),ReMap,NameMap(..),PackageID(..),LocalFP(..),CanonFP(..)) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
 import qualified Text.DescriptorProtos.DescriptorProto                as D.DescriptorProto(DescriptorProto(..))
@@ -129,6 +142,7 @@ import Data.Ix(inRange)
 import Data.List(foldl',stripPrefix,isPrefixOf,isSuffixOf)
 import Data.Map(Map)
 import Data.Maybe(mapMaybe)
+import Data.Typeable
 -- import Data.Monoid()
 import System.Directory
 import qualified System.FilePath as Local(pathSeparator,splitDirectories,joinPath,combine,makeRelative)
@@ -168,14 +182,24 @@ getJust _s (Just a) = return a
 defaultPackageName :: Utf8
 defaultPackageName = Utf8 (LC.pack "proto")
 
-getPackage :: D.FileDescriptorProto -> Utf8
+-- The "package" name turns out to be more complicated than I anticipated (when missing).  Instead
+-- of plain UTF8 annotate this with the PackageID newtype to force me to trace the usage.  Later
+-- change this to track the additional complexity.
+newtype PackageID a = PackageID { getPackageID :: a } deriving (Eq,Ord,Show)
+
+-- The package field of FileDescriptorProto is set in Parser.hs.
+-- 'getPackage' is the only direct user of this information in hprotoc.
+-- The convertFileToPackage was developed looking at the Java output of Google's protoc.
+-- In 2.0.5 this has lead to problems with the stricter import name resolution when the imported file has no package directive.
+-- I need a fancier way of handling this.
+getPackage :: D.FileDescriptorProto -> PackageID Utf8
 getPackage fdp = case D.FileDescriptorProto.package fdp of
-                   Just a -> a
+                   Just a -> PackageID a
                    Nothing -> case D.FileDescriptorProto.name fdp of
-                                Nothing -> defaultPackageName
+                                Nothing -> PackageID defaultPackageName
                                 Just filename -> case convertFileToPackage filename of
-                                                   Nothing -> defaultPackageName
-                                                   Just name -> name
+                                                   Nothing -> PackageID defaultPackageName
+                                                   Just name -> PackageID name
 
 -- | 'convertFileToPackage' mimics what I observe protoc --java_out do to convert the file name to a
 -- class name.
@@ -228,10 +252,10 @@ data Env = Local [IName String] EMap {- E'Message,E'Group,E'Service -} Env
 
 -- | TopLevel corresponds to all items defined in a .proto file. This
 -- includes the FileOptions since this will be consulted when
--- generating the Haskel module names, and the imported files are only
+-- generating the Haskell module names, and the imported files are only
 -- known through their TopLevel data.
 data TopLevel = TopLevel { top'Path :: FilePath
-                         , top'Package :: [IName String]
+                         , top'Package :: PackageID [IName String]
                          , top'FDP :: Either ErrStr D.FileDescriptorProto -- resolvedFDP'd
                          , top'mVals :: EMap } deriving Show
 
@@ -281,11 +305,11 @@ fpCanonToLocal | Canon.pathSeparator == Local.pathSeparator = LocalFP . unCanonF
                | otherwise = LocalFP . Local.joinPath . Canon.splitDirectories . unCanonFP
 
 -- Used to create optimal error messages
-allowedGlobal :: Env -> [([IName String],[IName String])]
+allowedGlobal :: Env -> [(PackageID [IName String],[IName String])]
 allowedGlobal (Local _ _ env) = allowedGlobal env
 allowedGlobal (Global t ts) = map allowedT (t:ts)
 
-allowedT :: TopLevel -> ([IName String], [IName String])
+allowedT :: TopLevel -> (PackageID [IName String], [IName String])
 allowedT tl = (top'Package tl,M.keys (top'mVals tl))
 
 -- Used to create optional error messages
@@ -295,14 +319,20 @@ allowedLocal (Local name vals env) = allowedE : allowedLocal env
   where allowedE :: ([IName String], [IName String])
         allowedE = (name,M.keys vals)
 
-data NameMap = NameMap (FIName Utf8,[MName String],[MName String]) ReMap
-
 -- Create a mapping from the "official" name to the Haskell hierarchy mangled name
 type ReMap = Map (FIName Utf8) ProtoName
 
+data NameMap = NameMap ( PackageID (FIName Utf8) -- packageName from 'getPackage' on fdp
+                       , [MName String]   -- hPrefix from command line
+                       , [MName String])  -- hParent from java_outer_classname, java_package, or 'getPackage'
+                       ReMap
+
 type RE a = ReaderT Env (Either ErrStr) a
 
-data SEnv = SEnv { my'Parent :: [IName String]
+get'SEnv'root'from'PackageID :: PackageID [IName String] -> [IName String]
+get'SEnv'root'from'PackageID = getPackageID
+
+data SEnv = SEnv { my'Parent :: [IName String]   -- top level value is derived from PackageID
                  , my'Env :: Env }
 --                 , my'Template :: ProtoName }
 
@@ -311,7 +341,7 @@ emptyEntity :: Entity
 emptyEntity = E'Service [IName "emptyEntity from myFix"] mempty
 
 emptyEnv :: Env
-emptyEnv = Global (TopLevel "emptyEnv from myFix" [IName "emptyEnv form myFix"] (Left "emptyEnv: top'FDP does not exist") mempty) []
+emptyEnv = Global (TopLevel "emptyEnv from myFix" (PackageID [IName "emptyEnv form myFix"]) (Left "emptyEnv: top'FDP does not exist") mempty) []
 
 instance Show SEnv where
   show (SEnv p e) = "(SEnv "++show p++" ; "++ whereEnv e ++ ")" --" ; "++show (haskellPrefix t,parentModule t)++ " )"
@@ -389,16 +419,16 @@ resolvePredEnv userMessage accept nameU envIn = do
                                  , "allowed (global): "                ++ show (allowedGlobal envIn) ]
  where
   lookupEnv :: [IName String] -> Env -> Maybe E'Entity
-  lookupEnv xs (Global tl tls) = let main = top'Package tl
-                                     findThis = lookupTopLevel main xs
+  lookupEnv xs (Global tl tls) = let findThis = lookupTopLevel main xs
+                                       where main = top'Package tl
                                  in msum (map findThis (tl:tls))
   lookupEnv xs (Local _ vals env) = filteredLookup vals xs <|> lookupEnv xs env
 
-  lookupTopLevel :: [IName String] -> [IName String] -> TopLevel -> Maybe E'Entity
+  lookupTopLevel :: PackageID [IName String] -> [IName String] -> TopLevel -> Maybe E'Entity
   lookupTopLevel main xs tl = 
     (if main == top'Package tl then filteredLookup (top'mVals tl) xs else Nothing)
     <|>
-    (stripPrefix (top'Package tl) xs >>= filteredLookup (top'mVals tl))
+    (stripPrefix (getPackageID (top'Package tl)) xs >>= filteredLookup (top'mVals tl))
 
   filteredLookup valsIn namesIn =
     let lookupVals :: EMap -> [IName String] -> Maybe E'Entity
@@ -450,7 +480,7 @@ expectMGE ee@(Right e) | isMGE = ee
 -- | This is a helper for resolveEnv and (Show SEnv) for error messages
 whereEnv :: Env -> String
 whereEnv (Local name _ env) = fiName (joinDot name) ++ " in "++show (top'Path . getTL $ env)
-whereEnv (Global tl _) = fiName (joinDot (top'Package tl)) ++ " in " ++ show (top'Path tl)
+whereEnv (Global tl _) = fiName (joinDot (getPackageID (top'Package tl))) ++ " in " ++ show (top'Path tl)
 
 -- | 'partEither' separates the Left errors and Right success in the obvious way.
 partEither :: [Either a b] -> ([a],[b])
@@ -473,10 +503,11 @@ unique name a b = E'Error ("Namespace collision for "++show name) [a,b]
 maybeM :: Monad m => (x -> m a) -> (Maybe x) -> m (Maybe a)
 maybeM f mx = maybe (return Nothing) (liftM Just . f) mx
 
+-- ReaderT containing template stacked on WriterT of list of name translations stacked on error reporting
 type MRM a = ReaderT ProtoName (WriterT [(FIName Utf8,ProtoName)] (Either ErrStr)) a
 
-runMRM'Reader :: ProtoName -> MRM a -> WriterT [(FIName Utf8,ProtoName)] (Either ErrStr) a
-runMRM'Reader template mrm = runReaderT mrm template
+runMRM'Reader :: MRM a -> ProtoName -> WriterT [(FIName Utf8,ProtoName)] (Either ErrStr) a
+runMRM'Reader = runReaderT
 
 runMRM'Writer :: WriterT [(FIName Utf8,ProtoName)] (Either ErrStr) a -> Either ErrStr (a,[(FIName Utf8,ProtoName)])
 runMRM'Writer = runWriterT
@@ -494,6 +525,11 @@ mrmName s f a = do
   tell [(fqSelf,self)]
   return template'
 
+-- makeNameMaps is called from the run' routine in ProtoCompile.hs for both standalone and plugin use.
+-- hPrefix and hAs are command line controlled options.
+-- hPrefix is "-p MODULE --prefix=MODULE dotted Haskell MODULE name to use as a prefix (default is none); last flag used"
+-- hAs is "-a FILEPATH=MODULE --as=FILEPATH=MODULE assign prefix module to imported prot file: --as descriptor.proto=Text"
+-- Note that 'setAs' puts both the full path and the basename as keys into the association list
 makeNameMaps :: [MName String] -> [(CanonFP,[MName String])] -> Env -> Either ErrStr NameMap
 makeNameMaps hPrefix hAs env = do
   let getPrefix fdp =
@@ -516,24 +552,22 @@ makeNameMaps hPrefix hAs env = do
 makeNameMap :: [MName String] -> D.FileDescriptorProto -> Either ErrStr NameMap
 makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
   go = fmap ((\(a,w) -> NameMap a (M.fromList w))) . runMRM'Writer
---  makeOne :: D.FileDescriptorProto -> WriterT [(FIName Utf8,ProtoName)] (Either ErrStr) ()
+
   makeOne fdp = do
-    -- Create 'template' :: ProtoName using "Text.ProtocolBuffers.Identifiers"
+    -- Create 'template' :: ProtoName using "Text.ProtocolBuffers.Identifiers" with error for baseName
     let rawPackage = getPackage fdp
     _ <- lift (checkDIUtf8 rawPackage) -- guard-like effect
-    let packageName = case D.FileDescriptorProto.package fdp of
-                        Nothing -> FIName $ fromString ""
-                        Just p  -> difi $ DIName p
+    let packageName = difi (DIName rawPackage)
     rawParent <- getJust "makeNameMap.makeOne: " . msum $
         [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options fdp)
         , D.FileOptions.java_package =<< (D.FileDescriptorProto.options fdp)
-        , Just (getPackage fdp)]
+        , Just (getPackageID rawPackage)]
     diParent <- getJust ("makeNameMap.makeOne: invalid character in: "++show rawParent)
                   (validDI rawParent)
     let hParent = map (mangle :: IName Utf8 -> MName String) . splitDI $ diParent
-        template = ProtoName packageName hPrefix hParent
+        template = ProtoName (getPackageID packageName) hPrefix hParent
                      (error "makeNameMap.makeOne.template.baseName undefined")
-    runMRM'Reader template (mrmFile fdp)
+    runMRM'Reader (mrmFile fdp) template
     return (packageName,hPrefix,hParent)
   -- Traversal of the named DescriptorProto types
   mrmFile :: D.FileDescriptorProto -> MRM ()
@@ -594,7 +628,7 @@ kids f xs = do sEnv <- ask
 -- The 'mdo' usage has been replace by modified forms of 'mfix' that will generate useful error
 -- values instead of calling 'error' and halting 'hprotoc'.
 --
-makeTopLevel :: D.FileDescriptorProto -> [IName String] -> [TopLevel] -> Either ErrStr Env {- Global -}
+makeTopLevel :: D.FileDescriptorProto -> PackageID [IName String] -> [TopLevel] -> Either ErrStr Env {- Global -}
 makeTopLevel fdp packageName imports = do
   filePath <- getJust "makeTopLevel.filePath" (D.FileDescriptorProto.name fdp)
   let -- There should be no TYPE_GROUP in the extension list here, but to be safe:
@@ -606,7 +640,7 @@ makeTopLevel fdp packageName imports = do
         groupNamesDI = mapMaybe validDI groupNamesRaw  -- These fully qualified names from using hprotoc as a plugin for protoc
         groupNames = groupNamesI ++ map (last . splitDI) groupNamesDI
   (bad,global) <- myFixE ("makeTopLevel myFixE",emptyEnv) $ \ global'Param ->
-    let sEnv = SEnv packageName global'Param
+    let sEnv = SEnv (get'SEnv'root'from'PackageID packageName) global'Param
     in runSE sEnv $ do
       (bads,children) <- fmap unzip . sequence $
         [ kids (entityMsg isGroup) (D.FileDescriptorProto.message_type fdp)
@@ -641,7 +675,7 @@ myFixSE s f = ReaderT $ \r -> myFixE s (\a -> runReaderT (f a) r)
 myFixE :: (String,a) -> (a -> Either ErrStr (String,a)) -> Either ErrStr (String,a)
 myFixE s f = let a = f (unRight a) in a
     where unRight (Right x) = snd x
-          unRight (Left msg) = snd s
+          unRight (Left _msg) = snd s
 --            ( "Text.ProtocolBuffers.ProtoCompile.Resolve: "++fst s ++":\n" ++ indent msg
 --                               , snd s)
 
@@ -779,7 +813,7 @@ fqFail msg dp entity = do
   throw $ unlines [ msg, "resolving: "++show dp, "in environment: "++whereEnv env, "found: "++show (eName entity) ]
 
 fqFileDP :: D.FileDescriptorProto -> RE D.FileDescriptorProto
-fqFileDP fdp = do
+fqFileDP fdp = annErr ("fqFileDP FileDescriptorProto (name,package) is "++show (D.FileDescriptorProto.name fdp,D.FileDescriptorProto.package fdp)) $ do
   newMessages <- T.mapM fqMessage      (D.FileDescriptorProto.message_type fdp)
   newEnums    <- T.mapM fqEnum         (D.FileDescriptorProto.enum_type    fdp)
   newServices <- T.mapM fqService      (D.FileDescriptorProto.service      fdp)
@@ -1206,21 +1240,19 @@ loadProto' fdpReader protoFile = goState (load Set.empty protoFile) where
     when (Set.member file parentsIn)
          (loadFailed file (unlines ["imports failed: recursive loop detected"
                                    ,unlines . map show . M.assocs $ built,show parentsIn]))
-    case M.lookup file built of
+    case M.lookup file built of  -- check memorized results
       Just result -> return result
       Nothing -> do
             (parsed'fdp, canonicalFile) <- lift $ fdpReader file
-            packageName <- case D.FileDescriptorProto.package parsed'fdp of
-                             Nothing -> return []
-                             Just p  -> either (loadFailed canonicalFile . show)
-                                               (return . map iToString . snd) $
-                                               (checkDIUtf8 p)
+            packageName <- either (loadFailed canonicalFile . show) (return . map iToString . snd) $
+                           (checkDIUtf8 (getPackage parsed'fdp))
             -- =<< getJust "makeTopLevel.packageName: you need a package declaration in your proto file"
                            -- (D.FileDescriptorProto.package parsed'fdp))
             let parents = Set.insert file parentsIn
                 importList = map (fpCanonToLocal . CanonFP . toString) . F.toList . D.FileDescriptorProto.dependency $ parsed'fdp
             imports <- mapM (fmap getTL . load parents) importList
-            let eEnv = makeTopLevel parsed'fdp packageName imports
+            let eEnv = makeTopLevel parsed'fdp packageName imports -- makeTopLevel is the "internal entry point" of Resolve.hs
+            -- Stricly force these two value to report errors here
             global'env <- either (loadFailed file) return eEnv
             _ <- either (loadFailed file) return (top'FDP . getTL $ global'env)
             modify (M.insert file global'env) -- add to memorized results

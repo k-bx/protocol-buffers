@@ -7,7 +7,6 @@ module Text.ProtocolBuffers.Header
     , fromDistinctAscList, member
     , throwError,catchError
     , module Data.Generics
-    , module Data.Typeable
     , module Text.ProtocolBuffers.Basic
     , module Text.ProtocolBuffers.Extensions
     , module Text.ProtocolBuffers.Identifiers
@@ -24,7 +23,6 @@ import Data.Generics(Data(..))
 import Data.Maybe(fromMaybe)
 import Data.Sequence((|>)) -- for append, see below
 import Data.Set(fromDistinctAscList,member)
-import Data.Typeable(Typeable(..))
 
 import Text.ProtocolBuffers.Basic -- all
 import Text.ProtocolBuffers.Extensions

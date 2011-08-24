@@ -3,6 +3,7 @@ module Text.DescriptorProtos.EnumDescriptorProto (EnumDescriptorProto(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.EnumOptions as DescriptorProtos (EnumOptions)
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto as DescriptorProtos (EnumValueDescriptorProto)
@@ -11,7 +12,7 @@ data EnumDescriptorProto = EnumDescriptorProto{name :: !(P'.Maybe P'.Utf8),
                                                value :: !(P'.Seq DescriptorProtos.EnumValueDescriptorProto),
                                                options :: !(P'.Maybe DescriptorProtos.EnumOptions),
                                                unknown'field :: !P'.UnknownField}
-                         deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
+                         deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.UnknownMessage EnumDescriptorProto where
   getUnknownField = unknown'field

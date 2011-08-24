@@ -3,6 +3,7 @@ module Text.DescriptorProtos.MethodDescriptorProto (MethodDescriptorProto(..)) w
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.MethodOptions as DescriptorProtos (MethodOptions)
  
@@ -10,7 +11,7 @@ data MethodDescriptorProto = MethodDescriptorProto{name :: !(P'.Maybe P'.Utf8), 
                                                    output_type :: !(P'.Maybe P'.Utf8),
                                                    options :: !(P'.Maybe DescriptorProtos.MethodOptions),
                                                    unknown'field :: !P'.UnknownField}
-                           deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
+                           deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.UnknownMessage MethodDescriptorProto where
   getUnknownField = unknown'field

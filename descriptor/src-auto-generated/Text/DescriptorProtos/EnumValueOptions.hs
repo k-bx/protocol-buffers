@@ -3,12 +3,13 @@ module Text.DescriptorProtos.EnumValueOptions (EnumValueOptions(..)) where
 import Prelude ((+), (/), (==), (<=), (&&))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
  
 data EnumValueOptions = EnumValueOptions{uninterpreted_option :: !(P'.Seq DescriptorProtos.UninterpretedOption),
                                          ext'field :: !P'.ExtField, unknown'field :: !P'.UnknownField}
-                      deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
+                      deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.ExtendMessage EnumValueOptions where
   getExtField = ext'field

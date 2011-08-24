@@ -3,6 +3,7 @@ module Text.DescriptorProtos.UninterpretedOption (UninterpretedOption(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.UninterpretedOption.NamePart as DescriptorProtos.UninterpretedOption (NamePart)
  
@@ -11,7 +12,7 @@ data UninterpretedOption = UninterpretedOption{name :: !(P'.Seq DescriptorProtos
                                                negative_int_value :: !(P'.Maybe P'.Int64), double_value :: !(P'.Maybe P'.Double),
                                                string_value :: !(P'.Maybe P'.ByteString), aggregate_value :: !(P'.Maybe P'.Utf8),
                                                unknown'field :: !P'.UnknownField}
-                         deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable)
+                         deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.UnknownMessage UninterpretedOption where
   getUnknownField = unknown'field
