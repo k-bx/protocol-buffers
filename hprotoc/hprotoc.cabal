@@ -1,5 +1,5 @@
 name:           hprotoc
-version:        2.0.5
+version:        2.0.6
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -53,6 +53,7 @@ Executable hprotoc
                    Text.Google.Protobuf.Compiler.CodeGeneratorResponse.File
                    Text.ProtocolBuffers.ProtoCompile.BreakRecursion
                    Text.ProtocolBuffers.ProtoCompile.Gen
+                   Text.ProtocolBuffers.ProtoCompile.Identifiers
                    Text.ProtocolBuffers.ProtoCompile.Instances
                    Text.ProtocolBuffers.ProtoCompile.Lexer
                    Text.ProtocolBuffers.ProtoCompile.MakeReflections
