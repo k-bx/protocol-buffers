@@ -1,0 +1,11 @@
+To regenerate the plugin haskell files, please run
+
+hprotoc -u --prefix=Text -d protoc-gen-haskell -I google-proto-files/ google/protobuf/plugin.proto 
+
+This was last populated from version 2.4.0a of Google's code.
+
+Also, one can invoke cabal build to make dist/autogen and then
+
+ghci -package parsec-2.1.0.1 -idist/build/autogen -iprotoc-gen-haskell Text/ProtocolBuffers/ProtoCompile.hs
+
+should work.

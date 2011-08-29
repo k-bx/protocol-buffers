@@ -1,0 +1,5 @@
+To recreate the src-auto-generated files do this:
+
+mv src-auto-generated/ old-src-auto-generated/
+
+/usr/local/bin/hprotoc --unknown_fields --as descriptor.proto=Text --haskell_out=src-auto-generated descriptor.proto
