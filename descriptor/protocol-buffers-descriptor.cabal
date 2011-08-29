@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        2.0.5
+version:        2.0.6
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -26,7 +26,7 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Library
-  build-depends: protocol-buffers == 2.0.5,
+  build-depends: protocol-buffers == 2.0.6,
                  bytestring,
                  containers
 
