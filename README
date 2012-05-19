@@ -1,11 +1,17 @@
 This the README file for protocol-buffers, protocol-buffers-descriptors, and hprotoc.
 These are three interdependent Haskell packages by Chris Kuklewicz.
-This README was updated most recently to reflect version 1.8.0
+This README was updated most recently to reflect version 2.0.7
 This code should be compatible with Google protobuf version 2.3.0
 Changes to keep up with Google protobuf version 2.4.0 are being considered.
 
 
 Questions and answers:
+
+Whats up with version 2.0.7 ?
+
+Version 2.0.5 and 2.0.6 had compile problems with GHC 7.4, this is now warning-free (as free as possible).
+
+The lack of a package name caused problems.  Hopefully the new handling works for everyone.
 
 What is new in 1.8.0 ?
 
