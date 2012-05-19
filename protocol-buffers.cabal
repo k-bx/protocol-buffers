@@ -13,7 +13,7 @@ package-url:    http://code.haskell.org/protocol-buffers/
 synopsis:       Parse Google Protocol Buffer specifications
 description:    Parse proto files and generate Haskell code.
 category:       Text
-Tested-With:    GHC == 7.0.3
+Tested-With:    GHC == 7.4.1
 extra-source-files: TODO
                     README
 

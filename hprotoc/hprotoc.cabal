@@ -38,7 +38,8 @@ Executable hprotoc
                    filepath >= 1.1.0.0,
                    haskell-src-exts >= 1.7.0,
                    mtl,
-                   parsec < 3,
+                   parsec,
+--                   parsec < 3,
                    utf8-string
 
   if flag(small_base)
@@ -69,7 +70,7 @@ Executable hprotoc
                    MultiParamTypeClasses,
                    PatternGuards,
                    RankNTypes,
-                   RecursiveDo,
+                   DoRec,
                    ScopedTypeVariables,
                    TypeSynonymInstances
 --                   PatternSignatures

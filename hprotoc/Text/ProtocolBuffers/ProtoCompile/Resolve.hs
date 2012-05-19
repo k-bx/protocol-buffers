@@ -4,11 +4,26 @@
   updated for version 2.0.4 to differentiate Entity and E'Entity, this makes eName a total selector
   updated after version 2.0.5 to fix problem when package name was not specified in proto file.
     main calls either runStandalone or runPlugin which call loadProto or loadStandalone which both call loadProto'
-      loadProto' uses getPackage to make packageName and pass this to makeTopLevel
+      loadProto' uses getPackage to make packageName, loads the imports, and passes all this to makeTopLevel to get Env
 
-    Then loadProto or loadStandalone both call run' which calls makeNameMaps
-      makeNameMaps calls makeNameMap on each top level fdp from each TopLevel in the Env made by loadProto'
+        The "load" loop in loadProto' caches the imported TopLevel based on _filename_
+           files can be loaded via multiple paths but this is not important
+           this may interact badly with absent "package" declarations that act as part of importing package
+             need these to be "polymorphic" in the packageID somehow?
+
+        Speculate: makeTopLevel knows the parent from the imports:
+           parent with explicit package could resolve "polymorphic" imports by a recursive transformation?
+           parent with no explicit package could do nothing.
+           root will need default explicit package name ? or special handling in loadProto' or load* ?
+
+    Then loadProto or loadStandalone both call run' which calls makeNameMaps with the Env from loadProto'
+      makeNameMaps calls makeNameMap on each top level fdp from each TopLevel in the Global Env from loadProto'
         makeNameMap calls getPackage to form packageName, and unless overridden it is also used for hParent
+
+          makeNameMap on the imports gets called without any special knowledge of the "parent".  If
+          root or some imports are still "polymorphic" then this is most annoying.
+
+    Alternative solution: a middle step after makeTopLevel and before makeNameMaps examines and fixes all the polymorphic imports.
 
     The nameMap this computes is passed by run' to makeProtoInfo from MakeReflections
 
@@ -180,12 +195,20 @@ getJust s ma@Nothing = throw $ "Impossible? Expected Just of type "++show (typeO
 getJust _s (Just a) = return a
 
 defaultPackageName :: Utf8
-defaultPackageName = Utf8 (LC.pack "proto")
+defaultPackageName = Utf8 (LC.pack "defaultPackageName")
 
 -- The "package" name turns out to be more complicated than I anticipated (when missing).  Instead
 -- of plain UTF8 annotate this with the PackageID newtype to force me to trace the usage.  Later
 -- change this to track the additional complexity.
-newtype PackageID a = PackageID { getPackageID :: a } deriving (Eq,Ord,Show)
+--newtype PackageID a = PackageID { getPackageID :: a } deriving (Show)
+
+data PackageID a = PackageID { getPackageID :: a }
+                 | NoPackageID { convertedFileName :: Utf8 }
+ deriving (Show)
+
+mPackageID :: Monoid a => PackageID a -> a
+mPackageID (PackageID {getPackageID=x}) = x
+mPackageID (NoPackageID {}) = mempty
 
 -- The package field of FileDescriptorProto is set in Parser.hs.
 -- 'getPackage' is the only direct user of this information in hprotoc.
@@ -196,10 +219,17 @@ getPackage :: D.FileDescriptorProto -> PackageID Utf8
 getPackage fdp = case D.FileDescriptorProto.package fdp of
                    Just a -> PackageID a
                    Nothing -> case D.FileDescriptorProto.name fdp of
-                                Nothing -> PackageID defaultPackageName
+                                Nothing -> NoPackageID defaultPackageName
                                 Just filename -> case convertFileToPackage filename of
-                                                   Nothing -> PackageID defaultPackageName
-                                                   Just name -> PackageID name
+                                                   Nothing -> NoPackageID defaultPackageName
+                                                   Just name -> NoPackageID name
+
+getPackageUtf8 :: PackageID Utf8 -> Utf8
+getPackageUtf8 (PackageID {getPackageID=x}) = x
+getPackageUtf8 (NoPackageID {convertedFileName=x}) = x
+
+checkPackageID :: PackageID Utf8 -> Either String (Bool,[IName Utf8])
+checkPackageID = checkDIUtf8 . getPackageUtf8
 
 -- | 'convertFileToPackage' mimics what I observe protoc --java_out do to convert the file name to a
 -- class name.
@@ -330,7 +360,7 @@ data NameMap = NameMap ( PackageID (FIName Utf8) -- packageName from 'getPackage
 type RE a = ReaderT Env (Either ErrStr) a
 
 get'SEnv'root'from'PackageID :: PackageID [IName String] -> [IName String]
-get'SEnv'root'from'PackageID = getPackageID
+get'SEnv'root'from'PackageID = mPackageID
 
 data SEnv = SEnv { my'Parent :: [IName String]   -- top level value is derived from PackageID
                  , my'Env :: Env }
@@ -426,9 +456,16 @@ resolvePredEnv userMessage accept nameU envIn = do
 
   lookupTopLevel :: PackageID [IName String] -> [IName String] -> TopLevel -> Maybe E'Entity
   lookupTopLevel main xs tl = 
-    (if main == top'Package tl then filteredLookup (top'mVals tl) xs else Nothing)
+    (if matchesMain main (top'Package tl) then filteredLookup (top'mVals tl) xs else Nothing)
     <|>
-    (stripPrefix (getPackageID (top'Package tl)) xs >>= filteredLookup (top'mVals tl))
+    (matchPrefix (top'Package tl) xs >>= filteredLookup (top'mVals tl))
+   where matchesMain (PackageID {getPackageID=a}) (PackageID {getPackageID=b}) = a==b
+         matchesMain (NoPackageID {}) (PackageID {})   = False
+         matchesMain (PackageID {})   (NoPackageID {}) = True
+         matchesMain (NoPackageID {}) (NoPackageID {}) = True
+
+         matchPrefix (NoPackageID {}) _ = Nothing
+         matchPrefix (PackageID {getPackageID=a}) ys = stripPrefix a ys
 
   filteredLookup valsIn namesIn =
     let lookupVals :: EMap -> [IName String] -> Maybe E'Entity
@@ -480,7 +517,11 @@ expectMGE ee@(Right e) | isMGE = ee
 -- | This is a helper for resolveEnv and (Show SEnv) for error messages
 whereEnv :: Env -> String
 whereEnv (Local name _ env) = fiName (joinDot name) ++ " in "++show (top'Path . getTL $ env)
-whereEnv (Global tl _) = fiName (joinDot (getPackageID (top'Package tl))) ++ " in " ++ show (top'Path tl)
+-- WAS whereEnv (Global tl _) = fiName (joinDot (getPackageID (top'Package tl))) ++ " in " ++ show (top'Path tl)
+whereEnv (Global tl _) = formatPackageID ++ " in " ++ show (top'Path tl)
+  where formatPackageID = case top'Package tl of
+                            PackageID {getPackageID=x} -> fiName (joinDot x)
+                            NoPackageID {convertedFileName=y} -> show y
 
 -- | 'partEither' separates the Left errors and Right success in the obvious way.
 partEither :: [Either a b] -> ([a],[b])
@@ -525,6 +566,8 @@ mrmName s f a = do
   tell [(fqSelf,self)]
   return template'
 
+-- Compute the nameMap that determine how to translate from proto names to haskell names
+-- The loop oever makeNameMap uses the (optional) package name
 -- makeNameMaps is called from the run' routine in ProtoCompile.hs for both standalone and plugin use.
 -- hPrefix and hAs are command line controlled options.
 -- hPrefix is "-p MODULE --prefix=MODULE dotted Haskell MODULE name to use as a prefix (default is none); last flag used"
@@ -534,13 +577,13 @@ makeNameMaps :: [MName String] -> [(CanonFP,[MName String])] -> Env -> Either Er
 makeNameMaps hPrefix hAs env = do
   let getPrefix fdp =
         case D.FileDescriptorProto.name fdp of
-          Nothing -> hPrefix -- really likely to be an error elsewhere
+          Nothing -> hPrefix -- really likely to be an error elsewhere since this ought to be a filename
           Just n -> let path = CanonFP (toString n)
                     in case lookup path hAs of
                           Just p -> p
                           Nothing -> case lookup (CanonFP . Canon.takeBaseName . unCanonFP $ path) hAs of
                                        Just p -> p
-                                       Nothing -> hPrefix
+                                       Nothing -> hPrefix  -- this is the usual branch unless overridden on command line
   let (tl,tls) = getTLS env
   (fdp:fdps) <- mapM top'FDP (tl:tls)
   (NameMap tuple m) <- makeNameMap (getPrefix fdp) fdp
@@ -561,7 +604,7 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
     rawParent <- getJust "makeNameMap.makeOne: " . msum $
         [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options fdp)
         , D.FileOptions.java_package =<< (D.FileDescriptorProto.options fdp)
-        , Just (getPackageID rawPackage)]
+        , Just (getPackageUtf8 rawPackage)]
     diParent <- getJust ("makeNameMap.makeOne: invalid character in: "++show rawParent)
                   (validDI rawParent)
     let hParent = map (mangle :: IName Utf8 -> MName String) . splitDI $ diParent

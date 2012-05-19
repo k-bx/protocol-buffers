@@ -85,7 +85,7 @@ import Data.Monoid(Monoid(mempty,mappend))           -- Writer has a Monoid cont
 import Data.Sequence(Seq,null,(|>))                  -- used for future queue in handler state
 import Data.Word(Word,Word8,Word16,Word32,Word64)
 import Foreign.ForeignPtr(withForeignPtr)
-import Foreign.Ptr(Ptr,castPtr,plusPtr,minusPtr)
+import Foreign.Ptr(Ptr,castPtr,plusPtr,minusPtr,nullPtr)
 import Foreign.Storable(Storable(peek,sizeOf))
 import System.IO.Unsafe(unsafePerformIO)
 #if defined(__GLASGOW_HASKELL__) && !defined(__HADDOCK__)

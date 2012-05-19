@@ -39,13 +39,14 @@ module Text.ProtocolBuffers.WireMessage
 import Control.Monad(when)
 import Control.Monad.Error.Class(throwError)
 import Control.Monad.ST
-import Data.Array.ST
+import Data.Array.ST(newArray,readArray)
+import Data.Array.Unsafe(castSTUArray)
 import Data.Bits (Bits(..))
 --import qualified Data.ByteString as S(last)
 --import qualified Data.ByteString.Unsafe as S(unsafeIndex)
 import qualified Data.ByteString.Lazy as BS (length)
 import qualified Data.Foldable as F(foldl',forM_)
---import Data.List (genericLength)
+import Data.List (genericLength)
 import Data.Maybe(fromMaybe)
 import Data.Sequence ((|>))
 import qualified Data.Sequence as Seq(length,empty)
@@ -448,11 +449,8 @@ wireGetErr ft = answer where
 -- "Text.ProtocolBuffers.WireMessage" and exported to use user by
 -- "Text.ProtocolBuffers".  These are less likely to change.
 class Wire b where
-  {-# INLINE wireSize #-}
   wireSize :: FieldType -> b -> WireSize
-  {-# INLINE wirePut #-}
   wirePut :: FieldType -> b -> Put
-  {-# INLINE wireGet #-}
   wireGet :: FieldType -> Get b
   {-# INLINE wireGetPacked #-}
   wireGetPacked :: FieldType -> Get (Seq b)
@@ -461,95 +459,122 @@ class Wire b where
                                  ++ ".\n  Either there is a bug in this library or the wire format is has been updated.")
 
 instance Wire Double where
+  {-# INLINE wireSize #-}
   wireSize {- TYPE_DOUBLE   -} 1      _ = 8
   wireSize ft x = wireSizeErr ft x
+  {-# INLINE wirePut #-}
   wirePut  {- TYPE_DOUBLE   -} 1      x = putWord64le (castDoubleToWord64 x)
   wirePut ft x = wirePutErr ft x
+  {-# INLINE wireGet #-}
   wireGet  {- TYPE_DOUBLE   -} 1        = fmap castWord64ToDouble getWord64le
   wireGet ft = wireGetErr ft
+  {-# INLINE wireGetPacked #-}
   wireGetPacked 1 = genericPacked 1
   wireGetPacked ft = wireGetErr ft
 
 instance Wire Float where
+  {-# INLINE wireSize #-}
   wireSize {- TYPE_FLOAT    -} 2      _ = 4
   wireSize ft x = wireSizeErr ft x
+  {-# INLINE wirePut #-}
   wirePut  {- TYPE_FLOAT    -} 2      x = putWord32le (castFloatToWord32 x)
   wirePut ft x = wirePutErr ft x
+  {-# INLINE wireGet #-}
   wireGet  {- TYPE_FLOAT    -} 2        = fmap castWord32ToFloat getWord32le
   wireGet ft = wireGetErr ft
+  {-# INLINE wireGetPacked #-}
   wireGetPacked 2 = genericPacked 2
   wireGetPacked ft = wireGetErr ft
 
 instance Wire Int64 where
+  {-# INLINE wireSize #-}
   wireSize {- TYPE_INT64    -} 3      x = size'Int64 x
   wireSize {- TYPE_SINT64   -} 18     x = size'Word64 (zzEncode64 x)
   wireSize {- TYPE_SFIXED64 -} 16     _ = 8
   wireSize ft x = wireSizeErr ft x
+  {-# INLINE wirePut #-}
   wirePut  {- TYPE_INT64    -} 3      x = putVarSInt x
   wirePut  {- TYPE_SINT64   -} 18     x = putVarUInt (zzEncode64 x)
   wirePut  {- TYPE_SFIXED64 -} 16     x = putWord64le (fromIntegral x)
   wirePut ft x = wirePutErr ft x
+  {-# INLINE wireGet #-}
   wireGet  {- TYPE_INT64    -} 3        = getVarInt
   wireGet  {- TYPE_SINT64   -} 18       = fmap zzDecode64 getVarInt
   wireGet  {- TYPE_SFIXED64 -} 16       = fmap fromIntegral getWord64le
   wireGet ft = wireGetErr ft
+  {-# INLINE wireGetPacked #-}
   wireGetPacked 3 = genericPacked 3
   wireGetPacked 18 = genericPacked 18
   wireGetPacked 16 = genericPacked 16
   wireGetPacked ft = wireGetErr ft
 
 instance Wire Int32 where
+  {-# INLINE wireSize #-}
   wireSize {- TYPE_INT32    -} 5      x = size'Int32 x
   wireSize {- TYPE_SINT32   -} 17     x = size'Word32 (zzEncode32 x)
   wireSize {- TYPE_SFIXED32 -} 15     _ = 4
   wireSize ft x = wireSizeErr ft x
+  {-# INLINE wirePut #-}
   wirePut  {- TYPE_INT32    -} 5      x = putVarSInt x
   wirePut  {- TYPE_SINT32   -} 17     x = putVarUInt (zzEncode32 x)
   wirePut  {- TYPE_SFIXED32 -} 15     x = putWord32le (fromIntegral x)
   wirePut ft x = wirePutErr ft x
+  {-# INLINE wireGet #-}
   wireGet  {- TYPE_INT32    -} 5        = getVarInt
   wireGet  {- TYPE_SINT32   -} 17       = fmap zzDecode32 getVarInt
   wireGet  {- TYPE_SFIXED32 -} 15       = fmap fromIntegral getWord32le
   wireGet ft = wireGetErr ft
+  {-# INLINE wireGetPacked #-}
   wireGetPacked 5 = genericPacked 5
   wireGetPacked 17 = genericPacked 17
   wireGetPacked 15 = genericPacked 15
   wireGetPacked ft = wireGetErr ft
 
 instance Wire Word64 where
+  {-# INLINE wireSize #-}
   wireSize {- TYPE_UINT64   -} 4      x = size'Word64 x
   wireSize {- TYPE_FIXED64  -} 6      _ = 8
   wireSize ft x = wireSizeErr ft x
+  {-# INLINE wirePut #-}
   wirePut  {- TYPE_UINT64   -} 4      x = putVarUInt x
   wirePut  {- TYPE_FIXED64  -} 6      x = putWord64le x
   wirePut ft x = wirePutErr ft x
+  {-# INLINE wireGet #-}
   wireGet  {- TYPE_FIXED64  -} 6        = getWord64le
   wireGet  {- TYPE_UINT64   -} 4        = getVarInt
   wireGet ft = wireGetErr ft
+  {-# INLINE wireGetPacked #-}
   wireGetPacked 6 = genericPacked 6
   wireGetPacked 4 = genericPacked 4
   wireGetPacked ft = wireGetErr ft
 
 instance Wire Word32 where
+  {-# INLINE wireSize #-}
   wireSize {- TYPE_UINT32   -} 13     x = size'Word32 x
   wireSize {- TYPE_FIXED32  -} 7      _ = 4
   wireSize ft x = wireSizeErr ft x
+  {-# INLINE wirePut #-}
   wirePut  {- TYPE_UINT32   -} 13     x = putVarUInt x
   wirePut  {- TYPE_FIXED32  -} 7      x = putWord32le x
   wirePut ft x = wirePutErr ft x
+  {-# INLINE wireGet #-}
   wireGet  {- TYPE_UINT32   -} 13       = getVarInt
   wireGet  {- TYPE_FIXED32  -} 7        = getWord32le
   wireGet ft = wireGetErr ft
+  {-# INLINE wireGetPacked #-}
   wireGetPacked 13 = genericPacked 13
   wireGetPacked 7 = genericPacked 7
   wireGetPacked ft = wireGetErr ft
 
 instance Wire Bool where
+  {-# INLINE wireSize #-}
   wireSize {- TYPE_BOOL     -} 8      _ = 1
   wireSize ft x = wireSizeErr ft x
+  {-# INLINE wirePut #-}
   wirePut  {- TYPE_BOOL     -} 8  False = putWord8 0
   wirePut  {- TYPE_BOOL     -} 8  True  = putWord8 1 -- google's wire_format_lite_inl.h
   wirePut ft x = wirePutErr ft x
+  {-# INLINE wireGet #-}
   wireGet  {- TYPE_BOOL     -} 8        = do
     x <- getVarInt :: Get Int32 -- google's wire_format_lit_inl.h line 155
     case x of
@@ -558,35 +583,46 @@ instance Wire Bool where
 --      x' | x' < 128 -> return True
 --      _ -> throwError ("TYPE_BOOL read failure : " ++ show x)
   wireGet ft = wireGetErr ft
+  {-# INLINE wireGetPacked #-}
   wireGetPacked 8 = genericPacked 8
   wireGetPacked ft = wireGetErr ft
 
 instance Wire Utf8 where
 -- items of TYPE_STRING is already in a UTF8 encoded Data.ByteString.Lazy
+  {-# INLINE wireSize #-}
   wireSize {- TYPE_STRING   -} 9      x = prependMessageSize $ BS.length (utf8 x)
   wireSize ft x = wireSizeErr ft x
+  {-# INLINE wirePut #-}
   wirePut  {- TYPE_STRING   -} 9      x = putVarUInt (BS.length (utf8 x)) >> putLazyByteString (utf8 x)
   wirePut ft x = wirePutErr ft x
+  {-# INLINE wireGet #-}
   wireGet  {- TYPE_STRING   -} 9        = getVarInt >>= getLazyByteString >>= verifyUtf8
   wireGet ft = wireGetErr ft
 
 instance Wire ByteString where
 -- items of TYPE_BYTES is an untyped binary Data.ByteString.Lazy
+  {-# INLINE wireSize #-}
   wireSize {- TYPE_BYTES    -} 12     x = prependMessageSize $ BS.length x
   wireSize ft x = wireSizeErr ft x
+  {-# INLINE wirePut #-}
   wirePut  {- TYPE_BYTES    -} 12     x = putVarUInt (BS.length x) >> putLazyByteString x
   wirePut ft x = wirePutErr ft x
+  {-# INLINE wireGet #-}
   wireGet  {- TYPE_BYTES    -} 12       = getVarInt >>= getLazyByteString
   wireGet ft = wireGetErr ft
 
 -- Wrap a protocol-buffer Enum in fromEnum or toEnum and serialize the Int:
 instance Wire Int where
+  {-# INLINE wireSize #-}
   wireSize {- TYPE_ENUM    -} 14      x = size'Int x
   wireSize ft x = wireSizeErr ft x
+  {-# INLINE wirePut #-}
   wirePut  {- TYPE_ENUM    -} 14      x = putVarSInt x
   wirePut ft x = wirePutErr ft x
+  {-# INLINE wireGet #-}
   wireGet  {- TYPE_ENUM    -} 14        = getVarInt
   wireGet ft = wireGetErr ft
+  {-# INLINE wireGetPacked #-}
   wireGetPacked 14 = genericPacked 14 -- Should not actually be used, see wireGetPackedEnum, though this ought to work if it were used (e.g. genericPacked)
   wireGetPacked ft = wireGetErr ft
 

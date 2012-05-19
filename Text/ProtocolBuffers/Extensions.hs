@@ -32,14 +32,14 @@ module Text.ProtocolBuffers.Extensions
 import Control.Monad.Error.Class(throwError)
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Foldable as F
-import Data.Generics
 import Data.Map(Map)
 import qualified Data.Map as M
 import Data.Maybe(fromMaybe,isJust)
 import Data.Monoid(mappend,mconcat)
 import Data.Sequence((|>),(><),viewl,ViewL(..))
 import qualified Data.Sequence as Seq(singleton,null,empty)
-import Data.Data -- all
+import Data.Typeable(Typeable(typeOf),Typeable1(typeOf1),Typeable2(typeOf2),TypeRep,mkTyConApp,mkTyCon3,cast)
+import Data.Data(Data(gfoldl,gunfold,toConstr),Constr,DataType,Fixity(Prefix),mkDataType,mkConstr,constrIndex,dataTypeOf)
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.WireMessage
@@ -98,7 +98,7 @@ getKeyDefaultValue :: Key c msg v -> v
 getKeyDefaultValue (Key _ _ md) = fromMaybe defaultValue md
 
 instance Typeable1 c => Typeable2 (Key c) where
-  typeOf2 _ = mkTyConApp (mkTyCon "Text.ProtocolBuffers.Extensions.Key") [typeOf1 (undefined :: c ())]
+  typeOf2 _ = mkTyConApp (mkTyCon3 "protocol-buffers" "Text.ProtocolBuffers.Extensions" "Key") [typeOf1 (undefined :: c ())]
 
 instance (Typeable1 c, Typeable msg, Typeable v) => Show (Key c msg v) where
   show key@(Key fieldId fieldType maybeDefaultValue) =
@@ -177,7 +177,7 @@ instance Typeable ExtField where
   typeOf _ = tr_ExtField
 
 tr_ExtField :: TypeRep
-tr_ExtField = mkTyConApp (mkTyCon "Text.ProtocolBuffers.Extensions.ExtField") []
+tr_ExtField = mkTyConApp (mkTyCon3 "protocol-buffers" "Text.ProtocolBuffers.Extensions" "ExtField") []
 
 ty_ExtField :: DataType
 ty_ExtField = mkDataType "Text.ProtocolBuffers.Extensions.ExtField" [con_ExtField]

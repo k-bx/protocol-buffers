@@ -8,6 +8,7 @@ import qualified Data.ByteString.Lazy as L
 import Data.Char(ord,isHexDigit,isOctDigit,toLower)
 import Data.Word(Word8)
 import Numeric(readHex,readOct,readDec,readSigned,readFloat)
+import qualified Data.ByteString.Lazy.Char8 as ByteString
 
 }
 

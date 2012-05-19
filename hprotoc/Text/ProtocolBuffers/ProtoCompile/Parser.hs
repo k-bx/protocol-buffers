@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, RankNTypes, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns, RankNTypes, ScopedTypeVariables, CPP #-}
 -- | This "Parser" module takes a filename and its contents as a
 -- bytestring, and uses Lexer.hs to make a stream of tokens that it
 -- parses. No IO is performed and the error function is not used.
@@ -74,7 +74,11 @@ import Text.ParserCombinators.Parsec.Pos(newPos)
 
 default ()
 
+#if MIN_VERSION_parsec(3,0,0)
+type P st = GenParser Lexed st
+#else
 type P = GenParser Lexed
+#endif
 
 parseProto :: String -> ByteString -> Either ParseError D.FileDescriptorProto
 parseProto filename fileContents = do
@@ -590,7 +594,7 @@ cEncode = concatMap one where
         | otherwise = '\\':(showOct x "")
   sl c = ['\\',c]
 
-showRF :: (RealFloat a) => a -> String
+showRF :: (Show a, RealFloat a) => a -> String
 showRF x | isNaN x = "nan"
          | isInfinite x = if 0 < x then "inf" else "-inf"
          | otherwise = show x
