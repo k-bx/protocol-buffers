@@ -599,9 +599,15 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
   makeOne fdp = do
     -- Create 'template' :: ProtoName using "Text.ProtocolBuffers.Identifiers" with error for baseName
     let rawPackage = getPackage fdp
-    _ <- lift (checkDIUtf8 rawPackage) -- guard-like effect
-    let packageName = difi (DIName rawPackage)
-    rawParent <- getJust "makeNameMap.makeOne: " . msum $
+    _ <- lift (checkPackageID rawPackage) -- guard-like effect
+{-
+    -- Previously patched way of doing this
+    let packageName = case D.FileDescriptorProto.package fdp of
+                        Nothing -> FIName $ fromString ""
+                        Just p  -> difi $ DIName p
+-}
+    let packageName = PackageID (difi (DIName (getPackageID rawPackage)))
+    rawParent <- getJust "makeNameMap.makeOne: impossible Nothing found" . msum $
         [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options fdp)
         , D.FileOptions.java_package =<< (D.FileDescriptorProto.options fdp)
         , Just (getPackageUtf8 rawPackage)]
@@ -1287,10 +1293,18 @@ loadProto' fdpReader protoFile = goState (load Set.empty protoFile) where
       Just result -> return result
       Nothing -> do
             (parsed'fdp, canonicalFile) <- lift $ fdpReader file
-            packageName <- either (loadFailed canonicalFile . show) (return . map iToString . snd) $
-                           (checkDIUtf8 (getPackage parsed'fdp))
-            -- =<< getJust "makeTopLevel.packageName: you need a package declaration in your proto file"
-                           -- (D.FileDescriptorProto.package parsed'fdp))
+            let rawPackage = getPackage parsed'fdp
+            packageName <- either (loadFailed canonicalFile . show)
+                                  (return . PackageID . map iToString . snd)
+                                  (checkPackageID rawPackage)
+{-
+   -- previously patched solution
+            packageName <- case D.FileDescriptorProto.package parsed'fdp of
+                             Nothing -> return []
+                             Just p  -> either (loadFailed canonicalFile . show)
+                                               (return . map iToString . snd) $
+                                               (checkDIUtf8 p)
+-}
             let parents = Set.insert file parentsIn
                 importList = map (fpCanonToLocal . CanonFP . toString) . F.toList . D.FileDescriptorProto.dependency $ parsed'fdp
             imports <- mapM (fmap getTL . load parents) importList
