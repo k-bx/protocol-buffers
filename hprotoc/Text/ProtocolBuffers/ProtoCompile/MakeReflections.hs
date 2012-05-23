@@ -73,7 +73,7 @@ makeProtoInfo :: (Bool,Bool) -- unknownField and lazyFields for makeDescriptorIn
 makeProtoInfo (unknownField,lazyFieldsOpt) (NameMap (packageID,hPrefix,hParent) reMap)
               fdp@(D.FileDescriptorProto { D.FileDescriptorProto.name = Just rawName })
      = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allKeys where
-  packageName = getPackageID packageID
+  packageName = getPackageID packageID :: FIName (Utf8)
   protoName = case hParent of
                 [] -> case hPrefix of
                         [] -> imp $ "makeProtoInfo: no hPrefix or hParent in NameMap for: "++show fdp

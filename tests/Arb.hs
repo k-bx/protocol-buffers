@@ -45,6 +45,7 @@ instance ArbCon a a where futz = return
 instance (Arbitrary a,ArbCon b x) => ArbCon (a -> b) x where
   futz f = arbitrary >>= futz . f
 
+{-
 instance Random Int32 where
   randomR = integralRandomR
   random = randomR minmax
@@ -64,6 +65,7 @@ instance Random Word64 where
 instance Random Word8 where
   randomR = integralRandomR
   random = randomR minmax
+-}
 
 instance Arbitrary Utf8 where
   arbitrary = do 

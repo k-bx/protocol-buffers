@@ -203,7 +203,7 @@ defaultPackageName = Utf8 (LC.pack "defaultPackageName")
 --newtype PackageID a = PackageID { getPackageID :: a } deriving (Show)
 
 data PackageID a = PackageID { getPackageID :: a }
-                 | NoPackageID { convertedFileName :: Utf8 }
+                 | NoPackageID { getPackageID :: a }
  deriving (Show)
 
 mPackageID :: Monoid a => PackageID a -> a
@@ -226,7 +226,7 @@ getPackage fdp = case D.FileDescriptorProto.package fdp of
 
 getPackageUtf8 :: PackageID Utf8 -> Utf8
 getPackageUtf8 (PackageID {getPackageID=x}) = x
-getPackageUtf8 (NoPackageID {convertedFileName=x}) = x
+getPackageUtf8 (NoPackageID {getPackageID=x}) = x
 
 checkPackageID :: PackageID Utf8 -> Either String (Bool,[IName Utf8])
 checkPackageID = checkDIUtf8 . getPackageUtf8
@@ -521,7 +521,7 @@ whereEnv (Local name _ env) = fiName (joinDot name) ++ " in "++show (top'Path . 
 whereEnv (Global tl _) = formatPackageID ++ " in " ++ show (top'Path tl)
   where formatPackageID = case top'Package tl of
                             PackageID {getPackageID=x} -> fiName (joinDot x)
-                            NoPackageID {convertedFileName=y} -> show y
+                            NoPackageID {getPackageID=y} -> show y
 
 -- | 'partEither' separates the Left errors and Right success in the obvious way.
 partEither :: [Either a b] -> ([a],[b])
@@ -598,7 +598,7 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
 
   makeOne fdp = do
     -- Create 'template' :: ProtoName using "Text.ProtocolBuffers.Identifiers" with error for baseName
-    let rawPackage = getPackage fdp
+    let rawPackage = getPackage fdp :: PackageID Utf8
     _ <- lift (checkPackageID rawPackage) -- guard-like effect
 {-
     -- Previously patched way of doing this
@@ -606,7 +606,7 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
                         Nothing -> FIName $ fromString ""
                         Just p  -> difi $ DIName p
 -}
-    let packageName = PackageID (difi (DIName (getPackageID rawPackage)))
+    let packageName@(PackageID fi'package'name) = PackageID (difi (DIName (getPackageUtf8 rawPackage))) :: PackageID (FIName Utf8)
     rawParent <- getJust "makeNameMap.makeOne: impossible Nothing found" . msum $
         [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options fdp)
         , D.FileOptions.java_package =<< (D.FileDescriptorProto.options fdp)
@@ -614,7 +614,7 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
     diParent <- getJust ("makeNameMap.makeOne: invalid character in: "++show rawParent)
                   (validDI rawParent)
     let hParent = map (mangle :: IName Utf8 -> MName String) . splitDI $ diParent
-        template = ProtoName (getPackageID packageName) hPrefix hParent
+        template = ProtoName fi'package'name hPrefix hParent
                      (error "makeNameMap.makeOne.template.baseName undefined")
     runMRM'Reader (mrmFile fdp) template
     return (packageName,hPrefix,hParent)

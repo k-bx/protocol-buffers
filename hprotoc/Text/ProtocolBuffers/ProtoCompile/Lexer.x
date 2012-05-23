@@ -78,9 +78,14 @@ getLinePos x = case x of
                  L_Error   i _ -> i
 
 -- 'errAt' is the only access to L_Error, so I can see where it is created with pos
+errAt :: AlexPosn -> [Char] -> Lexed
 errAt pos msg =  L_Error (line pos) $ "Lexical error (in Text.ProtocolBuffers.Lexer): "++ msg ++ ", at "++see pos where
   see (AlexPn char lineNum col) = "character "++show char++" line "++show lineNum++" column "++show col++"."
+
+dieAt :: [Char] -> AlexPosn -> t -> Lexed
 dieAt msg pos _s = errAt pos msg
+
+wtfAt :: AlexPosn -> ByteString.ByteString -> Lexed
 wtfAt pos s = errAt pos $ "unknown character "++show c++" (decimal "++show (ord c)++")"
   where (c:_) = ByteString.unpack s
 
@@ -89,6 +94,7 @@ mayRead :: ReadS a -> String -> Maybe a
 mayRead f s = case f s of [(a,"")] -> Just a; _ -> Nothing
 
 -- Given the regexps above, the "parse* failed" messages should be impossible.
+parseDec,parseOct,parseHex,parseDouble,parseStr,parseNinf,parseName,parseChar :: AlexPosn -> ByteString.ByteString -> Lexed
 parseDec pos s = maybe (errAt pos "Impossible? parseDec failed")
                        (L_Integer (line pos)) $ mayRead (readSigned readDec) (ByteString.unpack s)
 parseOct pos s = maybe (errAt pos "Impossible? parseOct failed")

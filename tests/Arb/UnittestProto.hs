@@ -52,11 +52,13 @@ instance Arbitrary ForeignMessage where arbitrary = futz ForeignMessage
 instance Arbitrary NestedMessage where arbitrary = futz NestedMessage
 instance Arbitrary OptionalGroup where arbitrary = futz OptionalGroup
 instance Arbitrary RepeatedGroup where arbitrary = futz RepeatedGroup
-instance Arbitrary TestAllTypes where arbitrary = futz TestAllTypes
 
 instance Arbitrary TestRequired where arbitrary = futz TestRequired
 --instance Arbitrary OptionalGroup_extension where arbitrary = futz OptionalGroup_extension
 --instance Arbitrary RepeatedGroup_extension where arbitrary = futz RepeatedGroup_extension
+
+instance Arbitrary TestAllTypes where 
+  arbitrary = futz TestAllTypes
 
 instance Arbitrary TestAllExtensions where
   arbitrary = F.foldlM (\msg alter -> alter msg) defaultValue (map snd allKeys)
@@ -82,24 +84,26 @@ prop_Size2 a =
        else trace ("Wrong size: "++show(predicted,written)) False
 
 -- convert with no header, a to a' compare a with a'
-prop_WireArb1 :: (Show a,Eq a,Arbitrary a,ReflectDescriptor a,Wire a) => a -> Bool
+prop_WireArb1 :: (Show a,Eq a,Arbitrary a,ReflectDescriptor a,Wire a, Mergeable a) => a -> Bool
 prop_WireArb1 a =
-   case messageGet (messagePut a) of
-     Right (a',b) | L.null b -> if a==a' then True
-                                  else trace ("Unequal\n" ++ show a ++ "\n\n" ++show a') False
+  case messageGet (messagePut a) of
+     Right (a',b) | L.null b -> if da==a' then True
+                                  else trace ("Unequal WireArb1\n" ++ show a ++ "\n\n" ++show a') False
                   | otherwise -> trace ("Not all input consumed: "++show (L.length b)++"\n"++ show a ++ "\n\n" ++show (L.unpack (messagePut a))) False
      Left msg -> trace (unlines [msg,show a,show . L.unpack $ messagePut a]) False
+  where da = defaultValue `mergeAppend` a
 
 type G x = Either String (x,ByteString)
 
 -- convert with with header, a to a' compare a and a'
-prop_WireArb2 :: (Eq a,Arbitrary a,ReflectDescriptor a,Wire a) => a -> Bool
+prop_WireArb2 :: (Eq a,Arbitrary a,ReflectDescriptor a,Wire a, Show a, Mergeable a) => a -> Bool
 prop_WireArb2 a =
    case messageWithLengthGet (messageWithLengthPut a) of
-     Right (a',b) | L.null b -> if a==a' then True
-                                  else trace ("Unequal") False
+     Right (a',b) | L.null b -> if da==a' then True
+                                  else trace ("Unequal WireArb2\n" ++ show a ++ "\n\n" ++show a') False
                   | otherwise -> trace ("Not all input consumed: "++show (L.length b)) False
      Left msg -> trace msg False
+  where da = defaultValue `mergeAppend` a
 
 -- main method of serialing messages, aIn to a to a', compare a and a'
 prop_WireArb3 :: (Show a,Eq a,Arbitrary a,ReflectDescriptor a,Wire a) => a -> Bool
@@ -108,7 +112,7 @@ prop_WireArb3 aIn =
        Right (a,_) = messageGet (messagePut aIn) in
    case messageGet (messagePut a) of
      Right (a',b) | L.null b -> if a==a' then True
-                                  else trace ("Unequal\n" ++ show a ++ "\n\n" ++show a') False
+                                  else trace ("Unequal WireArb3\n" ++ show a ++ "\n\n" ++show a') False
                   | otherwise -> trace ("Not all input consumed: "++show (L.length b)) False
      Left msg -> trace msg False
 
