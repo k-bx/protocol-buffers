@@ -4,17 +4,17 @@ module Text.ProtocolBuffers.ProtoCompile.Lexer (Lexed(..), alexScanTokens,getLin
 
 import Control.Monad.Error()
 import Codec.Binary.UTF8.String(encode)
-import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Lazy as DBL
 import Data.Char(ord,isHexDigit,isOctDigit,toLower)
 import Data.Word(Word8)
 import Numeric(readHex,readOct,readDec,readSigned,readFloat)
-import qualified Data.ByteString.Lazy.Char8 as ByteString
+import qualified Data.ByteString.Lazy.Char8 as DBL8
 
 }
 
 %wrapper "posn-bytestring"
 
-@inComment = ([^\*] | $white)+ | ([\*]+ ([\x00-\xff] # [\/]))
+@inComment = ([^\*] | $white)+ | ([\*]+ [^\/])
 @comment = [\/] [\*] (@inComment)* [\*]+ [\/] | "//".* | "#".*
 
 $d = [0-9]
@@ -25,12 +25,12 @@ $d = [0-9]
 
 @ident1 = [A-Za-z_][A-Za-z0-9_]*
 @ident = [\.]?@ident1([\.]@ident1)*
-@notChar = [\x00-\xff] # [A-Za-z0-9_]
+@notChar = [^A-Za-z0-9_]
 
 @hexEscape = \\[Xx][A-Fa-f0-9]{1,2}
 @octEscape = \\0?[0-7]{1,3}
 @charEscape = \\[abfnrtv\\\?'\"]
-@inStr = @hexEscape | @octEscape | @charEscape | [^'\"\0\n]
+@inStr = @hexEscape | @octEscape | @charEscape | [^'\"\n] | [\0]
 @strLit = ['] (@inStr | [\"])* ['] | [\"] (@inStr | ['])* [\"]
 
 $special    = [=\(\)\,\;\[\]\{\}\.\:]
@@ -62,8 +62,8 @@ line (AlexPn _byte lineNum _col) = lineNum
 
 data Lexed = L_Integer !Int !Integer
            | L_Double !Int !Double
-           | L_Name !Int !L.ByteString
-           | L_String !Int !L.ByteString !L.ByteString
+           | L_Name !Int !DBL.ByteString
+           | L_String !Int !DBL.ByteString !DBL.ByteString
            | L !Int !Char
            | L_Error !Int !String
   deriving (Show,Eq)
@@ -85,34 +85,34 @@ errAt pos msg =  L_Error (line pos) $ "Lexical error (in Text.ProtocolBuffers.Le
 dieAt :: [Char] -> AlexPosn -> t -> Lexed
 dieAt msg pos _s = errAt pos msg
 
-wtfAt :: AlexPosn -> ByteString.ByteString -> Lexed
+wtfAt :: AlexPosn -> DBL8.ByteString -> Lexed
 wtfAt pos s = errAt pos $ "unknown character "++show c++" (decimal "++show (ord c)++")"
-  where (c:_) = ByteString.unpack s
+  where (c:_) = DBL8.unpack s
 
 {-# INLINE mayRead #-}
 mayRead :: ReadS a -> String -> Maybe a
 mayRead f s = case f s of [(a,"")] -> Just a; _ -> Nothing
 
 -- Given the regexps above, the "parse* failed" messages should be impossible.
-parseDec,parseOct,parseHex,parseDouble,parseStr,parseNinf,parseName,parseChar :: AlexPosn -> ByteString.ByteString -> Lexed
+parseDec,parseOct,parseHex,parseDouble,parseStr,parseNinf,parseName,parseChar :: AlexPosn -> DBL8.ByteString -> Lexed
 parseDec pos s = maybe (errAt pos "Impossible? parseDec failed")
-                       (L_Integer (line pos)) $ mayRead (readSigned readDec) (ByteString.unpack s)
+                       (L_Integer (line pos)) $ mayRead (readSigned readDec) (DBL8.unpack s)
 parseOct pos s = maybe (errAt pos "Impossible? parseOct failed")
-                       (L_Integer (line pos)) $ mayRead (readSigned readOct) (ByteString.unpack s)
+                       (L_Integer (line pos)) $ mayRead (readSigned readOct) (DBL8.unpack s)
 parseHex pos s = maybe (errAt pos "Impossible? parseHex failed")
-                       (L_Integer (line pos)) $ mayRead (readSigned (readHex . drop 2)) (ByteString.unpack s)
+                       (L_Integer (line pos)) $ mayRead (readSigned (readHex . drop 2)) (DBL8.unpack s)
 parseDouble pos s = maybe (errAt pos "Impossible? parseDouble failed")
-                          (L_Double (line pos)) $ mayRead (readSigned readFloat) (ByteString.unpack s)
+                          (L_Double (line pos)) $ mayRead (readSigned readFloat) (DBL8.unpack s)
 -- The sDecode of the string contents may fail
-parseStr pos s = let middle = ByteString.init . ByteString.tail $ s
-                 in either (errAt pos) (L_String (line pos) middle . L.pack)
-                    . sDecode . ByteString.unpack $ middle
+parseStr pos s = let middle = DBL8.init . DBL8.tail $ s
+                 in either (errAt pos) (L_String (line pos) middle . DBL.pack)
+                    . sDecode . DBL8.unpack $ middle
 
 -- Here s is always "-inf" matched by @ninf
 parseNinf pos s = L_Name (line pos) s
 
 parseName pos s = L_Name (line pos) s
-parseChar pos s = L (line pos) (ByteString.head s)
+parseChar pos s = L (line pos) (DBL8.head s)
 
 -- Generalization of concat . unfoldr to monadic-Either form:
 op :: ( [Char] -> Either String (Maybe ([Word8],[Char]))) -> [Char] -> Either String [Word8]
