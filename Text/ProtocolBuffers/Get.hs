@@ -179,7 +179,7 @@ decode7unrolled :: forall s. (Num s,Integral s, Bits s) => Get s
 {-# NOINLINE decode7unrolled #-}
 decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc ->
   if ss == mempty
-    then unGet decode7 sc sIn pc
+    then unGet decode7 sc sIn pc -- decode7 will try suspend then will fail if still bad
     else
       let (TU'OK x i) = 
             unsafePerformIO $ withForeignPtr fp $ \ptr0 -> do
@@ -355,21 +355,26 @@ decode7 :: forall s. (Integral s, Bits s) => Get s
 decode7 = go 0 0
  where
   go !s1 !shift1 = do
-    let scanner (S.PS fp off len) =
+    let -- scanner's inner loop decodes only in current top strict bytestring, does not advance input state
+        scanner (S.PS fp off len) =
           withForeignPtr fp $ \ptr0 -> do
            if ptr0 == nullPtr || len < 1 then error "Get.decode7: ByteString invariant failed" else do
-            let start = ptr0 `plusPtr` off
-                end   = start `plusPtr` len
+            let start = ptr0 `plusPtr` off   -- start is a pointer to the next valid byte
+                end   = start `plusPtr` len  -- end is a pointer one byte past the last valid byte
                 inner :: (Ptr Word8) -> s -> Int -> IO (T3 s)
                 inner !ptr !s !shift
                   | ptr < end = do
                       w <- peek ptr
                       if (128>) w
-                        then return $ T3 (succ (ptr `minusPtr` start) )
-                                         (s .|. ((fromIntegral w) `shiftL` shift))
-                                         (-1) -- negative shift indicates satisfied
-                        else inner (ptr `plusPtr` 1) (s .|. ((fromIntegral (w .&. 0x7F)) `shiftL` shift)) (shift+7)
-                  | otherwise = return $ T3 (ptr `minusPtr` start) s shift
+                        then return $ T3 (succ (ptr `minusPtr` start) )            -- length of capture
+                                         (s .|. ((fromIntegral w) `shiftL` shift)) -- put the last bits into high position
+                                         (-1)                                      -- negative shift indicates satisfied
+                        else inner (ptr `plusPtr` 1)  -- loop on next byte
+                                   (s .|. ((fromIntegral (w .&. 0x7F)) `shiftL` shift)) -- put the new bits into high position
+                                   (shift+7)          -- increase high position for next loop
+                  | otherwise = return $ T3 (ptr `minusPtr` start)  -- length so far (ptr past end-of-string so no succ)
+                                            s                       -- value so far
+                                            shift                   -- next shift to use
             inner start s1 shift1
     (S ss bs n) <- getFull
     if ss == mempty
@@ -380,22 +385,22 @@ decode7 = go 0 0
           else fail "Get.decode7: Zero length input"
       else do
         let (T3 i sOut shiftOut) = unsafePerformIO $ scanner ss
-            t = S.unsafeDrop i ss
+            t = S.unsafeDrop i ss -- Warning: 't' may be mempty
             n' = n + fromIntegral i
         if 0 <= shiftOut
           then do
             case bs of
               L.Empty -> do
-                putFull (S mempty mempty n')
+                putFull_unsafe (S mempty mempty n')
                 continue <- suspend
                 if continue
                   then go sOut shiftOut
                   else return sOut
               L.Chunk ss' bs' -> do
-                putFull (S ss' bs' n')
+                putFull_unsafe (S ss' bs' n')
                 go sOut shiftOut
           else do
-            putFull (S t bs n')
+            putFull_safe (S t bs n') -- bs from getFull is still valid
             return sOut
 
 data T2 = T2 !Int64 !Bool
@@ -432,18 +437,18 @@ decode7size = go 0
             len2 = len1 + i
         if ok
           then do
-            putFull (S t bs n')
+            putFull_unsafe (S t bs n')
             return len2
           else do
             case bs of
               L.Empty -> do
-                putFull (S mempty mempty n')
+                putFull_safe (S mempty mempty n')
                 continue <- suspend
                 if continue
                   then go len2
                   else return len2
               L.Chunk ss' bs' -> do
-                putFull (S ss' bs' n')
+                putFull_safe (S ss' bs' n')
                 go len2
 
 -- Private Internal error handling stack type
@@ -604,8 +609,21 @@ putAvailable !bsNew = Get $ \ sc (S _ss _bs n) pc ->
 -- Internal access to full internal state, as helper functions
 getFull :: Get S
 getFull = Get $ \ sc s pc -> sc s s pc
-putFull :: S -> Get ()
-putFull !s = Get $ \ sc _s pc -> sc () s pc
+
+{-# INLINE putFull_unsafe #-}
+putFull_unsafe :: S -> Get ()
+putFull_unsafe !s = Get $ \ sc _s pc -> sc () s pc
+
+putFull_safe :: S -> Get ()
+putFull_safe !s@(S ss bs n) =
+  if ss == mempty then
+    case bs of
+      L.Empty -> do
+        putFull_unsafe (S mempty mempty n)
+      L.Chunk ss' bs' -> do
+        putFull_unsafe (S ss' bs' n)
+  else
+    putFull_unsafe s
 
 -- | Keep calling 'suspend' until Nothing is passed to the 'Partial'
 -- continuation.  This ensures all the data has been loaded into the
@@ -638,22 +656,26 @@ ensureBytes n = do
                   else suspendMsg "ensureBytes failed" >> ensureBytes n
 {-# INLINE ensureBytes #-}
 
--- | Pull @n@ bytes from the unput, as a lazy ByteString.  This will
+-- | Pull @n@ bytes from the input, as a lazy ByteString.  This will
 -- suspend if there is too little data.
 getLazyByteString :: Int64 -> Get L.ByteString
 getLazyByteString n | n<=0 = return mempty
                     | otherwise = do
   (S ss bs offset) <- getFull
   if ss == mempty
-    then suspendMsg ("getLazyByteString failed with "++show (n,(S.length ss,L.length bs,offset)))  >> getLazyByteString n
+    then do
+      suspendMsg ("getLazyByteString (ss=mempty) failed with "++show (n,(S.length ss,L.length bs,offset)))
+      getLazyByteString n
     else do
-      case splitAtOrDie n (L.chunk ss bs) of
+      case splitAtOrDie n (L.chunk ss bs) of  -- safe use of L.chunk because of ss == mempty check above
         Just (consume,rest) ->do
            case rest of
-             L.Empty -> putFull (S mempty mempty (offset + n))
-             L.Chunk ss' bs' -> putFull (S ss' bs' (offset + n))
+             L.Empty -> putFull_safe (S mempty mempty (offset + n))
+             L.Chunk ss' bs' -> putFull_safe (S ss' bs' (offset + n))
            return $! consume
-        Nothing -> suspendMsg ("getLazyByteString failed with "++show (n,(S.length ss,L.length bs,offset)))  >> getLazyByteString n
+        Nothing -> do
+           suspendMsg ("getLazyByteString (Nothing from splitAtOrDie) failed with "++show (n,(S.length ss,L.length bs,offset)))
+           getLazyByteString n
 {-# INLINE getLazyByteString #-} -- important
 
 -- | 'suspend' is supposed to allow the execution of the monad to be
@@ -748,10 +770,11 @@ skip m | m <=0 = return ()
        | otherwise = do
   ensureBytes m
   (S ss bs n) <- getFull
-  -- Could ignore impossible ss == mempty case due to (ensureBytes m) and (0 < m)
-  case L.drop m (if ss == mempty then bs else L.chunk ss bs) of
-    L.Empty -> putFull (S mempty mempty (n+m))
-    L.Chunk ss' bs' -> putFull (S ss' bs' (n+m))
+  -- Could ignore impossible ss == mempty case due to (ensureBytes m) and (0 < m) but be paranoid
+  let lbs = (if ss == mempty then bs else L.chunk ss bs) -- L.chunk is safe due to ss == mempty check
+  case L.drop m lbs of  -- drop will not perform less than 'm' bytes due to ensureBytes above
+    L.Empty -> putFull_safe (S mempty mempty (n+m))
+    L.Chunk ss' bs' -> putFull_safe (S ss' bs' (n+m))
 
 -- | Return the number of 'bytesRead' so far.  Initially 0, never negative.
 bytesRead :: Get Int64
@@ -815,10 +838,10 @@ highBitRun = loop where
 -- | get the longest prefix of the input where all the bytes satisfy the predicate.
 spanOf :: (Word8 -> Bool) ->  Get (L.ByteString)
 spanOf f = do let loop = do (S ss bs n) <- getFull
-                            let (pre,post) = L.span f (if ss==mempty then bs else L.chunk ss bs)
+                            let (pre,post) = L.span f (if ss==mempty then bs else L.chunk ss bs) -- L.chunk safe due to ss==mempty check
                             case post of
-                              L.Empty -> putFull (S mempty mempty (n + L.length pre))
-                              L.Chunk ss' bs' -> putFull (S ss' bs' (n + L.length pre))
+                              L.Empty -> putFull_safe (S mempty mempty (n + L.length pre))
+                              L.Chunk ss' bs' -> putFull_safe (S ss' bs' (n + L.length pre))
                             if L.null post
                               then do continue <- suspend
                                       if continue then  fmap ((L.toChunks pre)++) loop
@@ -836,9 +859,9 @@ getByteString :: Int -> Get S.ByteString
 getByteString nIn | nIn <= 0 = return mempty
                   | otherwise = do
   (S ss bs n) <- getFull
-  if nIn < S.length ss -- Leave at least one character of 'ss' in 'post'
+  if nIn < S.length ss -- Leave at least one character of 'ss' in 'post' allowing putFull_safe below
     then do let (pre,post) = S.splitAt nIn ss
-            putFull (S post bs (n+fromIntegral nIn))
+            putFull_safe (S post bs (n+fromIntegral nIn))
             return $! pre
     -- Expect nIn to be less than S.length ss the vast majority of times
     -- so do not worry about doing anything fancy here.

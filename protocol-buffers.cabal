@@ -1,10 +1,10 @@
 name:           protocol-buffers
-version:        2.0.9
+version:        2.0.10
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
 license-file:   LICENSE
-copyright:      (c) 2008-2011 Christopher Edward Kuklewicz
+copyright:      (c) 2008-2012 Christopher Edward Kuklewicz
 author:         Christopher Edward Kuklewicz
 maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
 stability:      Good

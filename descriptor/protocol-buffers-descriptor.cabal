@@ -1,10 +1,10 @@
 name:           protocol-buffers-descriptor
-version:        2.0.9
+version:        2.0.10
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
 license-file:   LICENSE
-copyright:      (c) 2009-2011 Christopher Edward Kuklewicz
+copyright:      (c) 2009-2012 Christopher Edward Kuklewicz
 author:         Christopher Edward Kuklewicz
 maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
 stability:      Good
@@ -26,7 +26,7 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Library
-  build-depends: protocol-buffers == 2.0.9,
+  build-depends: protocol-buffers == 2.0.10,
                  bytestring,
                  containers
 
