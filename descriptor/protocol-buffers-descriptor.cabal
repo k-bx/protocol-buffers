@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        2.0.10
+version:        2.0.12
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -8,8 +8,8 @@ copyright:      (c) 2009-2012 Christopher Edward Kuklewicz
 author:         Christopher Edward Kuklewicz
 maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
 stability:      Good
-homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers-descriptor
-package-url:    http://code.haskell.org/protocol-buffers/
+homepage:       http://code.haskell.org/protocol-buffers/
+package-url:    http://hackage.haskell.org/package/protocol-buffers-descriptor
 synopsis:       Text.DescriptorProto.Options and code generated from the Google Protocol Buffer specification
 description:    Uses protocol-buffers package
 category:       Text
@@ -26,7 +26,7 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Library
-  build-depends: protocol-buffers == 2.0.10,
+  build-depends: protocol-buffers == 2.0.12,
                  bytestring,
                  containers
 

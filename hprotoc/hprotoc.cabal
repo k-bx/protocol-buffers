@@ -1,5 +1,5 @@
 name:           hprotoc
-version:        2.0.10
+version:        2.0.12
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -8,8 +8,8 @@ copyright:      (c) 2008-2012 Christopher Edward Kuklewicz
 author:         Christopher Edward Kuklewicz
 maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
 stability:      Experimental
-homepage:       http://hackage.haskell.org/package/hprotoc
-package-url:    http://code.haskell.org/protocol-buffers/
+homepage:       http://code.haskell.org/protocol-buffers/
+package-url:    http://hackage.haskell.org/package/hprotoc
 synopsis:       Parse Google Protocol Buffer specifications
 description:    Parse language defined at "http://code.google.com/apis/protocolbuffers/docs/proto.html" and general haskell code to implement messages.
 category:       Text
@@ -22,8 +22,8 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Executable hprotoc
-  build-depends:   protocol-buffers == 2.0.10,
-                   protocol-buffers-descriptor == 2.0.10
+  build-depends:   protocol-buffers == 2.0.12,
+                   protocol-buffers-descriptor == 2.0.12
   Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell

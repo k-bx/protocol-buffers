@@ -95,7 +95,7 @@
 --
 -- hprotoc will actually resolve more unqualified imported names than Google's protoc which requires
 -- more qualified names.  I do not have the obsessive nature to fix this.
-module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadCodeGenRequest,makeNameMap,makeNameMaps,getTLS
+module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadCodeGenRequest,makeNameMaps,getTLS,getPackageID
                                                 ,Env(..),TopLevel(..),ReMap,NameMap(..),PackageID(..),LocalFP(..),CanonFP(..)) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
@@ -170,6 +170,8 @@ import qualified Data.Map as M
 import qualified Data.Set as Set
 import qualified Data.Traversable as T
 
+--import Debug.Trace(trace)
+
 -- Used by err and throw
 indent :: String -> String
 indent = unlines . map (\str -> ' ':' ':str) . lines
@@ -202,13 +204,18 @@ defaultPackageName = Utf8 (LC.pack "defaultPackageName")
 -- change this to track the additional complexity.
 --newtype PackageID a = PackageID { getPackageID :: a } deriving (Show)
 
-data PackageID a = PackageID { getPackageID :: a }
-                 | NoPackageID { getPackageID :: a }
+data PackageID a = PackageID { _getPackageID :: a }
+                 | NoPackageID { _getNoPackageID :: a }
  deriving (Show)
 
-mPackageID :: Monoid a => PackageID a -> a
-mPackageID (PackageID {getPackageID=x}) = x
-mPackageID (NoPackageID {}) = mempty
+instance Functor PackageID where
+   fmap f (PackageID a) = PackageID (f a)
+   fmap f (NoPackageID a) = NoPackageID (f a)
+
+-- Used in MakeReflections.makeProtoInfo
+getPackageID :: PackageID a -> a
+getPackageID (PackageID a) = a
+getPackageID (NoPackageID a) = a
 
 -- The package field of FileDescriptorProto is set in Parser.hs.
 -- 'getPackage' is the only direct user of this information in hprotoc.
@@ -224,12 +231,14 @@ getPackage fdp = case D.FileDescriptorProto.package fdp of
                                                    Nothing -> NoPackageID defaultPackageName
                                                    Just name -> NoPackageID name
 
-getPackageUtf8 :: PackageID Utf8 -> Utf8
-getPackageUtf8 (PackageID {getPackageID=x}) = x
-getPackageUtf8 (NoPackageID {getPackageID=x}) = x
+--getPackageUtf8 :: PackageID Utf8 -> Utf8
+--getPackageUtf8 (PackageID {_getPackageID=x}) = x
+--getPackageUtf8 (NoPackageID {_getNoPackageID=x}) = x
 
-checkPackageID :: PackageID Utf8 -> Either String (Bool,[IName Utf8])
-checkPackageID = checkDIUtf8 . getPackageUtf8
+-- LOSES PackageID vs NoPackageID 2012-09-19
+checkPackageID :: PackageID Utf8 -> Either String (PackageID (Bool,[IName Utf8]))
+checkPackageID (PackageID a) = fmap PackageID (checkDIUtf8 a)
+checkPackageID (NoPackageID a) = fmap NoPackageID (checkDIUtf8 a)
 
 -- | 'convertFileToPackage' mimics what I observe protoc --java_out do to convert the file name to a
 -- class name.
@@ -356,11 +365,10 @@ data NameMap = NameMap ( PackageID (FIName Utf8) -- packageName from 'getPackage
                        , [MName String]   -- hPrefix from command line
                        , [MName String])  -- hParent from java_outer_classname, java_package, or 'getPackage'
                        ReMap
+  deriving (Show)
 
 type RE a = ReaderT Env (Either ErrStr) a
 
-get'SEnv'root'from'PackageID :: PackageID [IName String] -> [IName String]
-get'SEnv'root'from'PackageID = mPackageID
 
 data SEnv = SEnv { my'Parent :: [IName String]   -- top level value is derived from PackageID
                  , my'Env :: Env }
@@ -459,13 +467,13 @@ resolvePredEnv userMessage accept nameU envIn = do
     (if matchesMain main (top'Package tl) then filteredLookup (top'mVals tl) xs else Nothing)
     <|>
     (matchPrefix (top'Package tl) xs >>= filteredLookup (top'mVals tl))
-   where matchesMain (PackageID {getPackageID=a}) (PackageID {getPackageID=b}) = a==b
-         matchesMain (NoPackageID {}) (PackageID {})   = False
+   where matchesMain (PackageID {_getPackageID=a}) (PackageID {_getPackageID=b}) = a==b
+         matchesMain (NoPackageID {}) (PackageID {})   = False  -- XXX XXX XXX 2012-09-19 suspicious
          matchesMain (PackageID {})   (NoPackageID {}) = True
          matchesMain (NoPackageID {}) (NoPackageID {}) = True
 
          matchPrefix (NoPackageID {}) _ = Nothing
-         matchPrefix (PackageID {getPackageID=a}) ys = stripPrefix a ys
+         matchPrefix (PackageID {_getPackageID=a}) ys = stripPrefix a ys
 
   filteredLookup valsIn namesIn =
     let lookupVals :: EMap -> [IName String] -> Maybe E'Entity
@@ -520,8 +528,8 @@ whereEnv (Local name _ env) = fiName (joinDot name) ++ " in "++show (top'Path . 
 -- WAS whereEnv (Global tl _) = fiName (joinDot (getPackageID (top'Package tl))) ++ " in " ++ show (top'Path tl)
 whereEnv (Global tl _) = formatPackageID ++ " in " ++ show (top'Path tl)
   where formatPackageID = case top'Package tl of
-                            PackageID {getPackageID=x} -> fiName (joinDot x)
-                            NoPackageID {getPackageID=y} -> show y
+                            PackageID {_getPackageID=x} -> fiName (joinDot x)
+                            NoPackageID {_getNoPackageID=y} -> show y
 
 -- | 'partEither' separates the Left errors and Right success in the obvious way.
 partEither :: [Either a b] -> ([a],[b])
@@ -589,7 +597,9 @@ makeNameMaps hPrefix hAs env = do
   (NameMap tuple m) <- makeNameMap (getPrefix fdp) fdp
   let f (NameMap _ x) = x
   ms <- fmap (map f) . mapM (\y -> makeNameMap (getPrefix y) y) $ fdps
-  return (NameMap tuple (M.unions (m:ms)))
+  let nameMap = (NameMap tuple (M.unions (m:ms)))
+--  trace (show nameMap) $ 
+  return nameMap
 
 -- | 'makeNameMap' conservatively checks its input.
 makeNameMap :: [MName String] -> D.FileDescriptorProto -> Either ErrStr NameMap
@@ -606,11 +616,13 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
                         Nothing -> FIName $ fromString ""
                         Just p  -> difi $ DIName p
 -}
-    let packageName@(PackageID fi'package'name) = PackageID (difi (DIName (getPackageUtf8 rawPackage))) :: PackageID (FIName Utf8)
+    let packageName :: PackageID (FIName Utf8)
+        packageName = fmap (difi . DIName) rawPackage
+        fi'package'name = getPackageID packageName
     rawParent <- getJust "makeNameMap.makeOne: impossible Nothing found" . msum $
         [ D.FileOptions.java_outer_classname =<< (D.FileDescriptorProto.options fdp)
         , D.FileOptions.java_package =<< (D.FileDescriptorProto.options fdp)
-        , Just (getPackageUtf8 rawPackage)]
+        , Just (getPackageID rawPackage)]
     diParent <- getJust ("makeNameMap.makeOne: invalid character in: "++show rawParent)
                   (validDI rawParent)
     let hParent = map (mangle :: IName Utf8 -> MName String) . splitDI $ diParent
@@ -677,6 +689,7 @@ kids f xs = do sEnv <- ask
 -- The 'mdo' usage has been replace by modified forms of 'mfix' that will generate useful error
 -- values instead of calling 'error' and halting 'hprotoc'.
 --
+-- Used from loadProto'
 makeTopLevel :: D.FileDescriptorProto -> PackageID [IName String] -> [TopLevel] -> Either ErrStr Env {- Global -}
 makeTopLevel fdp packageName imports = do
   filePath <- getJust "makeTopLevel.filePath" (D.FileDescriptorProto.name fdp)
@@ -712,6 +725,15 @@ makeTopLevel fdp packageName imports = do
        resolveFDP fdpIn env = runRE env (fqFileDP fdpIn)
         where runRE :: Env -> RE D.FileDescriptorProto -> Either ErrStr D.FileDescriptorProto
               runRE envIn m = runReaderT m envIn
+
+       -- Used from makeTopLevel, from loadProto'
+       get'SEnv'root'from'PackageID :: PackageID [IName String] -> [IName String]
+       get'SEnv'root'from'PackageID = getPackageID -- was mPackageID before 2012-09-19
+           -- where
+           -- Used from get'SEnv  makeTopLevel, from loadProto'
+           -- mPackageID :: Monoid a => PackageID a -> a
+           -- mPackageID (PackageID {_getPackageID=x}) = x
+           -- mPackageID (NoPackageID {}) = mempty
 
 
 -- Copies of mFix for use the string in (Left msg) for the error message.
@@ -1295,8 +1317,16 @@ loadProto' fdpReader protoFile = goState (load Set.empty protoFile) where
             (parsed'fdp, canonicalFile) <- lift $ fdpReader file
             let rawPackage = getPackage parsed'fdp
             packageName <- either (loadFailed canonicalFile . show)
-                                  (return . PackageID . map iToString . snd)
+                                  (return . fmap (map iToString . snd)) -- 2012-09-19 suspicious
                                   (checkPackageID rawPackage)
+
+{-
+-- OLD before 2012-09-19
+            packageName <- either (loadFailed canonicalFile . show)
+                                  (return . PackageID . map iToString . snd) -- 2012-09-19 suspicious
+                                  (checkPackageID rawPackage)
+-}
+
 {-
    -- previously patched solution
             packageName <- case D.FileDescriptorProto.package parsed'fdp of

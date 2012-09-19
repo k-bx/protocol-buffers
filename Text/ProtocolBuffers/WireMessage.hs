@@ -56,8 +56,6 @@ import Data.Typeable (Typeable(..))
 -- This has been superceded by the ST array trick (ugly, but promised to work)
 --import GHC.Exts (Double(D#),Float(F#),unsafeCoerce#)
 --import GHC.Word (Word64(W64#)) -- ,Word32(W32#))
---import Debug.Trace
-
 -- binary package
 import Data.Binary.Put (Put,runPut,putWord8,putWord32le,putWord64le,putLazyByteString)
 
@@ -68,8 +66,10 @@ import Text.ProtocolBuffers.Get as Get (Result(..),Get,runGet,runGetAll,bytesRea
 import Text.ProtocolBuffers.Reflections(ReflectDescriptor(reflectDescriptorInfo,getMessageInfo)
                                        ,DescriptorInfo(..),GetMessageInfo(..))
 
+-- import Debug.Trace(trace)
+
 trace :: a -> b -> b
-trace _ s = s
+trace _  = id
 
 -- External user API for writing and reading messages
 
@@ -740,9 +740,13 @@ testZZ = and (concat testsZZ)
 let values :: (Bounded a,Integral a) => [a]; values = [minBound,div minBound 2 - 1,div minBound 2, div minBound 2 + 1,-257,-256,-255,-129,-128,-127,-3,-2,-1,0,1,2,3,127,128,129,255,256,257,div maxBound 2 - 1, div maxBound 2, div maxBound 2 + 1, maxBound]
 -}
 
-getVarInt :: (Integral a, Bits a) => Get a
+getVarInt :: (Show a, Integral a, Bits a) => Get a
 {-# INLINE getVarInt #-}
-getVarInt = decode7unrolled -- decode7 -- getVarInt below
+--getVarInt = decode7unrolled -- decode7 -- getVarInt below
+getVarInt = do
+  a <- decode7unrolled
+  trace ("getVarInt: "++show a) $ return a
+
 {-
 getVarInt = do -- optimize first read instead of calling (go 0 0)
   b <- getWord8

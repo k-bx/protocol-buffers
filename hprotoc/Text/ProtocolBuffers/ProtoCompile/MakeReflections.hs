@@ -40,7 +40,7 @@ import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections
 import Text.ProtocolBuffers.WireMessage(size'WireTag,toWireTag,toPackedWireTag,runPut,Wire(..))
-import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..),PackageID(..))
+import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..),getPackageID)
 
 import qualified Data.Foldable as F(foldr,toList)
 import qualified Data.Sequence as Seq(fromList,empty,singleton,null)
@@ -124,6 +124,10 @@ keyExtendee' :: ReMap -> D.FieldDescriptorProto.FieldDescriptorProto -> ProtoNam
 keyExtendee' reMap f = case D.FieldDescriptorProto.extendee f of
                          Nothing -> imp $ "keyExtendee expected Just but found Nothing: "++show f
                          Just extName -> toHaskell reMap (FIName extName)
+                           -- let debugMsg = unlines [ "MakeReflections.keyExtendee'.debugMsg"
+                           --                        , "extName is " ++ show extName
+                           --                        , "reMap is :"
+                           --                        , show reMap ]
 
 makeDescriptorInfo' :: ReMap -> FIName Utf8
                     -> (ProtoName -> Seq FieldInfo)

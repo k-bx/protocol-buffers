@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        2.0.10
+version:        2.0.12
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -8,8 +8,8 @@ copyright:      (c) 2008-2012 Christopher Edward Kuklewicz
 author:         Christopher Edward Kuklewicz
 maintainer:     Chris Kuklewicz <protobuf@personal.mightyreason.com>
 stability:      Good
-homepage:       http://hackage.haskell.org/cgi-bin/hackage-scripts/package/protocol-buffers
-package-url:    http://code.haskell.org/protocol-buffers/
+homepage:       http://code.haskell.org/protocol-buffers/
+package-url:    http://hackage.haskell.org/package/protocol-buffers
 synopsis:       Parse Google Protocol Buffer specifications
 description:    Parse proto files and generate Haskell code.
 category:       Text
