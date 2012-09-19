@@ -93,6 +93,10 @@ import System.IO.Unsafe(unsafePerformIO)
 import GHC.Base(Int(..),uncheckedShiftL#)
 import GHC.Word(Word16(..),Word32(..),Word64(..),uncheckedShiftL64#)
 #endif
+--import Debug.Trace(trace)
+
+trace :: a -> b -> b
+trace _ = id
 
 -- Simple external return type
 data Result a = Failed {-# UNPACK #-} !Int64 String
@@ -100,70 +104,12 @@ data Result a = Failed {-# UNPACK #-} !Int64 String
               | Partial (Maybe L.ByteString -> Result a)
 
 -- Internal state type, not exposed to the user.
--- top is mempty implies current is also mempty
-data S = S { top :: {-# UNPACK #-} !S.ByteString
-           , current :: !L.ByteString
+-- Invariant: (S.null _top) implies (L.null _current)
+data S = S { _top :: {-# UNPACK #-} !S.ByteString
+           , _current :: !L.ByteString
            , consumed :: {-# UNPACK #-} !Int64
            } deriving Show
 
-{-
-data T s = T {-# UNPACK #-} !Int s
-
--- | A stateful scanner.  The predicate consumes and transforms a
--- state argument, and each transformed state is passed to successive
--- invocations of the predicate on each byte of the input until one
--- returns 'Nothing' or the input ends.
---
--- This parser does not fail.  It will return an empty string if the
--- predicate returns 'Nothing' on the first byte of input.
---
--- /Note/: Because this parser does not fail, do not use it with
--- combinators such as 'many', because such parsers loop until a
--- failure occurs.  Careless use will thus result in an infinite loop.
-scan :: s -> (s -> Word8 -> Maybe s) -> Get (S.ByteString,s)
-scan s0 p = do
-  (chunks,s) <- go [] s0
-  case chunks of
-    [x] -> return (x,s)
-    xs  -> return (S.concat . reverse $ xs, s)
- where
-  go acc s1 = do
-    let scanner (S.PS fp off len) =
-          withForeignPtr fp $ \ptr0 -> do
-           if ptr0 == nullPtr || len < 1 then error "Get.scan: ByteString invariant failed" else do
-            let start = ptr0 `plusPtr` off
-                end   = start `plusPtr` len
-                inner ptr !s
-                  | ptr < end = do
-                      w <- peek ptr
-                      case p s w of
-                        Just s' -> inner (ptr `plusPtr` 1) s'
-                        _       -> done (ptr `minusPtr` start) s
-                  | otherwise = done (ptr `minusPtr` start) s
-                done !i !s = return (T i s)
-            inner start s1
-    (S ss bs n) <- getFull
-    let T i s' = unsafePerformIO $ scanner ss
-        h = S.unsafeTake i ss
-        t = S.unsafeDrop i ss
-        n' = n + fromIntegral i
-    if S.null t
-      then do
-        case bs of
-          L.Empty -> do
-            putFull (S mempty mempty n')
-            continue <- suspend
-            if continue
-              then go (h:acc) s'
-              else return (h:acc,s')
-          L.Chunk ss' bs' -> do
-            putFull (S ss' bs' n')
-            go (h:acc) s'
-      else do
-        putFull (S t bs n')
-        return ((h:acc),s')
-
--}
 data T3 s = T3 !Int !s !Int
 
 --data TU s = TU'OK !s !Int | TU'DO (Get s)
@@ -177,9 +123,9 @@ data TU s = TU'OK !s !Int
 {-# SPECIALIZE decode7unrolled :: Get Integer #-}
 decode7unrolled :: forall s. (Num s,Integral s, Bits s) => Get s
 {-# NOINLINE decode7unrolled #-}
-decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc ->
-  if ss == mempty
-    then unGet decode7 sc sIn pc -- decode7 will try suspend then will fail if still bad
+decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc -> trace ("decode7unrolled: "++show (len,n)) $
+  if S.null ss
+    then trace ("decode7unrolled: S.null ss") $ unGet decode7 sc sIn pc -- decode7 will try suspend then will fail if still bad
     else
       let (TU'OK x i) = 
             unsafePerformIO $ withForeignPtr fp $ \ptr0 -> do
@@ -259,91 +205,11 @@ decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc ->
       in if i > 0
            then let ss' = (S.unsafeDrop i ss)
                     n' = n+fromIntegral i
-                in case S.null ss' of
-                     False -> sc x (S ss' bs n') pc
-                     True -> case bs of
-                               L.Empty -> sc x (S mempty mempty n') pc
-                               L.Chunk ss'2 bs'2 -> sc x (S ss'2 bs'2 n') pc
+                    s'safe = make_safe (S ss' bs n')
+                in sc x s'safe pc
            else if i==0 then unGet decode7 sc sIn pc
-                       else unGet (throwError $ "Text.ProtocolBuffers.Get.decode7unrolled: more than 10 bytes needed at bytes read of "++show n) sc sIn pc
+                        else unGet (throwError $ "Text.ProtocolBuffers.Get.decode7unrolled: more than 10 bytes needed at bytes read of "++show n) sc sIn pc
 
-{- used up till bench-024
-decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc ->
-  let r = unsafePerformIO $ withForeignPtr fp $ \ptr0 -> do
-            let ok :: s -> Int -> IO (TU s)
-                ok x i = return (TU'OK x i)
-                bad :: Get s -> IO (TU s)
-                bad y = return (TU'DO y)
-            let start = ptr0 `plusPtr` off :: Ptr Word8
-            b'1 <- peek start
-            if b'1 < 128 then ok (fromIntegral b'1) 1 else do
-            let !val'1 = fromIntegral (b'1 .&. 0x7F)
-                !end = start `plusPtr` len
-                !ptr2 = start `plusPtr` 1 :: Ptr Word8
-            if ptr2 >= end then bad decode7 else do
-
-            b'2 <- peek ptr2
-            if b'2 < 128 then ok (val'1 .|. (fromIntegral b'2 `shiftL` 7)) 2 else do
-            let !val'2 = (val'1 .|. (fromIntegral (b'2 .&. 0x7F) `shiftL` 7))
-                !ptr3 = ptr2 `plusPtr` 1
-            if ptr3 >= end then bad decode7 else do
-
-            b'3 <- peek ptr3
-            if b'3 < 128 then ok (val'2 .|. (fromIntegral b'3 `shiftL` 14)) 3 else do
-            let !val'3 = (val'2 .|. (fromIntegral (b'3 .&. 0x7F) `shiftL` 14))
-                !ptr4 = ptr3 `plusPtr` 1
-            if ptr4 >= end then bad decode7 else do
-
-            b'4 <- peek ptr4
-            if b'4 < 128 then ok (val'3 .|. (fromIntegral b'4 `shiftL` 21)) 4 else do
-            let !val'4 = (val'3 .|. (fromIntegral (b'4 .&. 0x7F) `shiftL` 21))
-                !ptr5 = ptr4 `plusPtr` 1
-            if ptr5 >= end then bad decode7 else do
-
-            b'5 <- peek ptr5
-            if b'5 < 128 then ok (val'4 .|. (fromIntegral b'5 `shiftL` 28)) 5 else do
-            let !val'5 = (val'4 .|. (fromIntegral (b'5 .&. 0x7F) `shiftL` 28))
-                !ptr6 = ptr5 `plusPtr` 1
-            if ptr6 >= end then bad decode7 else do
-               
-            b'6 <- peek ptr6
-            if b'6 < 128 then ok (val'5 .|. (fromIntegral b'6 `shiftL` 35)) 6 else do
-            let !val'6 = (val'5 .|. (fromIntegral (b'6 .&. 0x7F) `shiftL` 35))
-                !ptr7 = ptr6 `plusPtr` 1
-            if ptr7 >= end then bad decode7 else do
-               
-            b'7 <- peek ptr7
-            if b'7 < 128 then ok (val'6 .|. (fromIntegral b'7 `shiftL` 42)) 7 else do
-            let !val'7 = (val'6 .|. (fromIntegral (b'7 .&. 0x7F) `shiftL` 42))
-                !ptr8 = ptr7 `plusPtr` 1
-            if ptr8 >= end then bad decode7 else do
-               
-            b'8 <- peek ptr8
-            if b'8 < 128 then ok (val'7 .|. (fromIntegral b'8 `shiftL` 49)) 8 else do
-            let !val'8 = (val'7 .|. (fromIntegral (b'8 .&. 0x7F) `shiftL` 49))
-                !ptr9 = ptr8 `plusPtr` 1
-            if ptr9 >= end then bad decode7 else do
-               
-            b'9 <- peek ptr9
-            if b'9 < 128 then ok (val'8 .|. (fromIntegral b'9 `shiftL` 56)) 9 else do
-            let !val'9 = (val'8 .|. (fromIntegral (b'9 .&. 0x7F) `shiftL` 56))
-                !ptrA = ptr9 `plusPtr` 1
-            if ptrA >= end then bad decode7 else do
-
-            b'A <- peek ptrA
-            if b'A < 128 then ok (val'9 .|. (fromIntegral b'A `shiftL` 63)) 10 else do
-
-            bad (throwError $ "Text.ProtocolBuffers.Get.decode7unrolled: more than 10 bytes needed at bytes read of "++show n)
-  in case r of
-    TU'OK x i -> let ss' = (S.unsafeDrop i ss)
-                     n' = n+fromIntegral i
-                 in case S.null ss' of
-                      False -> sc x (S ss' bs n') pc
-                      True -> case bs of
-                                L.Empty -> sc x (S mempty mempty n') pc
-                                L.Chunk ss'2 bs'2 -> sc x (S ss'2 bs'2 n') pc
-    TU'DO y -> unGet y sc sIn pc
--}
 {-# SPECIALIZE decode7 :: Get Int64 #-}
 {-# SPECIALIZE decode7 :: Get Int32 #-}
 {-# SPECIALIZE decode7 :: Get Word64 #-}
@@ -354,7 +220,7 @@ decode7 :: forall s. (Integral s, Bits s) => Get s
 {-# NOINLINE decode7 #-}
 decode7 = go 0 0
  where
-  go !s1 !shift1 = do
+  go !s1 !shift1 = trace ("decode7.go: "++show (toInteger s1, shift1)) $ do
     let -- scanner's inner loop decodes only in current top strict bytestring, does not advance input state
         scanner (S.PS fp off len) =
           withForeignPtr fp $ \ptr0 -> do
@@ -365,6 +231,7 @@ decode7 = go 0 0
                 inner !ptr !s !shift
                   | ptr < end = do
                       w <- peek ptr
+                      trace ("w: " ++ show w) $ do
                       if (128>) w
                         then return $ T3 (succ (ptr `minusPtr` start) )            -- length of capture
                                          (s .|. ((fromIntegral w) `shiftL` shift)) -- put the last bits into high position
@@ -377,27 +244,28 @@ decode7 = go 0 0
                                             shift                   -- next shift to use
             inner start s1 shift1
     (S ss bs n) <- getFull
-    if ss == mempty
+    trace ("getFull says: "++ show ((S.length ss,ss),(L.length bs),n)) $ do
+    if S.null ss
       then do
         continue <- suspend
         if continue
-          then go 0 0
-          else fail "Get.decode7: Zero length input"
+          then go s1 shift1
+          else fail "Get.decode7: Zero length input" -- XXX can be triggered!
       else do
         let (T3 i sOut shiftOut) = unsafePerformIO $ scanner ss
             t = S.unsafeDrop i ss -- Warning: 't' may be mempty
             n' = n + fromIntegral i
+        trace ("scanner says "++show ((i,toInteger sOut,shiftOut),(S.length t,n'))) $ do
         if 0 <= shiftOut
           then do
-            case bs of
-              L.Empty -> do
-                putFull_unsafe (S mempty mempty n')
+            putFull_unsafe (make_state bs n')
+            if L.null bs
+              then do
                 continue <- suspend
                 if continue
                   then go sOut shiftOut
                   else return sOut
-              L.Chunk ss' bs' -> do
-                putFull_unsafe (S ss' bs' n')
+              else do
                 go sOut shiftOut
           else do
             putFull_safe (S t bs n') -- bs from getFull is still valid
@@ -424,11 +292,11 @@ decode7size = go 0
                   | otherwise = return $ T2 (fromIntegral (ptr `minusPtr` start)) False
             inner start
     (S ss bs n) <- getFull
-    if ss == mempty
+    if S.null ss
       then do
         continue <- suspend
         if continue
-          then go 0
+          then go len1
           else fail "Get.decode7size: zero length input"
       else do
         let (T2 i ok) = unsafePerformIO $ scanner ss
@@ -440,15 +308,14 @@ decode7size = go 0
             putFull_unsafe (S t bs n')
             return len2
           else do
-            case bs of
-              L.Empty -> do
-                putFull_safe (S mempty mempty n')
+            putFull_unsafe (make_state bs n')
+            if L.null bs
+              then do
                 continue <- suspend
                 if continue
                   then go len2
                   else return len2
-              L.Chunk ss' bs' -> do
-                putFull_safe (S ss' bs' n')
+              else
                 go len2
 
 -- Private Internal error handling stack type
@@ -464,7 +331,7 @@ data FrameStack b = ErrorFrame (String -> S -> Result b) -- top level handler
                   | HandlerFrame (Maybe ( S -> FrameStack b -> String -> Result b ))  -- encapsulated handler
                                  S  -- stored state to pass to handler
                                  (Seq L.ByteString)  -- additional input to hass to handler
-                                 (FrameStack b)  -- earlier/deeper/outer handlers
+                                 (FrameStack b)  -- earlier/shallower/outer handlers
 
 type Success b a = (a -> S -> FrameStack b -> Result b)
 
@@ -491,8 +358,7 @@ setCheckpoint = Get $ \ sc s pc -> sc () s (HandlerFrame Nothing s mempty pc)
 
 useCheckpoint = Get $ \ sc (S _ _ _) frame ->
   case frame of
-    (HandlerFrame Nothing s future pc) -> let (S {top=ss, current=bs, consumed=n}) = collect s future
-                                          in sc () (S ss bs n) pc
+    (HandlerFrame Nothing s future pc) -> sc () (collect s future) pc
     _ -> error "Text.ProtocolBuffers.Get: Impossible useCheckpoint frame!"
 
 clearCheckpoint = Get $ \ sc s frame ->
@@ -542,8 +408,8 @@ lookAheadE todo = do
 
 -- 'collect' is used by 'putCheckpoint' and 'throwError'
 collect :: S -> Seq L.ByteString -> S
-collect s@(S ss bs n) future | Data.Sequence.null future = s
-                             | otherwise = S ss (mappend bs (F.foldr1 mappend future)) n
+collect s@(S ss bs n) future | Data.Sequence.null future = make_safe $ s
+                             | otherwise = make_safe $ S ss (mappend bs (F.foldr1 mappend future)) n
 
 -- Put the Show instances here
 
@@ -566,16 +432,14 @@ instance Show (FrameStack b) where
 runGet :: Get a -> L.ByteString -> Result a
 runGet (Get f) bsIn = f scIn sIn (ErrorFrame ec True)
   where scIn a (S ss bs n) _pc = Finished (L.chunk ss bs) n a
-        sIn = case bsIn of L.Empty -> S mempty mempty 0
-                           L.Chunk ss bs -> S ss bs 0
+        sIn = make_state bsIn 0
         ec msg sOut = Failed (consumed sOut) msg
 
 -- | 'runGetAll' is the simple executor, and will not ask for any continuation because this lazy bytestring is all the input
 runGetAll :: Get a -> L.ByteString -> Result a
 runGetAll (Get f) bsIn = f scIn sIn (ErrorFrame ec False)
   where scIn a (S ss bs n) _pc = Finished (L.chunk ss bs) n a
-        sIn = case bsIn of L.Empty -> S mempty mempty 0
-                           L.Chunk ss bs -> S ss bs 0
+        sIn = make_state bsIn 0
         ec msg sOut = Failed (consumed sOut) msg
 
 -- | Get the input currently available to the parser.
@@ -591,18 +455,14 @@ getAvailable = Get $ \ sc s@(S ss bs _) pc -> sc (L.chunk ss bs) s pc
 -- WARNING : 'putAvailable' is still untested.
 putAvailable :: L.ByteString -> Get ()
 putAvailable !bsNew = Get $ \ sc (S _ss _bs n) pc ->
-  let !s' = case bsNew of
-             L.Empty -> S mempty mempty n
-             L.Chunk ss' bs' -> S ss' bs' n
+  let !s' = make_state bsNew n
       rebuild (HandlerFrame catcher (S ss1 bs1 n1) future pc') =
                HandlerFrame catcher sNew mempty (rebuild pc')
         where balance = n - n1
               whole | balance < 0 = error "Impossible? Cannot rebuild HandlerFrame in MyGet.putAvailable: balance is negative!"
                     | otherwise = L.take balance $ L.chunk ss1 bs1 `mappend` F.foldr mappend mempty future
               sNew | balance /= L.length whole = error "Impossible? MyGet.putAvailable.rebuild.sNew HandlerFrame assertion failed."
-                   | otherwise = case mappend whole bsNew of
-                                   L.Empty -> S mempty mempty n1
-                                   L.Chunk ss2 bs2 -> S ss2 bs2 n1
+                   | otherwise = make_state (mappend whole bsNew) n1
       rebuild x@(ErrorFrame {}) = x
   in sc () s' (rebuild pc)
          
@@ -614,16 +474,20 @@ getFull = Get $ \ sc s pc -> sc s s pc
 putFull_unsafe :: S -> Get ()
 putFull_unsafe !s = Get $ \ sc _s pc -> sc () s pc
 
+{-# INLINE make_safe #-}
+make_safe :: S -> S
+make_safe s@(S ss bs n) =
+  if S.null ss
+    then make_state bs n
+    else s
+
+{-# INLINE make_state #-}
+make_state :: L.ByteString -> Int64 -> S
+make_state L.Empty n = S mempty mempty n
+make_state (L.Chunk ss bs) n = S ss bs n
+
 putFull_safe :: S -> Get ()
-putFull_safe !s@(S ss bs n) =
-  if ss == mempty then
-    case bs of
-      L.Empty -> do
-        putFull_unsafe (S mempty mempty n)
-      L.Chunk ss' bs' -> do
-        putFull_unsafe (S ss' bs' n)
-  else
-    putFull_unsafe s
+putFull_safe= putFull_unsafe . make_safe
 
 -- | Keep calling 'suspend' until Nothing is passed to the 'Partial'
 -- continuation.  This ensures all the data has been loaded into the
@@ -646,7 +510,7 @@ suspendMsg msg = do continue <- suspend
 ensureBytes :: Int64 -> Get ()
 ensureBytes n = do
   (S ss bs _read) <- getFull
-  if ss == mempty
+  if S.null ss
     then suspendMsg "ensureBytes failed" >> ensureBytes n
     else do
       if n < fromIntegral (S.length ss)
@@ -662,16 +526,14 @@ getLazyByteString :: Int64 -> Get L.ByteString
 getLazyByteString n | n<=0 = return mempty
                     | otherwise = do
   (S ss bs offset) <- getFull
-  if ss == mempty
+  if S.null ss
     then do
-      suspendMsg ("getLazyByteString (ss=mempty) failed with "++show (n,(S.length ss,L.length bs,offset)))
+      suspendMsg ("getLazyByteString S.null ss failed with "++show (n,(S.length ss,L.length bs,offset)))
       getLazyByteString n
     else do
-      case splitAtOrDie n (L.chunk ss bs) of  -- safe use of L.chunk because of ss == mempty check above
-        Just (consume,rest) ->do
-           case rest of
-             L.Empty -> putFull_safe (S mempty mempty (offset + n))
-             L.Chunk ss' bs' -> putFull_safe (S ss' bs' (offset + n))
+      case splitAtOrDie n (L.chunk ss bs) of  -- safe use of L.chunk because of S.null ss check above
+        Just (consume,rest) -> do
+           putFull_unsafe (make_state rest (offset+n))
            return $! consume
         Nothing -> do
            suspendMsg ("getLazyByteString (Nothing from splitAtOrDie) failed with "++show (n,(S.length ss,L.length bs,offset)))
@@ -694,22 +556,6 @@ class MonadSuspend m where
 -- function in 'IResult'('IPartial').
 instance MonadSuspend Get where
     suspend = Get (
--- XXX I moved checkBool, addFuture, and rememberFalse inside the Get ( ) from
--- their previous location in the where clause below (with appendBS).
---
--- XXX This is because ghc-7.0.2 had error:
-{-
-Text/ProtocolBuffers/Get.hs:304:15:
-    Couldn't match type `b1' with `b'
-      because type variable `b' would escape its scope
-    This (rigid, skolem) type variable is bound by
-      a type expected by the context:
-        Success b Bool -> S -> FrameStack b -> Result b
-    The following variables have types that mention b1
-      addFuture :: L.ByteString -> FrameStack b1 -> FrameStack b1
-        (bound at Text/ProtocolBuffers/Get.hs:315:12)
--}
--- I am worried this may change the allocation behavior of the program. But suspend rarely gets called.
       let checkBool (ErrorFrame _ b) = b
           checkBool (HandlerFrame _ _ _ pc) = checkBool pc
           -- addFuture puts the new data in 'future' where throwError's collect can find and use it
@@ -730,7 +576,7 @@ Text/ProtocolBuffers/Get.hs:304:15:
              in Partial f
         else sc False sIn pcIn  -- once Nothing has been given suspend is a no-op
                   )
-     where appendBS (S ss bs n) bs' = S ss (mappend bs bs') n
+     where appendBS (S ss bs n) bs' = make_safe (S ss (mappend bs bs') n)
 
 -- A unique sort of command...
 
@@ -770,11 +616,9 @@ skip m | m <=0 = return ()
        | otherwise = do
   ensureBytes m
   (S ss bs n) <- getFull
-  -- Could ignore impossible ss == mempty case due to (ensureBytes m) and (0 < m) but be paranoid
-  let lbs = (if ss == mempty then bs else L.chunk ss bs) -- L.chunk is safe due to ss == mempty check
-  case L.drop m lbs of  -- drop will not perform less than 'm' bytes due to ensureBytes above
-    L.Empty -> putFull_safe (S mempty mempty (n+m))
-    L.Chunk ss' bs' -> putFull_safe (S ss' bs' (n+m))
+  -- Could ignore impossible S.null ss due to (ensureBytes m) and (0 < m) but be paranoid
+  let lbs = L.chunk ss bs -- L.chunk is safe
+  putFull_unsafe (make_state (L.drop m lbs) (n+m))  -- drop will not perform less than 'm' bytes due to ensureBytes above
 
 -- | Return the number of 'bytesRead' so far.  Initially 0, never negative.
 bytesRead :: Get Int64
@@ -792,26 +636,21 @@ remaining = do (S ss bs _) <- getFull
 --
 -- Compare with 'isReallyEmpty'
 isEmpty :: Get Bool
-isEmpty = do (S ss bs _n) <- getFull
-             return $ (S.null ss) && (L.null bs)
+isEmpty = do (S ss _bs _n) <- getFull
+             return (S.null ss) --  && (L.null bs)
 
 -- | Return True if the input is exhausted and will never be added to.
 -- Returns False if there is input left to consume.
 --
 -- Compare with 'isEmpty'
 isReallyEmpty :: Get Bool
-isReallyEmpty = do
-  b <- isEmpty
-  if b then loop
-    else return b
- where loop = do
+isReallyEmpty = isEmpty >>= loop
+ where loop False = return False
+       loop True = do
          continue <- suspend
          if continue
-           then do b <- isEmpty
-                   if b then loop
-                     else return b
+           then isReallyEmpty
            else return True
-
 
 -- | get the longest prefix of the input where the high bit is set as well as following byte.
 -- This made getVarInt slower.
@@ -822,7 +661,7 @@ highBitRun = loop where
   {-# INLINE loop #-}
   loop = do
     (S ss bs _n) <- getFull
-    -- mempty is okay, will lead to Nothing below
+    -- S.null ss is okay, will lead to Nothing, Nothing, suspend below
     let mi = S.findIndex (128>) ss
     case mi of
       Just i -> return (succ $ fromIntegral i)
@@ -838,13 +677,11 @@ highBitRun = loop where
 -- | get the longest prefix of the input where all the bytes satisfy the predicate.
 spanOf :: (Word8 -> Bool) ->  Get (L.ByteString)
 spanOf f = do let loop = do (S ss bs n) <- getFull
-                            let (pre,post) = L.span f (if ss==mempty then bs else L.chunk ss bs) -- L.chunk safe due to ss==mempty check
-                            case post of
-                              L.Empty -> putFull_safe (S mempty mempty (n + L.length pre))
-                              L.Chunk ss' bs' -> putFull_safe (S ss' bs' (n + L.length pre))
+                            let (pre,post) = L.span f (L.chunk ss bs) -- L.chunk is safe
+                            putFull_unsafe (make_state post (n + L.length pre))
                             if L.null post
                               then do continue <- suspend
-                                      if continue then  fmap ((L.toChunks pre)++) loop
+                                      if continue then fmap ((L.toChunks pre)++) loop
                                         else return (L.toChunks pre)
                               else return (L.toChunks pre)
               fmap L.fromChunks loop
@@ -859,9 +696,9 @@ getByteString :: Int -> Get S.ByteString
 getByteString nIn | nIn <= 0 = return mempty
                   | otherwise = do
   (S ss bs n) <- getFull
-  if nIn < S.length ss -- Leave at least one character of 'ss' in 'post' allowing putFull_safe below
+  if nIn < S.length ss -- Leave at least one character of 'ss' in 'post' allowing putFull_unsafe below
     then do let (pre,post) = S.splitAt nIn ss
-            putFull_safe (S post bs (n+fromIntegral nIn))
+            putFull_unsafe (S post bs (n+fromIntegral nIn))
             return $! pre
     -- Expect nIn to be less than S.length ss the vast majority of times
     -- so do not worry about doing anything fancy here.
@@ -936,35 +773,6 @@ getWord64le = do
 getWord64host = getStorable
 {-# INLINE getWord64host #-}
 
-{-
-
--- I no longer include the binary-strict package, but if one wants it
--- here is the instance:
-
-instance P.BinaryParser Get where
-  skip = skip . fromIntegral
-  bytesRead = fmap fromIntegral bytesRead
-  remaining = fmap fromIntegral remaining
-  isEmpty = isEmpty
-  spanOf = fmap (S.concat . L.toChunks) . spanOf
-
-  getByteString = getByteString
-  getWordhost = getWordhost
-  getWord8 = getWord8
-
-  getWord16be = getWord16be
-  getWord32be = getWord32be
-  getWord64be = getWord64be
-
-  getWord16le = getWord16le
-  getWord32le = getWord32le
-  getWord64le = getWord64le
-
-  getWord16host = getWord16host
-  getWord32host = getWord32host
-  getWord64host = getWord64host
--}
-
 -- Below here are the class instances
     
 instance Functor Get where
@@ -1007,14 +815,13 @@ instance Alternative Get where
 -- This is the only place I invoke L.Chunk as constructor instead of pattern matching.
 -- I claim that the first argument cannot be empty.
 splitAtOrDie :: Int64 -> L.ByteString -> Maybe (L.ByteString, L.ByteString)
-splitAtOrDie i ps | i <= 0 = Just (L.Empty, ps)
+splitAtOrDie i ps | i <= 0 = Just (mempty, ps)
 splitAtOrDie _i L.Empty = Nothing
 splitAtOrDie i (L.Chunk x xs) | i < len = let (pre,post) = S.splitAt (fromIntegral i) x
-                                          in Just (if pre == mempty then L.Empty else L.Chunk pre L.Empty
-                                                  ,if post == mempty then xs else L.Chunk post xs)
+                                          in Just (L.chunk pre mempty, L.chunk post xs)
                               | otherwise = case splitAtOrDie (i-len) xs of
                                               Nothing -> Nothing
-                                              Just (y1,y2) -> Just (L.Chunk x y1,y2)
+                                              Just (y1,y2) -> Just (L.chunk x y1,y2)
   where len = fromIntegral (S.length x)
 {-# INLINE splitAtOrDie #-}
 
