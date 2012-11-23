@@ -1,5 +1,5 @@
 name:           hprotoc
-version:        2.0.12
+version:        2.0.13
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3

@@ -159,7 +159,7 @@ import Data.Map(Map)
 import Data.Maybe(mapMaybe)
 import Data.Typeable
 -- import Data.Monoid()
-import System.Directory
+import System.Directory(doesFileExist,canonicalizePath)
 import qualified System.FilePath as Local(pathSeparator,splitDirectories,joinPath,combine,makeRelative)
 import qualified System.FilePath.Posix as Canon(pathSeparator,splitDirectories,joinPath,takeBaseName)
 import qualified Data.ByteString.Lazy.Char8 as LC
