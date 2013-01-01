@@ -1,5 +1,5 @@
 name:           hprotoc
-version:        2.0.13
+version:        2.0.14
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -11,7 +11,7 @@ stability:      Experimental
 homepage:       http://code.haskell.org/protocol-buffers/
 package-url:    http://hackage.haskell.org/package/hprotoc
 synopsis:       Parse Google Protocol Buffer specifications
-description:    Parse language defined at "http://code.google.com/apis/protocolbuffers/docs/proto.html" and general haskell code to implement messages.
+description:    Parse language defined at <http://code.google.com/apis/protocolbuffers/docs/proto.html> and general haskell code to implement messages.
 category:       Text
 Tested-With:    GHC == 7.0.3
 extra-source-files: README,
@@ -75,3 +75,56 @@ Executable hprotoc
                    ScopedTypeVariables,
                    TypeSynonymInstances
 --                   PatternSignatures
+
+Library
+  build-depends:   protocol-buffers == 2.0.12,
+                   protocol-buffers-descriptor == 2.0.12
+  Hs-Source-Dirs:  .,
+                   protoc-gen-haskell
+  build-tools:     alex
+  ghc-options:     -O2 -Wall -fspec-constr-count=10
+  ghc-prof-options: -O2 -auto-all -prof
+  build-depends:   array,
+                   binary,
+                   bytestring,
+                   containers,
+                   directory >= 1.0.0.1,
+                   filepath >= 1.1.0.0,
+                   haskell-src-exts >= 1.7.0,
+                   mtl,
+                   parsec,
+                   utf8-string
+
+  if flag(small_base)
+        build-depends: base == 4.*
+  else
+        build-depends: base == 3.*
+
+  exposed-modules: Text.ProtocolBuffers.ProtoCompile.Parser
+                   Text.ProtocolBuffers.ProtoCompile.Resolve
+                   Text.ProtocolBuffers.ProtoCompile.MakeReflections
+
+  other-modules:   Paths_hprotoc
+                   Text.Google.Protobuf.Compiler
+                   Text.Google.Protobuf.Compiler.CodeGeneratorRequest
+                   Text.Google.Protobuf.Compiler.CodeGeneratorResponse
+                   Text.Google.Protobuf.Compiler.CodeGeneratorResponse.File
+                   Text.ProtocolBuffers.ProtoCompile.BreakRecursion
+                   Text.ProtocolBuffers.ProtoCompile.Gen
+                   Text.ProtocolBuffers.ProtoCompile.Identifiers
+                   Text.ProtocolBuffers.ProtoCompile.Instances
+                   Text.ProtocolBuffers.ProtoCompile.Lexer
+  extensions:      DeriveDataTypeable,
+                   EmptyDataDecls,
+                   FlexibleContexts
+                   FlexibleInstances,
+                   FunctionalDependencies,
+                   GADTs,
+                   GeneralizedNewtypeDeriving,
+                   MagicHash,
+                   MultiParamTypeClasses,
+                   PatternGuards,
+                   RankNTypes,
+                   DoRec,
+                   ScopedTypeVariables,
+                   TypeSynonymInstances
