@@ -1,5 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses,FlexibleInstances,TypeSynonymInstances,FlexibleContexts #-}
--- | This modules collect utility routines related to the different
+-- | This modules collects utility routines related to the different
 -- incarnations of identifiers in the code.  The basic identifier is
 -- always ASCII, but because of the self gereneted DescriptorProto
 -- data structures it is stored in 'Utf8' tagged lazy bytestrings.
