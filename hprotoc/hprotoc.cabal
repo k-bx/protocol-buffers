@@ -22,8 +22,8 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Executable hprotoc
-  build-depends:   protocol-buffers == 2.0.15,
-                   protocol-buffers-descriptor == 2.0.15
+  build-depends:   protocol-buffers == 2.0.16,
+                   protocol-buffers-descriptor == 2.0.16
   Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell
@@ -78,8 +78,8 @@ Executable hprotoc
 --                   PatternSignatures
 
 Library
-  build-depends:   protocol-buffers == 2.0.15,
-                   protocol-buffers-descriptor == 2.0.15
+  build-depends:   protocol-buffers == 2.0.16,
+                   protocol-buffers-descriptor == 2.0.16
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell
   build-tools:     alex
