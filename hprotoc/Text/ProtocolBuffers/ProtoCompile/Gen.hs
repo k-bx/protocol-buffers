@@ -273,12 +273,20 @@ enumDecls ei =  map ($ ei) [ enumX
                            , instanceGPB . enumName
                            , instanceMessageAPI . enumName
                            , instanceReflectEnum
+                           , instanceTextTypeEnum
                            ]
 
 enumX :: EnumInfo -> Decl
 enumX ei = DataDecl src DataType [] (baseIdent (enumName ei)) [] (map enumValueX (enumValues ei)) derivesEnum
 --  where enumValueX (_,name) = ConDecl src (HsIdent name) []
   where enumValueX (_,name) = QualConDecl src [] [] (ConDecl (Ident name) [])
+
+instanceTextTypeEnum :: EnumInfo -> Decl
+instanceTextTypeEnum ei 
+  = InstDecl src [] (private "TextType") [TyCon (unqualName (enumName ei))] [
+        inst "tellT" [] (pvar "tellShow")
+      , inst "getT" [] (pvar "getRead")
+      ]
 
 instanceMergeableEnum :: EnumInfo -> Decl
 instanceMergeableEnum ei 
@@ -439,7 +447,7 @@ descriptorBootModule di
   = let protoName = descName di
         un = unqualName protoName
         classes = [prelude "Show",prelude "Eq",prelude "Ord",prelude "Typeable",prelude "Data"
-                  ,private "Mergeable",private "Default",private "Wire",private "GPB",private "ReflectDescriptor"]
+                  ,private "Mergeable",private "Default",private "Wire",private "GPB",private "ReflectDescriptor", private "TextType", private "TextMsg"]
                   ++ if hasExt di then [private "ExtendMessage"] else []
                   ++ if storeUnknown di then [private "UnknownMessage"] else []
         instMesAPI = InstDecl src [] (private "MessageAPI")
@@ -600,6 +608,8 @@ instancesDescriptor di = map ($ di) $
    , instanceMessageAPI . descName
    , instanceGPB . descName                 
    , instanceReflectDescriptor
+   , instanceTextType
+   , instanceTextMsg
    ]
 
 instanceExtendMessage :: DescriptorInfo -> Decl
@@ -618,6 +628,51 @@ instanceUnknownMessage di
         , inst "putUnknownField" [patvar "u'f",patvar "msg"] putunknownfield
         ]
   where putunknownfield = RecUpdate (lvar "msg") [ FieldUpdate (local "unknown'field") (lvar "u'f") ]
+
+instanceTextType :: DescriptorInfo -> Decl
+instanceTextType di 
+  = InstDecl src [] (private "TextType") [TyCon (unqualName (descName di))] [
+        inst "tellT" [] (pvar "tellSubMessage")
+      , inst "getT" [] (pvar "getSubMessage")
+      ]
+
+
+instanceTextMsg :: DescriptorInfo -> Decl
+instanceTextMsg di 
+  = InstDecl src [] (private "TextMsg") [TyCon (unqualName (descName di))] [
+        inst "textPut" [patvar "msg"] (Do $ map printField flds)
+      , InsDecl $ FunBind [Match src (Ident "textGet") [] Nothing (UnGuardedRhs parser) (BDecls subparsers)]
+      ]
+  where flds = F.toList (fields di)
+        printField fi = let Ident funcname = baseIdent' (fieldName fi)
+                            IName uname = last $ splitFI $ protobufName' (fieldName fi)
+                            printname = uToString uname
+                         in Qualifier $ pvar "tellT" $$ litStr printname $$ Paren (lvar funcname $$ lvar "msg")
+        parser
+            | Seq.null (fields di) = pvar "return" $$ pvar "defaultValue"
+            | otherwise = Do [
+                Generator src (patvar "mods") 
+                    $ pvar "sepEndBy" 
+                        $$ Paren (pvar "choice" $$ List (map (lvar . parserName) flds)) 
+                        $$ pvar "spaces",
+                Qualifier $ (preludevar "return")
+                    $$ Paren (preludevar "foldl"
+                        $$ Lambda src [patvar "v", patvar "f"] (lvar "f" $$ lvar "v") 
+                        $$ pvar "defaultValue" 
+                        $$ lvar "mods")
+             ]
+        parserName f = let Ident fname = baseIdent' (fieldName f) in "parse'" ++ fname
+        subparsers = map (\f -> defun (parserName f) [] (getField f)) flds
+        getField fi = let IName uname = last $ splitFI $ protobufName' (fieldName fi)
+                          printname = uToString uname
+                          Ident funcname = baseIdent' (fieldName fi)
+                          update = if canRepeat fi then pvar "append" $$ Paren (lvar funcname $$ lvar "o") $$ lvar "v" else lvar "v"
+            in pvar "try" $$ Do [
+                Generator src (patvar "v") $ pvar "getT" $$ litStr printname,
+                Qualifier $ (preludevar "return")
+                    $$ Paren (Lambda src [patvar "o"]
+                        (RecUpdate (lvar "o") [ FieldUpdate (local funcname) update]))
+            ]
 
 instanceMergeable :: DescriptorInfo -> Decl
 instanceMergeable di
