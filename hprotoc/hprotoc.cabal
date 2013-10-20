@@ -1,5 +1,5 @@
 name:           hprotoc
-version:        2.0.14
+version:        2.0.15
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -36,7 +36,8 @@ Executable hprotoc
                    containers,
                    directory >= 1.0.0.1,
                    filepath >= 1.1.0.0,
-                   haskell-src-exts >= 1.7.0,
+                   haskell-src-exts >= 1.7.0 && <= 1.13.5,
+                   -- could compile with haskell-src-exts-1.14.0
                    mtl,
                    parsec,
 --                   parsec < 3,
@@ -90,7 +91,7 @@ Library
                    containers,
                    directory >= 1.0.0.1,
                    filepath >= 1.1.0.0,
-                   haskell-src-exts >= 1.7.0,
+                   haskell-src-exts >= 1.7.0 && <= 1.13.5,
                    mtl,
                    parsec,
                    utf8-string
