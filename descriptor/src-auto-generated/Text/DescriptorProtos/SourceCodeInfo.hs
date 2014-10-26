@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 module Text.DescriptorProtos.SourceCodeInfo (SourceCodeInfo(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
@@ -8,7 +9,7 @@ import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.SourceCodeInfo.Location as DescriptorProtos.SourceCodeInfo (Location)
  
 data SourceCodeInfo = SourceCodeInfo{location :: !(P'.Seq DescriptorProtos.SourceCodeInfo.Location),
-                                     unknown'field :: !P'.UnknownField}
+                                     unknown'field :: !(P'.UnknownField)}
                     deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.UnknownMessage SourceCodeInfo where
@@ -62,3 +63,22 @@ instance P'.ReflectDescriptor SourceCodeInfo where
   reflectDescriptorInfo _
    = Prelude'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.SourceCodeInfo\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"SourceCodeInfo\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"SourceCodeInfo.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.SourceCodeInfo.location\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"SourceCodeInfo\"], baseName' = FName \"location\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = True, mightPack = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.SourceCodeInfo.Location\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\",MName \"SourceCodeInfo\"], baseName = MName \"Location\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True, lazyFields = False}"
+ 
+instance P'.TextType SourceCodeInfo where
+  tellT = P'.tellSubMessage
+  getT = P'.getSubMessage
+ 
+instance P'.TextMsg SourceCodeInfo where
+  textPut msg
+   = do
+       P'.tellT "location" (location msg)
+  textGet
+   = do
+       mods <- P'.sepEndBy (P'.choice [parse'location]) P'.spaces
+       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+    where
+        parse'location
+         = P'.try
+            (do
+               v <- P'.getT "location"
+               Prelude'.return (\ o -> o{location = P'.append (location o) v}))

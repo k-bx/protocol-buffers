@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 module Text.DescriptorProtos.FileOptions.OptimizeMode (OptimizeMode(..)) where
 import Prelude ((+), (/), (.))
 import qualified Prelude as Prelude'
@@ -60,3 +61,7 @@ instance P'.ReflectEnum OptimizeMode where
       (P'.makePNF (P'.pack ".google.protobuf.FileOptions.OptimizeMode") ["Text"] ["DescriptorProtos", "FileOptions"] "OptimizeMode")
       ["Text", "DescriptorProtos", "FileOptions", "OptimizeMode.hs"]
       [(1, "SPEED"), (2, "CODE_SIZE"), (3, "LITE_RUNTIME")]
+ 
+instance P'.TextType OptimizeMode where
+  tellT = P'.tellShow
+  getT = P'.getRead

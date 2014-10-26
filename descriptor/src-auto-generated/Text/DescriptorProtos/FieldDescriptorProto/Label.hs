@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 module Text.DescriptorProtos.FieldDescriptorProto.Label (Label(..)) where
 import Prelude ((+), (/), (.))
 import qualified Prelude as Prelude'
@@ -63,3 +64,7 @@ instance P'.ReflectEnum Label where
         "Label")
       ["Text", "DescriptorProtos", "FieldDescriptorProto", "Label.hs"]
       [(1, "LABEL_OPTIONAL"), (2, "LABEL_REQUIRED"), (3, "LABEL_REPEATED")]
+ 
+instance P'.TextType Label where
+  tellT = P'.tellShow
+  getT = P'.getRead

@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 module Text.DescriptorProtos.FieldDescriptorProto (FieldDescriptorProto(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
@@ -15,7 +16,7 @@ data FieldDescriptorProto = FieldDescriptorProto{name :: !(P'.Maybe P'.Utf8), nu
                                                  type_name :: !(P'.Maybe P'.Utf8), extendee :: !(P'.Maybe P'.Utf8),
                                                  default_value :: !(P'.Maybe P'.Utf8),
                                                  options :: !(P'.Maybe DescriptorProtos.FieldOptions),
-                                                 unknown'field :: !P'.UnknownField}
+                                                 unknown'field :: !(P'.UnknownField)}
                           deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.UnknownMessage FieldDescriptorProto where
@@ -100,3 +101,68 @@ instance P'.ReflectDescriptor FieldDescriptorProto where
   reflectDescriptorInfo _
    = Prelude'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.FieldDescriptorProto\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"FieldDescriptorProto\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"FieldDescriptorProto.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldDescriptorProto.name\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldDescriptorProto\"], baseName' = FName \"name\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldDescriptorProto.number\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldDescriptorProto\"], baseName' = FName \"number\"}, fieldNumber = FieldId {getFieldId = 3}, wireTag = WireTag {getWireTag = 24}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 5}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldDescriptorProto.label\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldDescriptorProto\"], baseName' = FName \"label\"}, fieldNumber = FieldId {getFieldId = 4}, wireTag = WireTag {getWireTag = 32}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 14}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.FieldDescriptorProto.Label\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\",MName \"FieldDescriptorProto\"], baseName = MName \"Label\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldDescriptorProto.type\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldDescriptorProto\"], baseName' = FName \"type'\"}, fieldNumber = FieldId {getFieldId = 5}, wireTag = WireTag {getWireTag = 40}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 14}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.FieldDescriptorProto.Type\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\",MName \"FieldDescriptorProto\"], baseName = MName \"Type\"}), hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldDescriptorProto.type_name\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldDescriptorProto\"], baseName' = FName \"type_name\"}, fieldNumber = FieldId {getFieldId = 6}, wireTag = WireTag {getWireTag = 50}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldDescriptorProto.extendee\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldDescriptorProto\"], baseName' = FName \"extendee\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 18}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldDescriptorProto.default_value\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldDescriptorProto\"], baseName' = FName \"default_value\"}, fieldNumber = FieldId {getFieldId = 7}, wireTag = WireTag {getWireTag = 58}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.FieldDescriptorProto.options\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"FieldDescriptorProto\"], baseName' = FName \"options\"}, fieldNumber = FieldId {getFieldId = 8}, wireTag = WireTag {getWireTag = 66}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.FieldOptions\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"FieldOptions\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True, lazyFields = False}"
+ 
+instance P'.TextType FieldDescriptorProto where
+  tellT = P'.tellSubMessage
+  getT = P'.getSubMessage
+ 
+instance P'.TextMsg FieldDescriptorProto where
+  textPut msg
+   = do
+       P'.tellT "name" (name msg)
+       P'.tellT "number" (number msg)
+       P'.tellT "label" (label msg)
+       P'.tellT "type" (type' msg)
+       P'.tellT "type_name" (type_name msg)
+       P'.tellT "extendee" (extendee msg)
+       P'.tellT "default_value" (default_value msg)
+       P'.tellT "options" (options msg)
+  textGet
+   = do
+       mods <- P'.sepEndBy
+                (P'.choice
+                  [parse'name, parse'number, parse'label, parse'type', parse'type_name, parse'extendee, parse'default_value,
+                   parse'options])
+                P'.spaces
+       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+    where
+        parse'name
+         = P'.try
+            (do
+               v <- P'.getT "name"
+               Prelude'.return (\ o -> o{name = v}))
+        parse'number
+         = P'.try
+            (do
+               v <- P'.getT "number"
+               Prelude'.return (\ o -> o{number = v}))
+        parse'label
+         = P'.try
+            (do
+               v <- P'.getT "label"
+               Prelude'.return (\ o -> o{label = v}))
+        parse'type'
+         = P'.try
+            (do
+               v <- P'.getT "type"
+               Prelude'.return (\ o -> o{type' = v}))
+        parse'type_name
+         = P'.try
+            (do
+               v <- P'.getT "type_name"
+               Prelude'.return (\ o -> o{type_name = v}))
+        parse'extendee
+         = P'.try
+            (do
+               v <- P'.getT "extendee"
+               Prelude'.return (\ o -> o{extendee = v}))
+        parse'default_value
+         = P'.try
+            (do
+               v <- P'.getT "default_value"
+               Prelude'.return (\ o -> o{default_value = v}))
+        parse'options
+         = P'.try
+            (do
+               v <- P'.getT "options"
+               Prelude'.return (\ o -> o{options = v}))

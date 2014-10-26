@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 module Text.DescriptorProtos.MethodDescriptorProto (MethodDescriptorProto(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
@@ -10,7 +11,7 @@ import qualified Text.DescriptorProtos.MethodOptions as DescriptorProtos (Method
 data MethodDescriptorProto = MethodDescriptorProto{name :: !(P'.Maybe P'.Utf8), input_type :: !(P'.Maybe P'.Utf8),
                                                    output_type :: !(P'.Maybe P'.Utf8),
                                                    options :: !(P'.Maybe DescriptorProtos.MethodOptions),
-                                                   unknown'field :: !P'.UnknownField}
+                                                   unknown'field :: !(P'.UnknownField)}
                            deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.UnknownMessage MethodDescriptorProto where
@@ -75,3 +76,40 @@ instance P'.ReflectDescriptor MethodDescriptorProto where
   reflectDescriptorInfo _
    = Prelude'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.MethodDescriptorProto\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"MethodDescriptorProto\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"MethodDescriptorProto.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.MethodDescriptorProto.name\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"MethodDescriptorProto\"], baseName' = FName \"name\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.MethodDescriptorProto.input_type\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"MethodDescriptorProto\"], baseName' = FName \"input_type\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 18}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.MethodDescriptorProto.output_type\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"MethodDescriptorProto\"], baseName' = FName \"output_type\"}, fieldNumber = FieldId {getFieldId = 3}, wireTag = WireTag {getWireTag = 26}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 9}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.MethodDescriptorProto.options\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"MethodDescriptorProto\"], baseName' = FName \"options\"}, fieldNumber = FieldId {getFieldId = 4}, wireTag = WireTag {getWireTag = 34}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.MethodOptions\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"MethodOptions\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True, lazyFields = False}"
+ 
+instance P'.TextType MethodDescriptorProto where
+  tellT = P'.tellSubMessage
+  getT = P'.getSubMessage
+ 
+instance P'.TextMsg MethodDescriptorProto where
+  textPut msg
+   = do
+       P'.tellT "name" (name msg)
+       P'.tellT "input_type" (input_type msg)
+       P'.tellT "output_type" (output_type msg)
+       P'.tellT "options" (options msg)
+  textGet
+   = do
+       mods <- P'.sepEndBy (P'.choice [parse'name, parse'input_type, parse'output_type, parse'options]) P'.spaces
+       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+    where
+        parse'name
+         = P'.try
+            (do
+               v <- P'.getT "name"
+               Prelude'.return (\ o -> o{name = v}))
+        parse'input_type
+         = P'.try
+            (do
+               v <- P'.getT "input_type"
+               Prelude'.return (\ o -> o{input_type = v}))
+        parse'output_type
+         = P'.try
+            (do
+               v <- P'.getT "output_type"
+               Prelude'.return (\ o -> o{output_type = v}))
+        parse'options
+         = P'.try
+            (do
+               v <- P'.getT "options"
+               Prelude'.return (\ o -> o{options = v}))

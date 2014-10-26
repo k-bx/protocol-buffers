@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 module Text.DescriptorProtos.SourceCodeInfo.Location (Location(..)) where
 import Prelude ((+), (/))
 import qualified Prelude as Prelude'
@@ -6,7 +7,7 @@ import qualified Data.Typeable as Prelude'
 import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
  
-data Location = Location{path :: !(P'.Seq P'.Int32), span :: !(P'.Seq P'.Int32), unknown'field :: !P'.UnknownField}
+data Location = Location{path :: !(P'.Seq P'.Int32), span :: !(P'.Seq P'.Int32), unknown'field :: !(P'.UnknownField)}
               deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
 instance P'.UnknownMessage Location where
@@ -65,3 +66,28 @@ instance P'.ReflectDescriptor Location where
   reflectDescriptorInfo _
    = Prelude'.read
       "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.SourceCodeInfo.Location\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\",MName \"SourceCodeInfo\"], baseName = MName \"Location\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"SourceCodeInfo\",\"Location.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.SourceCodeInfo.Location.path\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"SourceCodeInfo\",MName \"Location\"], baseName' = FName \"path\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, packedTag = Just (WireTag {getWireTag = 8},WireTag {getWireTag = 10}), wireTagLength = 1, isPacked = True, isRequired = False, canRepeat = True, mightPack = True, typeCode = FieldType {getFieldType = 5}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.SourceCodeInfo.Location.span\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"SourceCodeInfo\",MName \"Location\"], baseName' = FName \"span\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 18}, packedTag = Just (WireTag {getWireTag = 16},WireTag {getWireTag = 18}), wireTagLength = 1, isPacked = True, isRequired = False, canRepeat = True, mightPack = True, typeCode = FieldType {getFieldType = 5}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True, lazyFields = False}"
+ 
+instance P'.TextType Location where
+  tellT = P'.tellSubMessage
+  getT = P'.getSubMessage
+ 
+instance P'.TextMsg Location where
+  textPut msg
+   = do
+       P'.tellT "path" (path msg)
+       P'.tellT "span" (span msg)
+  textGet
+   = do
+       mods <- P'.sepEndBy (P'.choice [parse'path, parse'span]) P'.spaces
+       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+    where
+        parse'path
+         = P'.try
+            (do
+               v <- P'.getT "path"
+               Prelude'.return (\ o -> o{path = P'.append (path o) v}))
+        parse'span
+         = P'.try
+            (do
+               v <- P'.getT "span"
+               Prelude'.return (\ o -> o{span = P'.append (span o) v}))
