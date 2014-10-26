@@ -51,7 +51,7 @@ import Data.Maybe(fromMaybe)
 import Data.Sequence ((|>))
 import qualified Data.Sequence as Seq(length,empty)
 import qualified Data.Set as Set(delete,null)
-import Data.Typeable (Typeable(..))
+import Data.Typeable (Typeable,typeOf)
 -- GHC internals for getting at Double and Float representation as Word64 and Word32
 -- This has been superceded by the ST array trick (ugly, but promised to work)
 --import GHC.Exts (Double(D#),Float(F#),unsafeCoerce#)

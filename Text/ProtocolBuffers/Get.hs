@@ -122,7 +122,7 @@ data TU s = TU'OK !s !Int
 {-# SPECIALIZE decode7unrolled :: Get Int #-}
 {-# SPECIALIZE decode7unrolled :: Get Integer #-}
 decode7unrolled :: forall s. (Num s,Integral s, Bits s) => Get s
-{-# NOINLINE decode7unrolled #-}
+-- NOINLINE decode7unrolled removed to allow SPECIALIZE to work
 decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc -> trace ("decode7unrolled: "++show (len,n)) $
   if S.null ss
     then trace ("decode7unrolled: S.null ss") $ unGet decode7 sc sIn pc -- decode7 will try suspend then will fail if still bad
@@ -217,7 +217,7 @@ decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc -> trace ("dec
 {-# SPECIALIZE decode7 :: Get Int #-}
 {-# SPECIALIZE decode7 :: Get Integer #-}
 decode7 :: forall s. (Integral s, Bits s) => Get s
-{-# NOINLINE decode7 #-}
+-- NOINLINE decode7 removed to allow SPECIALIZE to work
 decode7 = go 0 0
  where
   go !s1 !shift1 = trace ("decode7.go: "++show (toInteger s1, shift1)) $ do

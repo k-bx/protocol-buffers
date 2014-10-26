@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs,MultiParamTypeClasses,FunctionalDependencies,FlexibleInstances,DeriveDataTypeable,ScopedTypeVariables #-}
+{-# LANGUAGE GADTs,MultiParamTypeClasses,FunctionalDependencies,FlexibleInstances,DeriveDataTypeable,ScopedTypeVariables,StandaloneDeriving #-}
 -- | The "Extensions" module contributes two main things.  The first
 -- is the definition and implementation of extensible message
 -- features.  This means that the 'ExtField' data type is exported but
@@ -38,7 +38,7 @@ import Data.Maybe(fromMaybe,isJust)
 import Data.Monoid(mappend,mconcat)
 import Data.Sequence((|>),(><),viewl,ViewL(..))
 import qualified Data.Sequence as Seq(singleton,null,empty)
-import Data.Typeable(Typeable(typeOf),Typeable1(typeOf1),Typeable2(typeOf2),TypeRep,mkTyConApp,mkTyCon3,cast)
+import Data.Typeable(Typeable,typeOf,cast)
 import Data.Data(Data(gfoldl,gunfold,toConstr),Constr,DataType,Fixity(Prefix),mkDataType,mkConstr,constrIndex,dataTypeOf)
 
 import Text.ProtocolBuffers.Basic
@@ -78,6 +78,8 @@ err msg = error $ "Text.ProtocolBuffers.Extensions error\n"++msg
 --
 data Key c msg v where
   Key :: (ExtKey c,ExtendMessage msg,GPB v) => FieldId -> FieldType -> (Maybe v) -> Key c msg v
+  deriving (Typeable)
+
 
 -- | This allows reflection, in this case it gives the numerical
 -- 'FieldId' of the key, from 1 to 2^29-1 (excluding 19,000 through
@@ -97,10 +99,7 @@ getKeyFieldType (Key _ ft _) = ft
 getKeyDefaultValue :: Key c msg v -> v
 getKeyDefaultValue (Key _ _ md) = fromMaybe defaultValue md
 
-instance Typeable1 c => Typeable2 (Key c) where
-  typeOf2 _ = mkTyConApp (mkTyCon3 "protocol-buffers" "Text.ProtocolBuffers.Extensions" "Key") [typeOf1 (undefined :: c ())]
-
-instance (Typeable1 c, Typeable msg, Typeable v) => Show (Key c msg v) where
+instance (Typeable c, ExtendMessage msg, GPB v) => Show (Key c msg v) where
   show key@(Key fieldId fieldType maybeDefaultValue) =
     concat ["(Key (",show fieldId
            ,") (",show fieldType
@@ -108,20 +107,16 @@ instance (Typeable1 c, Typeable msg, Typeable v) => Show (Key c msg v) where
            ,") :: ",show (typeOf key)
            ,")"]
 
--- | 'GPWitness' is an instance witness for the 'GPB' classes.  This
--- exists mainly to be a part of 'GPDyn' or 'GPDynSeq'.
-data GPWitness a where GPWitness :: (GPB a) => GPWitness a
-  deriving (Typeable)
-
 -- | The 'GPDyn' is my specialization of 'Dynamic'.  It hides the type
--- with an existential but the 'GPWitness' brings the class instances
--- into scope.  This is used in 'ExtOptional' for optional fields.
-data GPDyn = forall a . GPDyn !(GPWitness a) !a
+-- with an existential.  This is used in 'ExtOptional' for optional fields.
+data GPDyn where
+    GPDyn :: (GPB a) => !a -> GPDyn
   deriving (Typeable)
 
 -- | The 'GPDynSeq' is another specialization of 'Dynamic' and is used
 -- in 'ExtRepeated' for repeated fields.
-data GPDynSeq = forall a . GPDynSeq !(GPWitness a) !(Seq a)
+data GPDynSeq where
+    GPDynSeq :: GPB a => !(Seq a) -> GPDynSeq
   deriving (Typeable)
 
 -- | The 'PackedSeq' is needed to distinguish the packed repeated format from the repeated format.
@@ -137,11 +132,11 @@ data ExtFieldValue = ExtFromWire !(Seq EP) -- XXX must store wiretype with ByteS
                    | ExtPacked   !FieldType !GPDynSeq
   deriving (Typeable,Ord,Show)
            
--- For making a Data instance for ExtField
+-- | For making a Data instance for ExtField
 data ExtDataPair = ExtDataPair FieldId (Seq EP)
   deriving (Typeable,Data,Show)
 
-data EP = EP {-# UNPACK #-} !WireType  !ByteString
+data EP = EP {-# UNPACK #-} !WireType !ByteString
   deriving (Typeable,Data,Eq,Ord,Show)
 
 data DummyMessageType deriving (Typeable)
@@ -149,38 +144,35 @@ data DummyMessageType deriving (Typeable)
 -- | ExtField is a newtype'd map from the numeric FieldId key to the
 -- ExtFieldValue.  This allows for the needed class instances.
 newtype ExtField = ExtField (Map FieldId ExtFieldValue)
-  deriving (Eq,Ord,Show)
+  deriving (Typeable,Eq,Ord,Show)
 
--- Used only in gfoldl for Data instance of ExtField
+-- | Used only in gfoldl for Data instance of ExtField
 dataToList :: ExtField -> [ExtDataPair]
 dataToList (ExtField ef) = map toEDP . M.toList $ ef where
   toEDP (fi,ExtFromWire eps) = ExtDataPair fi eps
-  toEDP (fi,ExtOptional ft (GPDyn GPWitness d)) =
+  toEDP (fi,ExtOptional ft (GPDyn d)) =
     let p = wirePutOpt (toWireTag fi ft) ft (Just d)
         ep = EP (toWireType ft) (runPut p)
     in ExtDataPair fi (Seq.singleton ep)
-  toEDP (fi,ExtRepeated ft (GPDynSeq GPWitness s)) =
+  toEDP (fi,ExtRepeated ft (GPDynSeq s)) =
     let f :: forall w. Wire w => w -> EP
         f = EP (toWireType ft) . runPut . wirePutReq (toWireTag fi ft) ft
     in ExtDataPair fi (fmap f s)
-  toEDP (fi,ExtPacked ft (GPDynSeq GPWitness s)) =
+  toEDP (fi,ExtPacked ft (GPDynSeq s)) =
     let p = wirePutPacked (toPackedWireTag fi) ft s
         ep = EP (snd. splitWireTag $ toPackedWireTag fi) (runPut p)
     in ExtDataPair fi (Seq.singleton ep)
 
--- Used only in gfoldl and gunfold for Data instance of ExtField
+-- | Used only in gfoldl and gunfold for Data instance of ExtField
 dataFromList :: [ExtDataPair] -> ExtField
 dataFromList = ExtField . M.fromList . map fromEDP where
   fromEDP (ExtDataPair fid eps) = (fid,ExtFromWire eps)
 
-instance Typeable ExtField where
-  typeOf _ = tr_ExtField
-
-tr_ExtField :: TypeRep
-tr_ExtField = mkTyConApp (mkTyCon3 "protocol-buffers" "Text.ProtocolBuffers.Extensions" "ExtField") []
-
+-- | Used only in gfoldl and gunfold for Data instance of ExtField
 ty_ExtField :: DataType
 ty_ExtField = mkDataType "Text.ProtocolBuffers.Extensions.ExtField" [con_ExtField]
+
+-- | Used only in gfoldl and gunfold for Data instance of ExtField
 con_ExtField :: Constr
 con_ExtField = mkConstr ty_ExtField "ExtField" [] Prefix
 
@@ -190,6 +182,7 @@ instance Data ExtField where
                     _ -> k (z dataFromList)
   toConstr (ExtField _) = con_ExtField
   dataTypeOf _ = ty_ExtField
+
   
 instance ExtendMessage DummyMessageType where
   getExtField = undefined
@@ -209,28 +202,28 @@ instance Eq ExtFieldValue where
   (==) (ExtOptional a b) (ExtOptional a' b') = a==a' && b==b'
   (==) (ExtRepeated a b) (ExtRepeated a' b') = a==a' && b==b'
   (==) (ExtPacked a b)   (ExtPacked a' b')   = a==a' && b==b'
-  (==) x@(ExtOptional ft (GPDyn w@GPWitness _)) (ExtFromWire s') =
+  (==) x@(ExtOptional ft (GPDyn w)) (ExtFromWire s') =
     let wt = toWireType ft
-        makeKeyType :: GPWitness a -> Key Maybe DummyMessageType a
-        makeKeyType = undefined
+        makeKeyType :: a -> Key Maybe DummyMessageType a
+        makeKeyType _ = undefined
         key = Key 0 ft Nothing `asTypeOf` makeKeyType w
     in case parseWireExtMaybe key wt s' of
          Right (_,y) -> x==y
          _ -> False
   (==) y@(ExtFromWire {}) x@(ExtOptional {})  = x == y
-  (==) x@(ExtRepeated ft (GPDynSeq w@GPWitness _)) (ExtFromWire s') =
+  (==) x@(ExtRepeated ft (GPDynSeq w)) (ExtFromWire s') =
     let wt = toWireType ft
-        makeKeyType :: GPWitness a -> Key Seq DummyMessageType a
-        makeKeyType = undefined
+        makeKeyType :: Seq a -> Key Seq DummyMessageType a
+        makeKeyType _ = undefined
         key = Key 0 ft Nothing `asTypeOf` makeKeyType w
     in case parseWireExtSeq key wt s' of
          Right (_,y) -> x==y
          _ -> False
   (==) y@(ExtFromWire {}) x@(ExtRepeated {})  = x == y
-  (==) x@(ExtPacked ft (GPDynSeq w@GPWitness _)) (ExtFromWire s') =
+  (==) x@(ExtPacked ft (GPDynSeq w)) (ExtFromWire s') =
     let wt = 2 -- all packed types have wire type 2, length delimited
-        makeKeyType :: GPWitness a -> Key PackedSeq DummyMessageType a
-        makeKeyType = undefined
+        makeKeyType :: Seq a -> Key PackedSeq DummyMessageType a
+        makeKeyType _ = undefined
         key = Key 0 ft Nothing `asTypeOf` makeKeyType w
     in case parseWireExtPackedSeq key wt s' of
          Right (_,y) -> x==y
@@ -248,8 +241,7 @@ class Typeable msg => ExtendMessage msg where
   putExtField :: ExtField -> msg -> msg
   validExtRanges :: msg -> [(FieldId,FieldId)]
 
--- wireKeyToUnPacked is used to load a repeated packed format into a repeated non-packed extension key
--- wireKeyToPacked is used to load a repeated unpacked format into a repeated packed extension key
+-- | wireKeyToUnPacked is used to load a repeated packed format into a repeated non-packed extension key
 wireGetKeyToUnPacked :: (ExtendMessage msg,GPB v) => Key Seq msg v -> msg -> Get msg
 wireGetKeyToUnPacked k@(Key i t mv) msg = do
   let myCast :: Maybe a -> Get (Seq a)
@@ -257,28 +249,29 @@ wireGetKeyToUnPacked k@(Key i t mv) msg = do
   vv <- wireGetPacked t `asTypeOf` (myCast mv)
   let (ExtField ef) = getExtField msg
   v' <- case M.lookup i ef of
-          Nothing -> return $ ExtRepeated t (GPDynSeq GPWitness vv)
-          Just (ExtRepeated t' (GPDynSeq GPWitness s)) | t/=t' ->
+          Nothing -> return $ ExtRepeated t (GPDynSeq vv)
+          Just (ExtRepeated t' (GPDynSeq s)) | t/=t' ->
             fail $ "wireGetKeyToUnPacked: Key mismatch! found wrong field type: "++show (k,t,t')
                                                        | otherwise ->
             case cast s of
               Nothing -> fail $ "wireGetKeyToUnPacked: previous Seq value cast failed: "++show (k,typeOf s)
-              Just s' -> return $ ExtRepeated t (GPDynSeq GPWitness (s' >< vv))
+              Just s' -> return $ ExtRepeated t (GPDynSeq (s' >< vv))
           Just (ExtFromWire raw) ->
             case parseWireExtSeq k (toWireType t) raw of -- was wt from ExtFromWire
               Left errMsg -> fail $ "wireGetKeyToUnPacked: Could not parseWireExtSeq: "++show k++"\n"++errMsg
-              Right (_,ExtRepeated t' (GPDynSeq GPWitness s)) | t/=t' ->
+              Right (_,ExtRepeated t' (GPDynSeq s)) | t/=t' ->
                 fail $ "wireGetKeyToUnPacked:: Key mismatch! parseWireExtSeq returned wrong field type: "++show (k,t,t')
                                                               | otherwise ->
                 case cast s of
                   Nothing -> fail $ "wireGetKey Seq: previous Seq value cast failed: "++show (k,typeOf s)
-                  Just s' -> return $ ExtRepeated t (GPDynSeq GPWitness (s' >< vv))
+                  Just s' -> return $ ExtRepeated t (GPDynSeq (s' >< vv))
               wtf -> fail $ "wireGetKeyToUnPacked: Weird parseWireExtSeq return value: "++show (k,wtf)
           Just wtf@(ExtOptional {}) -> fail $ "wireGetKeyToUnPacked: ExtOptional found when ExtRepeated expected: "++show (k,wtf)
           Just wtf@(ExtPacked {}) -> fail $ "wireGetKeyToUnPacked: ExtPacked found when ExtRepeated expected: "++show (k,wtf)
   let ef' = M.insert i v' ef
   seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
 
+-- | wireKeyToPacked is used to load a repeated unpacked format into a repeated packed extension key
 wireGetKeyToPacked :: (ExtendMessage msg,GPB v) => Key PackedSeq msg v -> msg -> Get msg
 wireGetKeyToPacked k@(Key i t mv) msg = do
   let wt = toWireType t
@@ -287,22 +280,22 @@ wireGetKeyToPacked k@(Key i t mv) msg = do
   v <- wireGet t `asTypeOf` (myCast mv)
   let (ExtField ef) = getExtField msg
   v' <- case M.lookup i ef of
-          Nothing -> return $ ExtPacked t (GPDynSeq GPWitness (Seq.singleton v))
-          Just (ExtPacked t' (GPDynSeq GPWitness s)) | t/=t' ->
+          Nothing -> return $ ExtPacked t (GPDynSeq (Seq.singleton v))
+          Just (ExtPacked t' (GPDynSeq s)) | t/=t' ->
             fail $ "wireGetKeyToPacked: Key mismatch! found wrong field type: "++show (k,t,t')
                                                      | otherwise ->
             case cast s of
               Nothing -> fail $ "wireGetKeyToPacked: previous Seq value cast failed: "++show (k,typeOf s)
-              Just s' -> seq v $ return $ ExtRepeated t (GPDynSeq GPWitness (s' |> v))
+              Just s' -> seq v $ return $ ExtRepeated t (GPDynSeq (s' |> v))
           Just (ExtFromWire raw) ->
             case parseWireExtPackedSeq k wt raw of
               Left errMsg -> fail $ "wireGetKeyToPacked: Could not parseWireExtPackedSeq: "++show k++"\n"++errMsg
-              Right (_,ExtPacked t' (GPDynSeq GPWitness s)) | t/=t' ->
+              Right (_,ExtPacked t' (GPDynSeq s)) | t/=t' ->
                 fail $ "wireGetKeyToPacked: Key mismatch! parseWireExtPackedSeq returned wrong field type: "++show (k,t,t')
                                                               | otherwise ->
                 case cast s of
                   Nothing -> fail $ "wireGetKeyToPacked: previous Seq value cast failed: "++show (k,typeOf s)
-                  Just s' -> seq v $ return $ ExtRepeated t (GPDynSeq GPWitness (s' |> v))
+                  Just s' -> seq v $ return $ ExtRepeated t (GPDynSeq (s' |> v))
               wtf -> fail $ "wireGetKeyToPacked: Weird parseWireExtPackedSeq return value: "++show (k,wtf)
           Just wtf@(ExtOptional {}) -> fail $ "wireGetKeyToPacked: ExtOptional found when ExtPacked expected: "++show (k,wtf)
           Just wtf@(ExtRepeated {}) -> fail $ "wireGetKeyToPacked: ExtRepeated found when ExtPacked expected: "++show (k,wtf)
@@ -373,75 +366,31 @@ instance Mergeable ExtField where
 mergeExtFieldValue :: ExtFieldValue -> ExtFieldValue -> ExtFieldValue
 mergeExtFieldValue (ExtFromWire s1) (ExtFromWire s2) = ExtFromWire (mappend s1 s2)
 
-mergeExtFieldValue (ExtOptional ft1 (GPDyn GPWitness d1))
-                   (ExtOptional ft2 (GPDyn GPWitness d2)) =
+mergeExtFieldValue (ExtOptional ft1 (GPDyn d1))
+                   (ExtOptional ft2 (GPDyn d2)) =
   if ft1 /= ft2 then err $ "mergeExtFieldValue : ExtOptional FieldType mismatch "++show (ft1,ft2)
     else case cast d2 of
            Nothing -> err $ "mergeExtFieldValue : ExtOptional cast failed, FieldType "++show (ft2,typeOf d1,typeOf d2)
-           Just d2' -> ExtOptional ft2 (GPDyn GPWitness (mergeAppend d1 d2'))
+           Just d2' -> ExtOptional ft2 (GPDyn (mergeAppend d1 d2'))
 
-mergeExtFieldValue (ExtRepeated ft1 (GPDynSeq GPWitness s1))
-                   (ExtRepeated ft2 (GPDynSeq GPWitness s2)) =
+mergeExtFieldValue (ExtRepeated ft1 (GPDynSeq s1))
+                   (ExtRepeated ft2 (GPDynSeq s2)) =
   if ft1 /= ft2 then err $ "mergeExtFieldValue : ExtRepeated FieldType mismatch "++show (ft1,ft2)
     else case cast s2 of
            Nothing -> err $ "mergeExtFieldValue : ExtRepeated cast failed, FieldType "++show (ft2,typeOf s1,typeOf s2)
-           Just s2' -> ExtRepeated ft2 (GPDynSeq GPWitness (mappend s1 s2'))
+           Just s2' -> ExtRepeated ft2 (GPDynSeq (mappend s1 s2'))
 
-mergeExtFieldValue (ExtPacked ft1 (GPDynSeq GPWitness s1))
-                   (ExtPacked ft2 (GPDynSeq GPWitness s2)) =
+mergeExtFieldValue (ExtPacked ft1 (GPDynSeq s1))
+                   (ExtPacked ft2 (GPDynSeq s2)) =
   if ft1 /= ft2 then err $ "mergeExtFieldValue : ExtPacked FieldType mismatch "++show (ft1,ft2)
     else case cast s2 of
            Nothing -> err $ "mergeExtFieldValue : ExtPacked cast failed, FieldType "++show (ft2,typeOf s1,typeOf s2)
-           Just s2' -> ExtPacked ft2 (GPDynSeq GPWitness (mappend s1 s2'))
+           Just s2' -> ExtPacked ft2 (GPDynSeq (mappend s1 s2'))
 
 mergeExtFieldValue a b = err $ "mergeExtFieldValue : mismatch of constructors "++show (a,b)
 
 instance Default ExtField where
   defaultValue = ExtField M.empty
-
-instance Show (GPWitness a) where
-  showsPrec _n GPWitness = ("(GPWitness :: GPWitness ("++) . shows (typeOf (undefined :: a)) . (')':) . (')':)
-
-instance Eq (GPWitness a) where
-  (==) GPWitness GPWitness = True
-  (/=) GPWitness GPWitness = False
-
-instance Ord (GPWitness a) where
-  compare GPWitness GPWitness = EQ
-
-instance (GPB a) => Data (GPWitness a) where
-  gunfold _k z c = case constrIndex c of
-                     1 -> z GPWitness
-                     _ -> err "gunfold of GPWitness error"
-  toConstr GPWitness = gpWitnessC
-  dataTypeOf _ = gpWitnessDT
-
-gpWitnessC :: Constr
-gpWitnessC = mkConstr gpWitnessDT "GPWitness" [] Prefix 
-gpWitnessDT :: DataType
-gpWitnessDT = mkDataType "GPWitness" [gpWitnessC]
-
-{-
-gpDynC :: Constr
-gpDynC = mkConstr gpDynDT "GPDyn" ["a"] Prefix
-gpDynDT :: DataType
-gpDynDT = mkDataType "GPDyn" [gpDynC]
-
-fromGPDyn :: (GPB a) => GPDyn -> Maybe a
-fromGPDyn (GPDyn GPWitness a) = cast a
-
-typeOfGPDyn :: GPDyn -> TypeRep
-typeOfGPDyn (GPDyn GPWitness a) = typeOf a
-
-defaultValueGPDyn :: GPWitness a -> GPDyn
-defaultValueGPDyn x@GPWitness = GPDyn x defaultValue
-
-mergeEmptyGPDyn :: GPWitness a -> GPDyn
-mergeEmptyGPDyn x@GPWitness = GPDyn x mergeEmpty
-
-mergeAppendGPDyn :: GPDyn -> GPDyn -> Maybe GPDyn
-mergeAppendGPDyn (GPDyn GPWitness a1) (GPDyn GPWitness a2) = fmap (GPDyn GPWitness . mergeAppend a1) (cast a2)
--}
 
 instance Eq GPDyn where
   (==) a b = fromMaybe False (eqGPDyn a b)
@@ -450,7 +399,7 @@ instance Ord GPDyn where
   compare a b = fromMaybe (compare (show a) (show b)) (ordGPDyn a b)
 
 instance Show GPDyn where
-  showsPrec _n (GPDyn x@GPWitness a) = ("(GPDyn "++) . shows x . (" ("++) . shows a . ("))"++)
+  showsPrec _n (GPDyn a) = ("(GPDyn "++) . (" ("++) . shows a . ("))"++)
 
 instance Eq GPDynSeq where
   (==) a b = fromMaybe False (eqGPDynSeq a b)
@@ -459,48 +408,25 @@ instance Ord GPDynSeq where
   compare a b = fromMaybe (compare (show a) (show b)) (ordGPDynSeq a b)
 
 instance Show GPDynSeq where
-  showsPrec _n (GPDynSeq x@GPWitness s) = ("(GPDynSeq "++) . shows x . (" ("++) . shows s . ("))"++)
+  showsPrec _n (GPDynSeq s) = ("(GPDynSeq "++) . (" ("++) . shows s . ("))"++)
 
 ordGPDyn :: GPDyn -> GPDyn -> Maybe Ordering
-ordGPDyn (GPDyn GPWitness a1) (GPDyn GPWitness a2) = fmap (compare a1) (cast a2)
+ordGPDyn (GPDyn a1) (GPDyn a2) = fmap (compare a1) (cast a2)
 
 eqGPDyn :: GPDyn -> GPDyn -> Maybe Bool
-eqGPDyn (GPDyn GPWitness a1) (GPDyn GPWitness a2) = fmap (a1==) (cast a2)
-
--- showGPDyn :: GPDyn -> String
--- showGPDyn (GPDyn GPWitness s) = show s
+eqGPDyn (GPDyn a1) (GPDyn a2) = fmap (a1==) (cast a2)
 
 ordGPDynSeq :: GPDynSeq -> GPDynSeq -> Maybe Ordering
-ordGPDynSeq (GPDynSeq GPWitness a1) (GPDynSeq GPWitness a2) = fmap (compare a1) (cast a2)
+ordGPDynSeq (GPDynSeq a1) (GPDynSeq  a2) = fmap (compare a1) (cast a2)
 
 eqGPDynSeq :: GPDynSeq -> GPDynSeq -> Maybe Bool
-eqGPDynSeq (GPDynSeq GPWitness a1) (GPDynSeq GPWitness a2) = fmap (a1==) (cast a2)
-
--- showGPDynSeq :: GPDynSeq -> String
--- showGPDynSeq (GPDynSeq GPWitness s) = show s
-
--- wireSizeGPDyn :: FieldType -> GPDyn -> WireSize
--- wireSizeGPDyn ft (GPDyn GPWitness a) = wireSize ft a 
-
--- wirePutGPDyn :: FieldType -> GPDyn -> Put
--- wirePutGPDyn ft (GPDyn GPWitness a) = wirePut ft a 
-
--- wireGetGPDyn :: forall a. GPWitness a -> FieldType -> Get GPDyn
--- wireGetGPDyn GPWitness ft = fmap (GPDyn GPWitness) (wireGet ft :: Get a)
-
--- getWitness :: (GPB a) => GPDyn -> Maybe (GPWitness a)
--- getWitness (GPDyn x@GPWitness _) = cast x
-
--- readGPDyn :: forall a . Read a => GPWitness a -> String -> GPDyn
--- readGPDyn x@(GPWitness) s =
---   let t :: a; t = read s
---   in GPDyn x t
+eqGPDynSeq (GPDynSeq a1) (GPDynSeq a2) = fmap (a1==) (cast a2)
 
 instance ExtKey Maybe where
   putExt key Nothing msg = clearExt key msg
   putExt (Key i t _) (Just v) msg =
     let (ExtField ef) = getExtField msg
-        v' = ExtOptional t (GPDyn GPWitness v)
+        v' = ExtOptional t (GPDyn v)
         ef' = M.insert i v' ef
     in seq v' $ seq ef' (putExtField (ExtField ef') msg)
 
@@ -518,7 +444,7 @@ instance ExtKey Maybe where
          Just x -> getExt' x
    where getExt' (ExtRepeated t' _) = Left $ "getExt Maybe: ExtField has repeated type: "++show (k,t')
          getExt' (ExtPacked t' _) = Left $ "getExt Maybe: ExtField has packed type: "++show (k,t')
-         getExt' (ExtOptional t' (GPDyn GPWitness d)) | t/=t' =
+         getExt' (ExtOptional t' (GPDyn d)) | t/=t' =
            Left $ "getExt Maybe: Key's FieldType does not match ExtField's: "++show (k,t')
                                                       | otherwise =
            case cast d of
@@ -533,22 +459,22 @@ instance ExtKey Maybe where
     v <- wireGet t `asTypeOf` (myCast mv)
     let (ExtField ef) = getExtField msg
     v' <- case M.lookup i ef of
-            Nothing -> return $ ExtOptional t (GPDyn GPWitness v)
-            Just (ExtOptional t' (GPDyn GPWitness vOld)) | t /= t' ->
+            Nothing -> return $ ExtOptional t (GPDyn v)
+            Just (ExtOptional t' (GPDyn vOld)) | t /= t' ->
               fail $ "wireGetKey Maybe: Key mismatch! found wrong field type: "++show (k,t,t')
                                                          | otherwise ->
               case cast vOld of
                 Nothing -> fail $ "wireGetKey Maybe: previous Maybe value case failed: "++show (k,typeOf vOld)
-                Just vOld' -> return $ ExtOptional t (GPDyn GPWitness (mergeAppend vOld' v))
+                Just vOld' -> return $ ExtOptional t (GPDyn (mergeAppend vOld' v))
             Just (ExtFromWire raw) ->
               case parseWireExtMaybe k wt raw of
                 Left errMsg -> fail $ "wireGetKey Maybe: Could not parseWireExtMaybe: "++show k++"\n"++errMsg
-                Right (_,ExtOptional t' (GPDyn GPWitness vOld)) | t/=t' ->
+                Right (_,ExtOptional t' (GPDyn vOld)) | t/=t' ->
                   fail $ "wireGetKey Maybe: Key mismatch! found wrong field type: "++show (k,t,t')
                                                                 | otherwise ->
                   case cast vOld of
                     Nothing -> fail $ "wireGetKey Maybe: previous Maybe value case failed: "++show (k,typeOf vOld)
-                    Just vOld' -> return $ ExtOptional t (GPDyn GPWitness (mergeAppend vOld' v))
+                    Just vOld' -> return $ ExtOptional t (GPDyn (mergeAppend vOld' v))
                 wtf -> fail $ "wireGetKey Maybe: Weird parseGetWireMaybe return value: "++show (k,wtf)
             Just wtf@(ExtRepeated {}) -> fail $ "wireGetKey Maybe: ExtRepeated found with ExtOptional expected: "++show (k,wtf)
             Just wtf@(ExtPacked {}) -> fail $ "wireGetKey Maybe: ExtPacked found with ExtOptional expected: "++show (k,wtf)
@@ -560,19 +486,18 @@ parseWireExtMaybe :: Key Maybe msg v -> WireType -> Seq EP -> Either String (Fie
 parseWireExtMaybe k@(Key fi ft mv)  wt raw | wt /= toWireType ft =
   Left $ "parseWireExt Maybe: Key's FieldType does not match ExtField's wire type: "++show (k,toWireType ft,wt)
                                            | otherwise = do
-  let mkWitType :: Maybe a -> GPWitness a
+  let mkWitType :: Maybe a -> FieldType -> EP -> Either String (Seq a) 
       mkWitType = undefined
-      witness = GPWitness `asTypeOf` (mkWitType mv)
---      parsed = map (applyGet (wireGet ft)) . F.toList $ raw
-      parsed = map (chooseGet ft) . F.toList $ raw
+      chooseGet' = chooseGet `asTypeOf` (mkWitType mv)
+  let parsed = map (chooseGet' ft) . F.toList $ raw
       errs = [ m | Left m <- parsed ]
   if null errs 
     then case viewl (mconcat [ a | Right a <- parsed ]) of
            EmptyL -> Left "Text.ProtocolBuffers.Extensions.parseWireExtMaybe: impossible empty parsed list"
-           x :< xs -> Right (fi,(ExtOptional ft (GPDyn witness (F.foldl' mergeAppend x xs))))
+           x :< xs -> Right (fi,(ExtOptional ft (GPDyn (F.foldl' mergeAppend x xs))))
     else Left (unlines errs)
 
--- 'chooseGet' is an intermediate handler between parseWireExt* and applyGet.  This does not know
+-- | 'chooseGet' is an intermediate handler between parseWireExt* and applyGet.  This does not know
 -- whether the EP will result in a single r or repeat r, so it always returns a Seq.  It may also
 -- realize that there is a mismatch between the desired FieldType and the WireType
 chooseGet :: (Wire r) => FieldType -> EP -> Either String (Seq r)
@@ -599,7 +524,7 @@ instance ExtKey Seq where
   putExt key@(Key i t _) s msg | Seq.null s = clearExt key msg
                                | otherwise =
       let (ExtField ef) = getExtField msg
-          v' = ExtRepeated t (GPDynSeq GPWitness s)
+          v' = ExtRepeated t (GPDynSeq s)
           ef' = M.insert i v' ef
       in seq v' $ seq ef' (putExtField (ExtField ef') msg)
 
@@ -617,7 +542,7 @@ instance ExtKey Seq where
          Just x -> getExt' x
    where getExt' (ExtOptional t' _) = Left $ "getExt Seq: ExtField has optional type: "++show (k,t')
          getExt' (ExtPacked t' _) = Left $ "getExt Seq: ExtField has packed type: "++show (k,t')
-         getExt' (ExtRepeated t' (GPDynSeq GPWitness s)) | t'/=t =
+         getExt' (ExtRepeated t' (GPDynSeq s)) | t'/=t =
            Left $ "getExt Seq: Key's FieldType does not match ExtField's: "++show (k,t')
                                                          | otherwise =
            case cast s of
@@ -636,22 +561,22 @@ instance ExtKey Seq where
     v <- wireGet t `asTypeOf` (myCast mv)
     let (ExtField ef) = getExtField msg
     v' <- case M.lookup i ef of
-            Nothing -> return $ ExtRepeated t (GPDynSeq GPWitness (Seq.singleton v))
-            Just (ExtRepeated t' (GPDynSeq GPWitness s)) | t/=t' ->
+            Nothing -> return $ ExtRepeated t (GPDynSeq (Seq.singleton v))
+            Just (ExtRepeated t' (GPDynSeq s)) | t/=t' ->
               fail $ "wireGetKey Seq: Key mismatch! found wrong field type: "++show (k,t,t')
                                                          | otherwise ->
               case cast s of
                 Nothing -> fail $ "wireGetKey Seq: previous Seq value cast failed: "++show (k,typeOf s)
-                Just s' -> seq v $ return $ ExtRepeated t (GPDynSeq GPWitness (s' |> v))
+                Just s' -> seq v $ return $ ExtRepeated t (GPDynSeq (s' |> v))
             Just (ExtFromWire raw) ->
               case parseWireExtSeq k wt raw of
                 Left errMsg -> fail $ "wireGetKey Seq: Could not parseWireExtSeq: "++show k++"\n"++errMsg
-                Right (_,ExtRepeated t' (GPDynSeq GPWitness s)) | t/=t' ->
+                Right (_,ExtRepeated t' (GPDynSeq s)) | t/=t' ->
                   fail $ "wireGetKey Seq: Key mismatch! parseWireExtSeq returned wrong field type: "++show (k,t,t')
                                                                 | otherwise ->
                   case cast s of
                     Nothing -> fail $ "wireGetKey Seq: previous Seq value cast failed: "++show (k,typeOf s)
-                    Just s' -> seq v $ return $ ExtRepeated t (GPDynSeq GPWitness (s' |> v))
+                    Just s' -> seq v $ return $ ExtRepeated t (GPDynSeq (s' |> v))
                 wtf -> fail $ "wireGetKey Seq: Weird parseWireExtSeq return value: "++show (k,wtf)
             Just wtf@(ExtOptional {}) -> fail $ "wireGetKey Seq: ExtOptional found when ExtRepeated expected: "++show (k,wtf)
             Just wtf@(ExtPacked {}) -> fail $ "wireGetKey Seq: ExtPacked found when ExtRepeated expected: "++show (k,wtf)
@@ -663,20 +588,19 @@ parseWireExtSeq :: Key Seq msg v -> WireType -> Seq EP -> Either String (FieldId
 parseWireExtSeq k@(Key i t mv)  wt raw | wt /= toWireType t =
   Left $ "parseWireExtSeq: Key mismatch! Key's FieldType does not match ExtField's wire type: "++show (k,toWireType t,wt)
                                        | otherwise = do
-  let mkWitType :: Maybe a -> GPWitness a
+  let mkWitType :: Maybe a -> FieldType -> EP -> Either String (Seq a) 
       mkWitType = undefined
-      witness = GPWitness `asTypeOf` (mkWitType mv)
---      parsed = map (applyGet (wireGet t)) . F.toList $ raw
-      parsed = map (chooseGet t) . F.toList $ raw
+      chooseGet' = chooseGet `asTypeOf` (mkWitType mv)
+  let parsed = map (chooseGet' t) . F.toList $ raw
       errs = [ m | Left m <- parsed ]
-  if null errs then Right (i,(ExtRepeated t (GPDynSeq witness (mconcat [ a | Right a <- parsed ]))))
+  if null errs then Right (i,(ExtRepeated t (GPDynSeq (mconcat [ a | Right a <- parsed ]))))
     else Left (unlines errs)
 
 instance ExtKey PackedSeq where
   putExt key@(Key i t _) (PackedSeq s) msg | Seq.null s = clearExt key msg
                                            | otherwise =
       let (ExtField ef) = getExtField msg
-          v' = ExtPacked t (GPDynSeq GPWitness s)
+          v' = ExtPacked t (GPDynSeq s)
           ef' = M.insert i v' ef
       in seq v' $ seq ef' (putExtField (ExtField ef') msg)
     
@@ -694,7 +618,7 @@ instance ExtKey PackedSeq where
          Just x -> getExt' x
    where getExt' (ExtOptional t' _) = Left $ "getExt PackedSeq: ExtField has optional type: "++show (k,t')
          getExt' (ExtRepeated t' _) = Left $ "getExt PackedSeq: ExtField has repeated type: "++show (k,t')
-         getExt' (ExtPacked t' (GPDynSeq GPWitness s)) | t'/=t =
+         getExt' (ExtPacked t' (GPDynSeq s)) | t'/=t =
            Left $ "getExt PackedSeq: Key's FieldType does not match ExtField's: "++show (k,t')
                                                        | otherwise =
            case cast s of
@@ -709,22 +633,22 @@ instance ExtKey PackedSeq where
     vv <- wireGetPacked t `asTypeOf` (myCast mv)
     let (ExtField ef) = getExtField msg
     v' <- case M.lookup i ef of
-            Nothing -> return $ ExtPacked t (GPDynSeq GPWitness vv)
-            Just (ExtPacked t' (GPDynSeq GPWitness s)) | t/=t' ->
+            Nothing -> return $ ExtPacked t (GPDynSeq vv)
+            Just (ExtPacked t' (GPDynSeq s)) | t/=t' ->
               fail $ "wireGetKey PackedSeq: Key mismatch! found wrong field type: "++show (k,t,t')
                                                        | otherwise ->
               case cast s of
                 Nothing -> fail $ "wireGetKey PackedSeq: previous Seq value cast failed: "++show (k,typeOf s)
-                Just s' -> return $ ExtRepeated t (GPDynSeq GPWitness (s' >< vv))
+                Just s' -> return $ ExtRepeated t (GPDynSeq (s' >< vv))
             Just (ExtFromWire raw) ->
               case parseWireExtPackedSeq k wt raw of
                 Left errMsg -> fail $ "wireGetKey PackedSeq: Could not parseWireExtPackedSeq: "++show k++"\n"++errMsg
-                Right (_,ExtPacked t' (GPDynSeq GPWitness s)) | t/=t' ->
+                Right (_,ExtPacked t' (GPDynSeq s)) | t/=t' ->
                   fail $ "wireGetKey PackedSeq: Key mismatch! parseWireExtPackedSeq returned wrong field type: "++show (k,t,t')
                                                                 | otherwise ->
                   case cast s of
                     Nothing -> fail $ "wireGetKey PackedSeq: previous Seq value cast failed: "++show (k,typeOf s)
-                    Just s' -> return $ ExtRepeated t (GPDynSeq GPWitness (s' >< vv))
+                    Just s' -> return $ ExtRepeated t (GPDynSeq (s' >< vv))
                 wtf -> fail $ "wireGetKey PackedSeq: Weird parseWireExtPackedSeq return value: "++show (k,wtf)
             Just wtf@(ExtOptional {}) -> fail $ "wireGetKey PackedSeq: ExtOptional found when ExtPacked expected: "++show (k,wtf)
 -- XXX XXX XXX 2.3.0 need to add handling to the next line?
@@ -736,13 +660,12 @@ parseWireExtPackedSeq :: Key PackedSeq msg v -> WireType -> Seq EP -> Either Str
 parseWireExtPackedSeq k@(Key i t mv) wt raw | wt /= 2 {- packed wire type is 2, length delimited -} =
   Left $ "parseWireExtPackedSeq: Key mismatch! Key's FieldType does not match ExtField's wire type: "++show (k,toWireType t,wt)
                                             | otherwise = do
-  let mkWitType :: Maybe a -> GPWitness a
+  let mkWitType :: Maybe a -> FieldType -> EP -> Either String (Seq a) 
       mkWitType = undefined
-      witness = GPWitness `asTypeOf` (mkWitType mv)
---      parsed = map (applyGet (wireGetPacked t)) . F.toList $ raw
-      parsed = map (chooseGet t) . F.toList $ raw
+      chooseGet' = chooseGet `asTypeOf` (mkWitType mv)
+  let parsed = map (chooseGet' t) . F.toList $ raw
       errs = [ m | Left m <- parsed ]
-  if null errs then Right (i,(ExtPacked t (GPDynSeq witness (mconcat [ a | Right a <- parsed ]))))
+  if null errs then Right (i,(ExtPacked t (GPDynSeq (mconcat [ a | Right a <- parsed ]))))
     else Left (unlines errs)
 
 -- | This is used by the generated code
@@ -751,18 +674,13 @@ wireSizeExtField (ExtField m) = F.foldl' aSize 0 (M.assocs m)  where
   aSize old (fi,(ExtFromWire raw)) =
     let toSize (EP wt bs) = size'WireTag (mkWireTag fi wt) + L.length bs
     in F.foldl' (\oldVal new -> oldVal + toSize new) old raw
-{-
-  aSize old (fi,(ExtFromWire raw)) = old +
-    let tagSize = size'WireTag (mkWireTag fi wt)
-    in F.foldl' (\oldVal new -> oldVal + L.length new) (fromIntegral (Seq.length raw) * tagSize) raw
--}
-  aSize old (fi,(ExtOptional ft (GPDyn GPWitness d))) = old +
+  aSize old (fi,(ExtOptional ft (GPDyn d))) = old +
     let tagSize = size'WireTag (toWireTag fi ft)
     in wireSizeReq tagSize ft d
-  aSize old (fi,(ExtRepeated ft (GPDynSeq GPWitness s))) = old +
+  aSize old (fi,(ExtRepeated ft (GPDynSeq s))) = old +
     let tagSize = size'WireTag (toWireTag fi ft)
     in wireSizeRep tagSize ft s
-  aSize old (fi,(ExtPacked ft (GPDynSeq GPWitness s))) = old +
+  aSize old (fi,(ExtPacked ft (GPDynSeq s))) = old +
     let tagSize = size'WireTag (toPackedWireTag fi)
     in wireSizePacked tagSize ft s
 
@@ -771,9 +689,9 @@ wireSizeExtField (ExtField m) = F.foldl' aSize 0 (M.assocs m)  where
 wirePutExtField :: ExtField -> Put
 wirePutExtField (ExtField m) = mapM_ aPut (M.assocs m) where
   aPut (fi,(ExtFromWire raw)) = F.mapM_ (\(EP wt bs) -> putVarUInt (getWireTag $ mkWireTag fi wt) >> putLazyByteString bs) raw
-  aPut (fi,(ExtOptional ft (GPDyn GPWitness d))) = wirePutOpt (toWireTag fi ft) ft (Just d)
-  aPut (fi,(ExtRepeated ft (GPDynSeq GPWitness s))) = wirePutRep (toWireTag fi ft) ft s
-  aPut (fi,(ExtPacked   ft (GPDynSeq GPWitness s))) = wirePutPacked (toPackedWireTag fi) ft s
+  aPut (fi,(ExtOptional ft (GPDyn d))) = wirePutOpt (toWireTag fi ft) ft (Just d)
+  aPut (fi,(ExtRepeated ft (GPDynSeq s))) = wirePutRep (toWireTag fi ft) ft s
+  aPut (fi,(ExtPacked   ft (GPDynSeq s))) = wirePutPacked (toPackedWireTag fi) ft s
 
 notExtension :: (ReflectDescriptor a, ExtendMessage a,Typeable a) => FieldId -> WireType -> a -> Get a
 notExtension fieldId _wireType msg = throwError ("Field id "++show fieldId++" is not a valid extension field id for "++show (typeOf (undefined `asTypeOf` msg)))
@@ -799,36 +717,36 @@ loadExtension fieldId wireType msg = do
       let v' = seq bs $ ExtFromWire (raw |> (EP wireType bs))
           ef' = M.insert fieldId v' ef
       seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
-    Just (ExtOptional ft (GPDyn x@GPWitness a)) | toWireType ft /= wireType -> badwt (toWireType ft)
-                                                | otherwise -> do
+    Just (ExtOptional ft (GPDyn a)) | toWireType ft /= wireType -> badwt (toWireType ft)
+                                    | otherwise -> do
       b <- wireGet ft
-      let v' = ExtOptional ft (GPDyn x (mergeAppend a b))
+      let v' = ExtOptional ft (GPDyn (mergeAppend a b))
           ef' = M.insert fieldId v' ef
       seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
 -- handle wireType of "2" when toWireType ft is not "2" but ft could be packed by using wireGetPacked ft
-    Just (ExtRepeated ft (GPDynSeq x@GPWitness s)) | toWireType ft /= wireType -> if (wireType==2) && (isValidPacked ft) 
-                                                                                    then do
-                                                                                      aa <- wireGetPacked ft
-                                                                                      let v' = ExtRepeated ft (GPDynSeq x (s >< aa))
-                                                                                          ef' = M.insert fieldId v' ef
-                                                                                      seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
-                                                                                    else badwt (toWireType ft)
-                                                   | otherwise -> do
+    Just (ExtRepeated ft (GPDynSeq s)) | toWireType ft /= wireType -> if (wireType==2) && (isValidPacked ft) 
+                                                                        then do
+                                                                          aa <- wireGetPacked ft
+                                                                          let v' = ExtRepeated ft (GPDynSeq (s >< aa))
+                                                                              ef' = M.insert fieldId v' ef
+                                                                          seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
+                                                                        else badwt (toWireType ft)
+                                       | otherwise -> do
       a <- wireGet ft
-      let v' = seq a $ ExtRepeated ft (GPDynSeq x (s |> a))
+      let v' = seq a $ ExtRepeated ft (GPDynSeq (s |> a))
           ef' = M.insert fieldId v' ef
       seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
 -- handle wireType of NOT "2" when wireType is good match for ft by using wireGet ft
-    Just (ExtPacked ft (GPDynSeq x@GPWitness s)) | 2 /= wireType -> if (toWireType ft) == wireType
-                                                                      then do
-                                                                        a <- wireGet ft
-                                                                        let v' = seq a $ ExtPacked ft (GPDynSeq x (s |> a))
-                                                                            ef' = M.insert fieldId v' ef
-                                                                        seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
-                                                                      else badwt 2  {- packed uses length delimited: 2 -}
-                                                 | otherwise -> do
+    Just (ExtPacked ft (GPDynSeq s)) | 2 /= wireType -> if (toWireType ft) == wireType
+                                                          then do
+                                                            a <- wireGet ft
+                                                            let v' = seq a $ ExtPacked ft (GPDynSeq (s |> a))
+                                                                ef' = M.insert fieldId v' ef
+                                                            seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
+                                                          else badwt 2  {- packed uses length delimited: 2 -}
+                                     | otherwise -> do
       aa <- wireGetPacked ft
-      let v' = ExtPacked ft (GPDynSeq x (s >< aa))
+      let v' = ExtPacked ft (GPDynSeq (s >< aa))
           ef' = M.insert fieldId v' ef
       seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
 

@@ -21,7 +21,7 @@ import Data.Int(Int32,Int64)
 import Data.Ix(Ix)
 import Data.Monoid(Monoid(..))
 import Data.Sequence(Seq,(><))
-import Data.Typeable(Typeable(..))
+import Data.Typeable(Typeable)
 import Data.Word(Word8,Word32,Word64)
 
 import qualified Data.ByteString.Lazy as L(unpack)
