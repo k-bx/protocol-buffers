@@ -193,7 +193,8 @@ style :: Style
 style = Style PageMode 132 0.6
 
 myMode :: PPHsMode
-myMode = PPHsMode 2 2 2 2 4 1 True PPOffsideRule False -- True
+-- myMode = PPHsMode 2 2 2 2 4 1 True PPOffsideRule False -- True
+myMode = PPHsMode 2 2 2 2 2 4 1 True PPOffsideRule False -- True
 
 dump :: (Monad m) => Output m -> Bool -> Maybe LocalFP -> D.FileDescriptorProto -> [D.FileDescriptorProto] -> m ()
 dump _ _ Nothing _ _ = return ()

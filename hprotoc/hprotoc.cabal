@@ -1,5 +1,5 @@
 name:           hprotoc
-version:        2.0.16
+version:        2.0.17
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -22,8 +22,8 @@ flag small_base
     description: Choose the new smaller, split-up base package.
 
 Executable hprotoc
-  build-depends:   protocol-buffers == 2.0.16,
-                   protocol-buffers-descriptor == 2.0.16
+  build-depends:   protocol-buffers == 2.0.17,
+                   protocol-buffers-descriptor == 2.0.17
   Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell
@@ -36,8 +36,8 @@ Executable hprotoc
                    containers,
                    directory >= 1.0.0.1,
                    filepath >= 1.1.0.0,
-                   haskell-src-exts >= 1.7.0 && <= 1.13.5,
-                   -- could compile with haskell-src-exts-1.14.0
+                   -- haskell-src-exts >= 1.7.0 && <= 1.13.5,
+                   haskell-src-exts >= 1.16.0,
                    mtl,
                    parsec,
 --                   parsec < 3,
@@ -78,8 +78,8 @@ Executable hprotoc
 --                   PatternSignatures
 
 Library
-  build-depends:   protocol-buffers == 2.0.16,
-                   protocol-buffers-descriptor == 2.0.16
+  build-depends:   protocol-buffers == 2.0.17,
+                   protocol-buffers-descriptor == 2.0.17
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell
   build-tools:     alex
@@ -91,7 +91,8 @@ Library
                    containers,
                    directory >= 1.0.0.1,
                    filepath >= 1.1.0.0,
-                   haskell-src-exts >= 1.7.0 && <= 1.13.5,
+                   -- haskell-src-exts >= 1.7.0 && <= 1.13.5,
+                   haskell-src-exts >= 1.16.0,
                    mtl,
                    parsec,
                    utf8-string

@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
 -- This module uses the Reflection data structures (ProtoInfo,EnumInfo,DescriptorInfo) to
 -- build an AST using Language.Haskell.Syntax.  This get quite verbose, so a large number
 -- of helper functions (and operators) are defined to aid in specifying the output code.
@@ -67,8 +68,8 @@ litStr :: String -> Exp
 litStr = Lit . Hse.String
 
 litIntP :: Integral x => x -> Pat
-litIntP x | x<0 = PParen $ PLit (Hse.Int (toInteger x))
-          | otherwise = PLit (Hse.Int (toInteger x))
+litIntP x | x<0 = PParen $ PLit Signless (Hse.Int (toInteger x))
+          | otherwise = PLit Signless (Hse.Int (toInteger x))
 
 -- Pin down the type inference
 litIntP' :: Int -> Pat
@@ -162,7 +163,7 @@ importPN r selfMod@(ModuleName self) part pn =
       m2 = ModuleName (joinMod (parentModule pn))
       fromSource = S.member (FMName self,part,o) (rIBoot r)
       ans = if m1 == selfMod && part /= KeyFile then Nothing
-              else Just $ ImportDecl src m1 True fromSource Nothing (Just m2)
+              else Just $ ImportDecl src m1 True fromSource False Nothing (Just m2)
                             (Just (False,[IAbs (Ident (mName (baseName pn)))]))
   in ecart (unlines . map (\ (a,b) -> a ++ " = "++b) $
                  [("selfMod",show selfMod)
@@ -180,7 +181,7 @@ importPFN r m@(ModuleName self) pfn =
   let o@(FMName _other) = pfKey pfn
       m1@(ModuleName m1') = ModuleName (joinMod (haskellPrefix' pfn ++ parentModule' pfn))
       m2 = ModuleName (joinMod (parentModule' pfn))
-      spec = Just (False,[IVar (Ident (fName (baseName' pfn)))])
+      spec = Just (False,[IVar NoNamespace (Ident (fName (baseName' pfn)))])
       kind = getKind r o
       fromAlt = S.member (FMName self,FMName m1') (rIKey r)
       m1key = if kind == SplitKeyTypeBoot && fromAlt
@@ -191,7 +192,7 @@ importPFN r m@(ModuleName self) pfn =
                     | otherwise = Nothing
       sourceFlag = (kind == KeyTypeBoot) && fromAlt
       ans = if not qualifiedFlag && kind /= SplitKeyTypeBoot then Nothing else Just $
-              ImportDecl src m1key qualifiedFlag sourceFlag Nothing qualifiedName spec
+              ImportDecl src m1key qualifiedFlag sourceFlag False Nothing qualifiedName spec
   in ecart (unlines . map (\ (a,b) -> a ++ " = "++b) $
                 [("m",show m)
                 ,("pfn",show pfn)
@@ -205,11 +206,9 @@ importPFN r m@(ModuleName self) pfn =
 -- Several items might be taken from the same module, combine these statements
 mergeImports :: [ImportDecl] -> [ImportDecl]
 mergeImports importsIn =
-  let idKey (ImportDecl _p1 p2 p3 p4 _ p5 (Just (p6,_xs))) = (p2,p3,p4,p5,Just p6)
-      idKey (ImportDecl _p1 p2 p3 p4 _ p5 Nothing) = (p2,p3,p4,p5,Nothing)
-      mergeImports' (ImportDecl p1 p2 p3 p4 _ p5 (Just (p6,xs)))
-                   (ImportDecl _ _ _ _ _ _ (Just (_,ys))) =
-        ImportDecl p1 p2 p3 p4 Nothing p5 (Just (p6,xs `union` ys))
+  let idKey ImportDecl{..} = (importModule,importQualified,importSrc,importAs,fmap fst importSpecs)
+      mergeImports' ImportDecl{importSpecs=Just(hiding,xs), ..} ImportDecl{importSpecs=Just(_,ys)} =
+          ImportDecl{importSpecs=Just (hiding, xs `union` ys), ..}
       mergeImports' i _ = i -- identical, so drop one
       combined = M.fromListWith mergeImports' . map (\ i -> (idKey i,i)) $ importsIn
   in M.elems combined
@@ -283,18 +282,18 @@ enumX ei = DataDecl src DataType [] (baseIdent (enumName ei)) [] (map enumValueX
 
 instanceTextTypeEnum :: EnumInfo -> Decl
 instanceTextTypeEnum ei 
-  = InstDecl src [] (private "TextType") [TyCon (unqualName (enumName ei))] [
+  = InstDecl src Nothing [] [] (private "TextType") [TyCon (unqualName (enumName ei))] [
         inst "tellT" [] (pvar "tellShow")
       , inst "getT" [] (pvar "getRead")
       ]
 
 instanceMergeableEnum :: EnumInfo -> Decl
 instanceMergeableEnum ei 
-  = InstDecl src [] (private "Mergeable") [TyCon (unqualName (enumName ei))] []
+  = InstDecl src Nothing [] [] (private "Mergeable") [TyCon (unqualName (enumName ei))] []
 
 instanceBounded :: EnumInfo -> Decl
 instanceBounded ei
-    = InstDecl src [] (prelude "Bounded") [TyCon (unqualName (enumName ei))] 
+    = InstDecl src Nothing [] [] (prelude "Bounded") [TyCon (unqualName (enumName ei))] 
          [set "minBound" (head values),set "maxBound" (last values)] -- values cannot be null in a well formed enum
   where values = enumValues ei
         set f (_,n) = inst f [] (lcon n)
@@ -309,7 +308,7 @@ instanceBounded ei
 -}
 instanceDefaultEnum :: EnumInfo -> Decl
 instanceDefaultEnum ei
-    = InstDecl src [] (private "Default") [TyCon (unqualName (enumName ei))]
+    = InstDecl src Nothing [] [] (private "Default") [TyCon (unqualName (enumName ei))]
       [ inst "defaultValue" [] firstValue ]
   where firstValue :: Exp
         firstValue = case enumValues ei of
@@ -327,7 +326,7 @@ declToEnum ei = [ TypeSig src [Ident "toMaybe'Enum"]
 
 instanceEnum :: EnumInfo -> Decl
 instanceEnum ei
-    = InstDecl src [] (prelude "Enum") [TyCon (unqualName (enumName ei))]
+    = InstDecl src Nothing [] [] (prelude "Enum") [TyCon (unqualName (enumName ei))]
         (map (InsDecl . FunBind) [fromEnum',toEnum',succ',pred'])
   where values = enumValues ei
         fromEnum' = map fromEnum'one values
@@ -346,7 +345,7 @@ instanceEnum ei
 -- fromEnum TYPE_ENUM == 14 :: Int
 instanceWireEnum :: EnumInfo -> Decl
 instanceWireEnum ei
-    = InstDecl src [] (private "Wire") [TyCon (unqualName (enumName ei))]
+    = InstDecl src Nothing [] [] (private "Wire") [TyCon (unqualName (enumName ei))]
         [ withName "wireSize", withName "wirePut", withGet, withGetErr,withGetPacked,withGetPackedErr ]
   where withName foo = inst foo [patvar "ft'",patvar "enum"] rhs
           where rhs = pvar foo $$ lvar "ft'" $$
@@ -362,11 +361,11 @@ instanceWireEnum ei
 
 instanceGPB :: ProtoName -> Decl
 instanceGPB protoName
-    = InstDecl src [] (private "GPB") [TyCon (unqualName protoName)] []
+    = InstDecl src Nothing [] [] (private "GPB") [TyCon (unqualName protoName)] []
 
 instanceReflectEnum :: EnumInfo -> Decl
 instanceReflectEnum ei
-    = InstDecl src [] (private "ReflectEnum") [TyCon (unqualName (enumName ei))]
+    = InstDecl src Nothing [] [] (private "ReflectEnum") [TyCon (unqualName (enumName ei))]
         [ inst "reflectEnum" [] ascList
         , inst "reflectEnumInfo" [ PWildCard ] ei' ]
   where (ProtoName xxx a b c) = enumName ei
@@ -374,11 +373,11 @@ instanceReflectEnum ei
         values = enumValues ei
         ascList,ei',protoNameExp :: Exp
         ascList = List (map one values)
-          where one (v,ns) = Tuple [litInt (getEnumCode v),litStr ns,lcon ns]
+          where one (v,ns) = Tuple Boxed [litInt (getEnumCode v),litStr ns,lcon ns]
         ei' = foldl' App (pcon "EnumInfo") [protoNameExp
                                              ,List $ map litStr (enumFilePath ei)
                                              ,List (map two values)]
-          where two (v,ns) = Tuple [litInt (getEnumCode v),litStr ns]
+          where two (v,ns) = Tuple Boxed [litInt (getEnumCode v),litStr ns]
         protoNameExp = Paren $ foldl' App (pvar "makePNF")
                                         [ xxx'Exp, mList a, mList b, litStr (mName c) ]
           where mList = List . map (litStr . mName)
@@ -395,31 +394,31 @@ protoModule result pri fdpBS
   = let protoName = protoMod pri
         (extendees,myKeys) = unzip $ F.toList (extensionKeys pri)
         m = ModuleName (fqMod protoName)
-        exportKeys = map (EVar . unqualFName . fieldName) myKeys
-        exportNames = map (EVar . UnQual . Ident) ["protoInfo","fileDescriptorProto"]
+        exportKeys = map (EVar NoNamespace . unqualFName . fieldName) myKeys
+        exportNames = map (EVar NoNamespace . UnQual . Ident) ["protoInfo","fileDescriptorProto"]
         imports = (protoImports ++) . mergeImports $
                     mapMaybe (importPN result m Normal) $
                       extendees ++ mapMaybe typeName myKeys
     in Module src m modulePragmas Nothing (Just (exportKeys++exportNames)) imports
          (keysXTypeVal protoName (extensionKeys pri) ++ embed'ProtoInfo pri ++ embed'fdpBS fdpBS)
  where protoImports = standardImports False (not . Seq.null . extensionKeys $ pri) ++
-         [ ImportDecl src (ModuleName "Text.DescriptorProtos.FileDescriptorProto") False False Nothing Nothing
+         [ ImportDecl src (ModuleName "Text.DescriptorProtos.FileDescriptorProto") False False False Nothing Nothing
                         (Just (False,[IAbs (Ident "FileDescriptorProto")]))
-         , ImportDecl src (ModuleName "Text.ProtocolBuffers.Reflections") False False Nothing Nothing
+         , ImportDecl src (ModuleName "Text.ProtocolBuffers.Reflections") False False False Nothing Nothing
                         (Just (False,[IAbs (Ident "ProtoInfo")]))
-         , ImportDecl src (ModuleName "Text.ProtocolBuffers.WireMessage") True False Nothing (Just (ModuleName "P'"))
-                        (Just (False,[IVar (Ident "wireGet,getFromBS")])) ]
+         , ImportDecl src (ModuleName "Text.ProtocolBuffers.WireMessage") True False False Nothing (Just (ModuleName "P'"))
+                        (Just (False,[IVar NoNamespace (Ident "wireGet,getFromBS")])) ]
 
 embed'ProtoInfo :: ProtoInfo -> [Decl]
 embed'ProtoInfo pri = [ myType, myValue ]
   where myType = TypeSig src [ Ident "protoInfo" ] (TyCon (local "ProtoInfo"))
-        myValue = PatBind src (PApp (local "protoInfo") []) Nothing (UnGuardedRhs $
+        myValue = PatBind src (PApp (local "protoInfo") []) (UnGuardedRhs $
                     preludevar "read" $$ litStr (show pri)) noWhere
 
 embed'fdpBS :: ByteString -> [Decl]
 embed'fdpBS bs = [ myType, myValue ]
   where myType = TypeSig src [ Ident "fileDescriptorProto" ] (TyCon (local "FileDescriptorProto"))
-        myValue = PatBind src (PApp (local "fileDescriptorProto") []) Nothing (UnGuardedRhs $
+        myValue = PatBind src (PApp (local "fileDescriptorProto") []) (UnGuardedRhs $
                     pvar "getFromBS" $$
                       Paren (pvar "wireGet" $$ litInt' 11) $$ 
                       Paren (pvar "pack" $$ litStr (LC.unpack bs))) noWhere
@@ -450,10 +449,10 @@ descriptorBootModule di
                   ,private "Mergeable",private "Default",private "Wire",private "GPB",private "ReflectDescriptor", private "TextType", private "TextMsg"]
                   ++ if hasExt di then [private "ExtendMessage"] else []
                   ++ if storeUnknown di then [private "UnknownMessage"] else []
-        instMesAPI = InstDecl src [] (private "MessageAPI")
+        instMesAPI = InstDecl src Nothing [] [] (private "MessageAPI")
                        [TyVar (Ident "msg'"), TyFun (TyVar (Ident "msg'")) (TyCon un),  (TyCon un)] []
         dataDecl = DataDecl src DataType [] (baseIdent protoName) [] [] []
-        mkInst s = InstDecl src [] s [TyCon un] []
+        mkInst s = InstDecl src Nothing [] [] s [TyCon un] []
     in Module src (ModuleName (fqMod protoName)) modulePragmas Nothing (Just [EAbs un]) minimalImports
          (dataDecl : instMesAPI : map mkInst classes)
 
@@ -463,7 +462,7 @@ descriptorKeyBootModule :: Result -> DescriptorInfo -> Module
 descriptorKeyBootModule result di
   = let Module p1 m@(ModuleName _self) p3 p4 (Just exports) imports decls = descriptorBootModule di
         (extendees,myKeys) = unzip $ F.toList (keys di)
-        exportKeys = map (EVar . unqualFName . fieldName) myKeys
+        exportKeys = map (EVar NoNamespace . unqualFName . fieldName) myKeys
         importTypes = mergeImports . mapMaybe (importPN result m Source) . nubSort $
                         extendees ++ mapMaybe typeName myKeys
         declKeys = keysXType (descName di) (keys di)
@@ -476,7 +475,7 @@ descriptorKeyfileModule result di
         (extendees,myKeys) = unzip $ F.toList (keys di)
         mBase = ModuleName (fqMod (descName di))
         m = ModuleName (fqMod protoName'Key)
-        exportKeys = map (EVar . unqualFName . fieldName) myKeys
+        exportKeys = map (EVar NoNamespace . unqualFName . fieldName) myKeys
         importTypes = mergeImports . mapMaybe (importPN result mBase KeyFile) . nubSort $
                         extendees ++ mapMaybe typeName myKeys
         declKeys = keysXTypeVal protoName'Key (keys di)
@@ -493,7 +492,7 @@ descriptorNormalModule result di
         extendees' = if sepKey then [] else extendees
         myKeys' = if sepKey then [] else myKeys
         m = ModuleName (fqMod protoName)
-        exportKeys = map (EVar . unqualFName . fieldName) myKeys
+        exportKeys = map (EVar NoNamespace . unqualFName . fieldName) myKeys
         imports = (standardImports False (hasExt di) ++) . mergeImports . concat $
                     [ mapMaybe (importPN result m Normal) $
                         extendees' ++ mapMaybe typeName (myKeys' ++ (F.toList (fields di)))
@@ -505,20 +504,20 @@ descriptorNormalModule result di
 
 minimalImports :: [ImportDecl]
 minimalImports =
-  [ ImportDecl src (ModuleName "Prelude") True False Nothing (Just (ModuleName "Prelude'")) Nothing
-  , ImportDecl src (ModuleName "Data.Typeable") True False Nothing (Just (ModuleName "Prelude'")) Nothing
-  , ImportDecl src (ModuleName "Data.Data") True False Nothing (Just (ModuleName "Prelude'")) Nothing
-  , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False Nothing (Just (ModuleName "P'")) Nothing ]
+  [ ImportDecl src (ModuleName "Prelude") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
+  , ImportDecl src (ModuleName "Data.Typeable") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
+  , ImportDecl src (ModuleName "Data.Data") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
+  , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False False Nothing (Just (ModuleName "P'")) Nothing ]
 
 standardImports :: Bool -> Bool -> [ImportDecl]
 standardImports isEnumMod ext =
-  [ ImportDecl src (ModuleName "Prelude") False False Nothing Nothing (Just (False,ops))
-  , ImportDecl src (ModuleName "Prelude") True False Nothing (Just (ModuleName "Prelude'")) Nothing
-  , ImportDecl src (ModuleName "Data.Typeable") True False Nothing (Just (ModuleName "Prelude'")) Nothing
-  , ImportDecl src (ModuleName "Data.Data") True False Nothing (Just (ModuleName "Prelude'")) Nothing
-  , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False Nothing (Just (ModuleName "P'")) Nothing ]
- where ops | ext = map (IVar . Symbol) $ base ++ ["==","<=","&&"]
-           | otherwise = map (IVar . Symbol) base
+  [ ImportDecl src (ModuleName "Prelude") False False False Nothing Nothing (Just (False,ops))
+  , ImportDecl src (ModuleName "Prelude") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
+  , ImportDecl src (ModuleName "Data.Typeable") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
+  , ImportDecl src (ModuleName "Data.Data") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
+  , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False False Nothing (Just (ModuleName "P'")) Nothing ]
+ where ops | ext = map (IVar NoNamespace . Symbol) $ base ++ ["==","<=","&&"]
+           | otherwise = map (IVar NoNamespace . Symbol) base
        base | isEnumMod = ["+","/","."]
             | otherwise = ["+","/"]
 
@@ -549,7 +548,7 @@ makeKeyType self (extendee,f) = keyType
 makeKeyVal :: ProtoName -> KeyInfo -> Decl
 makeKeyVal _self (_extendee,f) = keyVal
   where typeNumber = getFieldType . typeCode $ f
-        keyVal = PatBind src (PApp (unqualFName . fieldName $ f) []) Nothing (UnGuardedRhs
+        keyVal = PatBind src (PApp (unqualFName . fieldName $ f) []) (UnGuardedRhs
                    (pcon "Key" $$ litInt (getFieldId (fieldNumber f))
                                $$ litInt typeNumber
                                $$ maybe (preludecon "Nothing")
@@ -580,12 +579,12 @@ descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] de
                 where eFields = F.foldr ((:) . fieldX) end (fields di)
                       end = (if hasExt di then (extfield:) else id) 
                           $ (if storeUnknown di then [unknownField] else [])
-        bangType = if lazyFields di then UnBangedTy else BangedTy
-        extfield :: ([Name],BangType)
+        bangType = if lazyFields di then TyParen {- UnBangedTy -} else TyBang BangedTy
+        -- extfield :: ([Name],BangType)
         extfield = ([Ident "ext'field"], bangType (TyCon (private "ExtField")))
-        unknownField :: ([Name],BangType)
+        -- unknownField :: ([Name],BangType)
         unknownField = ([Ident "unknown'field"], bangType (TyCon (private  "UnknownField")))
-        fieldX :: FieldInfo -> ([Name],BangType)
+        -- fieldX :: FieldInfo -> ([Name],BangType)
         fieldX fi = ([baseIdent' . fieldName $ fi], bangType (labeled (TyCon typed)))
           where labeled | canRepeat fi = typeApp "Seq"
                         | isRequired fi = id
@@ -614,7 +613,7 @@ instancesDescriptor di = map ($ di) $
 
 instanceExtendMessage :: DescriptorInfo -> Decl
 instanceExtendMessage di
-    = InstDecl src [] (private "ExtendMessage") [TyCon (unqualName (descName di))]
+    = InstDecl src Nothing [] [] (private "ExtendMessage") [TyCon (unqualName (descName di))]
         [ inst "getExtField" [] (lvar "ext'field")
         , inst "putExtField" [patvar "e'f", patvar "msg"] putextfield
         , inst "validExtRanges" [patvar "msg"] (pvar "extRanges" $$ (Paren $ pvar "reflectDescriptorInfo" $$ lvar "msg"))
@@ -623,7 +622,7 @@ instanceExtendMessage di
 
 instanceUnknownMessage :: DescriptorInfo -> Decl
 instanceUnknownMessage di
-    = InstDecl src [] (private "UnknownMessage") [TyCon (unqualName (descName di))]
+    = InstDecl src Nothing [] [] (private "UnknownMessage") [TyCon (unqualName (descName di))]
         [ inst "getUnknownField" [] (lvar "unknown'field")
         , inst "putUnknownField" [patvar "u'f",patvar "msg"] putunknownfield
         ]
@@ -631,7 +630,7 @@ instanceUnknownMessage di
 
 instanceTextType :: DescriptorInfo -> Decl
 instanceTextType di 
-  = InstDecl src [] (private "TextType") [TyCon (unqualName (descName di))] [
+  = InstDecl src Nothing [] [] (private "TextType") [TyCon (unqualName (descName di))] [
         inst "tellT" [] (pvar "tellSubMessage")
       , inst "getT" [] (pvar "getSubMessage")
       ]
@@ -639,7 +638,7 @@ instanceTextType di
 
 instanceTextMsg :: DescriptorInfo -> Decl
 instanceTextMsg di 
-  = InstDecl src [] (private "TextMsg") [TyCon (unqualName (descName di))] [
+  = InstDecl src Nothing [] [] (private "TextMsg") [TyCon (unqualName (descName di))] [
         inst "textPut" [patvar "msg"] (Do $ map printField flds)
       , InsDecl $ FunBind [Match src (Ident "textGet") [] Nothing (UnGuardedRhs parser) (BDecls subparsers)]
       ]
@@ -676,7 +675,7 @@ instanceTextMsg di
 
 instanceMergeable :: DescriptorInfo -> Decl
 instanceMergeable di
-    = InstDecl src [] (private "Mergeable") [TyCon un]
+    = InstDecl src Nothing [] [] (private "Mergeable") [TyCon un]
         [ -- inst "mergeEmpty" [] (foldl' App (Con un) (replicate len (pvar "mergeEmpty"))),
           inst "mergeAppend" [PApp un patternVars1, PApp un patternVars2]
                              (foldl' App (Con un) (zipWith append vars1 vars2))
@@ -699,7 +698,7 @@ instanceMergeable di
 
 instanceDefault :: DescriptorInfo -> Decl
 instanceDefault di
-    = InstDecl src [] (private "Default") [TyCon un]
+    = InstDecl src Nothing [] [] (private "Default") [TyCon un]
         [ inst "defaultValue" [] (foldl' App (Con un) deflistExt) ]
   where un = unqualName (descName di)
         deflistExt = F.foldr ((:) . defX) end (fields di)
@@ -718,7 +717,7 @@ instanceDefault di
 
 instanceMessageAPI :: ProtoName -> Decl
 instanceMessageAPI protoName
-    = InstDecl src [] (private "MessageAPI")
+    = InstDecl src Nothing [] [] (private "MessageAPI")
         [TyVar (Ident "msg'"), TyFun (TyVar (Ident "msg'")) (TyCon un),  (TyCon un)]
         [ inst "getVal" [patvar "m'",patvar "f'"] (App (lvar "f'" ) (lvar "m'")) ]
   where un = unqualName protoName
@@ -742,9 +741,9 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
 
 -- reusable 'cases' generator
         -- first case is for Group behavior, second case is for Message behavior, last is error handler
-        cases g m e = Case (lvar "ft'") [ Alt src (litIntP' 10) (UnGuardedAlt g) noWhere
-                                        , Alt src (litIntP' 11) (UnGuardedAlt m) noWhere
-                                        , Alt src PWildCard  (UnGuardedAlt e) noWhere
+        cases g m e = Case (lvar "ft'") [ Alt src (litIntP' 10) (UnGuardedRhs g) noWhere
+                                        , Alt src (litIntP' 11) (UnGuardedRhs m) noWhere
+                                        , Alt src PWildCard     (UnGuardedRhs e) noWhere
                                         ]
 
 -- wireSize generation
@@ -810,10 +809,10 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         -- update cases are all normal fields then all known extensions then wildcard
         updateAlts = concatMap toUpdate (F.toList fieldInfos)
                      ++ (if extensible then concatMap toUpdateExt (F.toList fieldExts) else [])
-                     ++ [Alt src PWildCard (UnGuardedAlt wildcardAlt) noWhere]
+                     ++ [Alt src PWildCard (UnGuardedRhs wildcardAlt) noWhere]
         -- the wildcard alternative handles new extensions and 
         wildcardAlt = letPair extBranch
-          where letPair = Let (BDecls [PatBind src (PTuple [patvar "field'Number",patvar "wire'Type"]) Nothing
+          where letPair = Let (BDecls [PatBind src (PTuple Boxed [patvar "field'Number",patvar "wire'Type"])
                                          (UnGuardedRhs (pvar "splitWireTag" $$ lvar "wire'Tag")) (BDecls [])])
                 extBranch | extensible = If (isAllowedExt (lvar "field'Number"))
                                             (argPair (pvar "loadExtension"))
@@ -839,18 +838,18 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                               | otherwise = (pvar "wireGetKey",pvar "wireGetKeyToUnPacked")
                 toUpdateExtUnpacked wt1 =
                   Alt src (litIntP . getWireTag $ wt1)
-                      (UnGuardedAlt $ getUnP $$ Var (mayQualName protoName (fieldName fi)) $$ lvar "old'Self")
+                      (UnGuardedRhs $ getUnP $$ Var (mayQualName protoName (fieldName fi)) $$ lvar "old'Self")
                       noWhere
                 toUpdateExtPacked wt2 =
                   Alt src (litIntP . getWireTag $ wt2)
-                      (UnGuardedAlt $ getP $$ Var (mayQualName protoName (fieldName fi)) $$ lvar "old'Self")
+                      (UnGuardedRhs $ getP $$ Var (mayQualName protoName (fieldName fi)) $$ lvar "old'Self")
                       noWhere
 
 -- wireGet without extensions
         toUpdate fi | Just (wt1,wt2) <- packedTag fi = [toUpdateUnpacked wt1 fi, toUpdatePacked wt2 fi]
                     | otherwise                      = [toUpdateUnpacked (wireTag fi) fi]
         toUpdateUnpacked wt1 fi =
-          Alt src (litIntP . getWireTag $ wt1) (UnGuardedAlt $ 
+          Alt src (litIntP . getWireTag $ wt1) (UnGuardedRhs $ 
             preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
                               RecUpdate (lvar "old'Self")
                                         [FieldUpdate (unqualFName . fieldName $ fi)
@@ -867,7 +866,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                   $$ Paren x
                            | otherwise = x
         toUpdatePacked wt2 fi =
-          Alt src (litIntP . getWireTag $ wt2) (UnGuardedAlt $ 
+          Alt src (litIntP . getWireTag $ wt2) (UnGuardedRhs $ 
             preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
                               RecUpdate (lvar "old'Self")
                                         [FieldUpdate (unqualFName . fieldName $ fi)
@@ -882,7 +881,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         -- that are not right-biased replacements.  The "mergeAppend" uses
         -- knowledge of how all repeated fields get merged.
 
-    in InstDecl src [] (private "Wire") [TyCon me] . map InsDecl $
+    in InstDecl src Nothing [] [] (private "Wire") [TyCon me] . map InsDecl $
         [ FunBind [Match src (Ident "wireSize") [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] Nothing sizeCases whereCalcSize]
         , FunBind [Match src (Ident "wirePut")  [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] Nothing putCases wherePutFields]
         , FunBind [Match src (Ident "wireGet") [patvar "ft'"] Nothing getCases whereDecls]
@@ -890,7 +889,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
 
 instanceReflectDescriptor :: DescriptorInfo -> Decl
 instanceReflectDescriptor di
-    = InstDecl src [] (private "ReflectDescriptor") [TyCon (unqualName (descName di))]
+    = InstDecl src Nothing [] [] (private "ReflectDescriptor") [TyCon (unqualName (descName di))]
         [ inst "getMessageInfo" [PWildCard] gmi
         , inst "reflectDescriptorInfo" [ PWildCard ] rdi ]
   where -- massive shortcut through show and read

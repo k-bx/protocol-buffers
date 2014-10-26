@@ -51,8 +51,10 @@ dotPM (PMName xs (MName x)) = FMName (foldr dot x . map mName $ xs)
 dotPF :: Dotted a => PFName a -> FFName a
 dotPF (PFName xs (FName x)) = FFName (foldr dot x . map mName $ xs)
 
+dotUtf8 :: Utf8 -> Utf8 -> Utf8
 dotUtf8 (Utf8 a) (Utf8 b) = Utf8 (LC.append a (LC.cons '.' b))
 
+dotString :: String -> String -> String
 dotString a b = a ++ ('.':b)
 
 unull :: Utf8 -> Bool
@@ -135,8 +137,8 @@ checkDIString "" = Left $ "Invalid empty identifier: "++show ""
 checkDIString "." = Left $ "Invalid identifier of just a period: "++show "."
 checkDIString xs | ('.':ys) <- xs = fmap ((,) True) $ parts id (span ('.'/=) ys)
                  | otherwise = fmap ((,) False) $ parts id (span ('.'/=) xs)
- where parts f ("","") = Left $ "Invalid identifier because it ends with a period: "++show xs
-       parts f ("",_)  = Left $ "Invalid identifier because is contains two periods in a row: "++show xs
+ where parts _f ("","") = Left $ "Invalid identifier because it ends with a period: "++show xs
+       parts _f ("",_)  = Left $ "Invalid identifier because is contains two periods in a row: "++show xs
        parts f (_,"")  = Right (f [])
        parts f (a,b)   = parts (f . (IName a:)) (span ('.'/=) (tail b))
 
@@ -159,11 +161,13 @@ manglePM :: Mangle a (MName x) => [a] -> PMName x
 manglePM = go id where
   go ms [x] = PMName (ms []) (mangle x)
   go ms (x:xs) = go (ms . (mangle x:)) xs
+  go _ [] = error "impossible manglePM []"
 
 manglePF :: (Mangle a (MName x),Mangle a (FName x)) => [a] -> PFName x
 manglePF = go id where
   go ms [x] = PFName (ms []) (mangle x)
   go ms (x:xs) = go (ms . (mangle x:)) xs
+  go _ [] = error "impossible manglePF []"
 
 class Mangle a b where
   mangle :: a -> b
@@ -190,6 +194,7 @@ instance Mangle (IName Utf8) (FName String) where
   mangle (IName s) = FName (fixLow . toString $ s)
 
 -- make leading upper case letter or "U'_"
+fixUp :: String -> String
 fixUp ('_':xs) = "U'"++xs
 fixUp i@(x:xs) | isLower x =
   let x' = toUpper x
@@ -205,6 +210,7 @@ fixLow i@(x:xs) | i `S.member` reserved = i ++ "'"
                                    else let i' = (x':xs)
                                         in if i' `S.member` reserved then i' ++ "'" else i'
                 | otherwise = i
+fixLow [] = []
 
 reserved :: Set String
 reserved = S.fromDistinctAscList
