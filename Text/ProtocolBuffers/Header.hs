@@ -6,11 +6,13 @@ module Text.ProtocolBuffers.Header
     , pack, fromMaybe, ap
     , fromDistinctAscList, member
     , throwError,catchError
+    , choice, sepEndBy, spaces, try
     , module Data.Generics
     , module Text.ProtocolBuffers.Basic
     , module Text.ProtocolBuffers.Extensions
     , module Text.ProtocolBuffers.Identifiers
     , module Text.ProtocolBuffers.Reflections
+    , module Text.ProtocolBuffers.TextMessage
     , module Text.ProtocolBuffers.Unknown
     , module Text.ProtocolBuffers.WireMessage
     ) where
@@ -23,6 +25,7 @@ import Data.Generics(Data(..))
 import Data.Maybe(fromMaybe)
 import Data.Sequence((|>)) -- for append, see below
 import Data.Set(fromDistinctAscList,member)
+import Text.Parsec(choice, sepEndBy, spaces, try)
 
 import Text.ProtocolBuffers.Basic -- all
 import Text.ProtocolBuffers.Extensions
@@ -33,6 +36,7 @@ import Text.ProtocolBuffers.Identifiers(FIName(..),MName(..),FName(..))
 import Text.ProtocolBuffers.Reflections
   ( ReflectDescriptor(..),ReflectEnum(..),EnumInfo(..),ProtoName(..)
   , GetMessageInfo(GetMessageInfo),DescriptorInfo(extRanges),makePNF )
+import Text.ProtocolBuffers.TextMessage -- all
 import Text.ProtocolBuffers.Unknown
   ( UnknownField,UnknownMessage(..),wireSizeUnknownField,wirePutUnknownField,catch'Unknown )
 import Text.ProtocolBuffers.WireMessage

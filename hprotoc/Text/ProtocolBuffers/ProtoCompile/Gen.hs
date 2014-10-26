@@ -249,7 +249,9 @@ mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix pa
 -- Define LANGUAGE options as [ModulePramga]
 --------------------------------------------
 modulePragmas :: [ModulePragma]
-modulePragmas = [ LanguagePragma src (map Ident ["BangPatterns","DeriveDataTypeable","FlexibleInstances","MultiParamTypeClasses"]) ]
+modulePragmas = [ LanguagePragma src (map Ident ["BangPatterns","DeriveDataTypeable","FlexibleInstances","MultiParamTypeClasses"]) 
+                , OptionsPragma src (Just GHC) " -fno-warn-unused-imports "
+                ]
 
 --------------------------------------------
 -- EnumDescriptorProto module creation
@@ -579,7 +581,7 @@ descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] de
                 where eFields = F.foldr ((:) . fieldX) end (fields di)
                       end = (if hasExt di then (extfield:) else id) 
                           $ (if storeUnknown di then [unknownField] else [])
-        bangType = if lazyFields di then TyParen {- UnBangedTy -} else TyBang BangedTy
+        bangType = if lazyFields di then TyParen {- UnBangedTy -} else TyBang BangedTy . TyParen
         -- extfield :: ([Name],BangType)
         extfield = ([Ident "ext'field"], bangType (TyCon (private "ExtField")))
         -- unknownField :: ([Name],BangType)
