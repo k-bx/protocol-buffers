@@ -28,7 +28,7 @@ Executable hprotoc
   build-tools:     alex
   ghc-options:     -O2 -Wall -fspec-constr-count=10
   ghc-prof-options: -O2 -auto-all -prof
-  build-depends:   base >= 4.7.0 && < 5,
+  build-depends:   base >= 4.3.0 && < 5,
                    array,
                    binary,
                    bytestring,

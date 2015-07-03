@@ -22,7 +22,7 @@ source-repository head
 -- Text.DescriptorProtos.Options is NOT generated from descriptor.proto
 
 Library
-  build-depends: base >= 4.7.0 && < 5,
+  build-depends: base >= 4.3.0 && < 5,
                  protocol-buffers == 2.1.0,
                  bytestring,
                  containers
