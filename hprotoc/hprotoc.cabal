@@ -20,8 +20,8 @@ source-repository head
   location: git://github.com/k-bx/protocol-buffers.git
 
 Executable hprotoc
-  build-depends:   protocol-buffers == 2.0.18,
-                   protocol-buffers-descriptor == 2.0.18
+  build-depends:   protocol-buffers == 2.1.0,
+                   protocol-buffers-descriptor == 2.1.0
   Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell
