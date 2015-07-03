@@ -15,6 +15,9 @@ category:       Text
 extra-source-files: README,
                     google-proto-files/google/protobuf/descriptor.proto,
                     google-proto-files/google/protobuf/plugin.proto
+source-repository head
+  type: git
+  location: git://github.com/k-bx/protocol-buffers.git
 
 Executable hprotoc
   build-depends:   protocol-buffers == 2.0.18,

@@ -13,7 +13,10 @@ synopsis:       Parse Google Protocol Buffer specifications
 description:    Parse proto files and generate Haskell code.
 category:       Text
 extra-source-files: TODO
-                    README
+                    README.md
+source-repository head
+  type: git
+  location: git://github.com/k-bx/protocol-buffers.git
 
 Library
   -- Added -fspec-constr-count=10 to quiet ghc-7.0.2.
