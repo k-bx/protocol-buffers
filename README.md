@@ -1,5 +1,5 @@
-Haskell Protocol Buffers
-========================
+[![Build Status](https://travis-ci.org/k-bx/protocol-buffers.svg)](https://travis-ci.org/k-bx/protocol-buffers) Haskell Protocol Buffers
+====================================================
 
 This the README file for `protocol-buffers`,
 `protocol-buffers-descriptors`, and `hprotoc`. These are three
