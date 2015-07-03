@@ -1,212 +1,286 @@
-This the README file for protocol-buffers, protocol-buffers-descriptors, and hprotoc.
-These are three interdependent Haskell packages by Chris Kuklewicz.
-This README was updated most recently to reflect version 2.0.7
-This code should be compatible with Google protobuf version 2.3.0
-Changes to keep up with Google protobuf version 2.4.0 are being considered.
+Haskell Protocol Buffers
+========================
 
+This the README file for `protocol-buffers`,
+`protocol-buffers-descriptors`, and `hprotoc`. These are three
+interdependent Haskell packages originally written by Chris Kuklewicz.
 
-Questions and answers:
+(Needs check) This README was updated most recently to reflect version
+`2.0.7`. This code should be compatible with Google protobuf version
+`2.3.0`. Changes to keep up with Google protobuf version `2.4.0` are
+being considered.
 
-Whats up with version 2.0.7 ?
+What is this for? What does it do? Why?
+---------------------------------------
 
-Version 2.0.5 and 2.0.6 had compile problems with GHC 7.4, this is now warning-free (as free as possible).
-
-The lack of a package name caused problems.  Hopefully the new handling works for everyone.
-
-What is new in 1.8.0 ?
-
-Submitted bug fixes!
-Fix for compiling generated haskell that uses packed fields.
-Fix to mangling default value Enum names.
-Fix for using "group" when in plug-in mode.
-
-I also changed the directory layout for the source code of protocol-buffers-descriptor.  The
-auto-generated code is now in "src-auto-generated" and the API for accessing options is under
-"src-hand-written".  I also added a README file to the descriptor package explaining the commands to
-recreate src-auto-generated.
-
-What is new in 1.7.0 ?
-
-This version adds a patch from George van den Driessche to allow hprotoc to work as a plug-in to
-protoc.  You must copy the hprotoc to be named protoc-gen-haskell (not a symlink) and call it as:
-
-/opt/protobuf-2.3.0/bin/protoc --plugin=./protoc-gen-haskell --haskell_out=DirOut test.proto
-
-What is new in 1.6.0 ?
-
-This version is now caught up with the official protobuf-2.3.0 release.
- The highlights of the changes are (cribbing from Kenton's announcement):
-
->   General
->   * Parsers for repeated numeric fields now always accept both packed and
->     unpacked input.  The [packed=true] option only affects serializers.
->     Therefore, it is possible to switch a field to packed format without
->     breaking backwards-compatibility -- as long as all parties are using
->     protobuf 2.3.0 or above, at least.
-and
->   * inf, -inf, and nan can now be used as default values for float and double
->     fields.
-have been added to 1.6.0.
-
-I did not add support for plugin code generators or for writing directly
-to a compressed zip or jar file.  No service related code is ever
-generated so the "option *_generic_services" changes were ignored.
-
-
-What is new in 1.5.0 ?
-
-  The "packed" repeated fields should work on the wire, "deprecated" fields are parsed properly but
-  not nothing is otherwise done about this flag.  The parser should disambiguate references to
-  messages/groups/enums by ignoring fields with the same name (for types of normal fields and
-  extension fields).  The Lexar has had a few fixes courtesy of George van den Driessche (newlines
-  after numeric literals in proto files should now be handled).
-
-What is this for?  What does it do?  Why?
-
-  It is a pure Haskell re-implementation of the Google code at
-http://code.Google.com/apis/protocolbuffers/docs/overview.html
-  which is "...a language-neutral, platform-neutral, extensible way of serializing structured data for use in communications protocols, data storage, and more."
-  Google's project produces C++, Java, and Python code.  This one produces Haskell code.
+It is a pure Haskell re-implementation of the Google code at
+https://developers.google.com/protocol-buffers/docs/overview which is
+"...a language-neutral, platform-neutral, extensible way of
+serializing structured data for use in communications protocols, data
+storage, and more."  Google's project produces C++, Java, and Python
+code.  This one produces Haskell code.
 
 How well does this Haskell package duplicate Google's project?
+--------------------------------------------------------------
 
-  This provides non-mutable messages that ought to be wire-compatible with Google.
-  These messages support extensions.
-  These messages support unknown fields if hprotoc is passed the proper flag (-u or --unknown_fields).
-  This does not generate anything for Services/Methods.
+- This provides non-mutable messages that ought to be wire-compatible
+  with Google.
 
-  Adding support for services has not been considered.
+- These messages support extensions.
 
-  I think that Google's code checks for some policy violations that are not well documented enough for me to reverse engineer.
-  Some (all?) of Google's APIs include the possibility of mutable messages.
-  I suspect that my message reflection is not as useful at runtime as in some of Google's APIs.
+- These messages support unknown fields if hprotoc is passed the
+  proper flag (-u or --unknown_fields).
+
+- This does not generate anything for Services/Methods.
+
+- Adding support for services has not been considered.
+
+I think that Google's code checks for some policy violations that are
+not well documented enough for me to reverse engineer. Some (all?) of
+Google's APIs include the possibility of mutable messages. I suspect
+that my message reflection is not as useful at runtime as in some of
+Google's APIs.
 
 What is protocol-buffers?
+-------------------------
 
-  The protocol-buffers part is the main library which has two faces:
+The protocol-buffers part is the main library which has two faces:
 
-  1) It provides an external API exported by module Text.ProtocolBuffers for users to read and write the binary format and manipulate the message data structures created by hprotoc.
-  2) It provides an internal API for the messages under module Text.ProtocolBuffers.Header to implement their tasks.
+1. It provides an external API exported by module
+`Text.ProtocolBuffers` for users to read and write the binary format
+and manipulate the message data structures created by hprotoc.
+
+2. It provides an internal API for the messages under module
+`Text.ProtocolBuffers.Header` to implement their tasks.
 
 What is protocol-buffers-descriptor?
+------------------------------------
 
-  1) It uses the protocol-buffers package.
-  2) It provides the code generated by hprotoc from "descriptor.proto" under module Text.DescriptorProtos.
-  3) This supports hprotoc which is used to describe proto files and the code they will generate.
-  4) It provides Text.DescriptorProtos.Options which help in looking up the new style custom options.
+- It uses the `protocol-buffers` package.
+
+- It provides the code generated by hprotoc from `descriptor.proto`
+under module `Text.DescriptorProtos`.
+
+- This supports hprotoc which is used to describe proto files and the
+code they will generate.
+
+- It provides `Text.DescriptorProtos.Options` which help in looking up
+the new style custom options.
 
 What is hprotoc?
+----------------
 
-  1) It uses protocol-buffers and protocol-buffers-descriptor above.
-  2) It is a command line tool that reads in ".proto" files and produces Haskell source trees like Google's protoc.
-  3) ...and it contains a very nice lexer and parser for the ".proto" file...
+- It uses `protocol-buffers` and `protocol-buffers-descriptor` above.
 
-  The hprotoc part is a executable program which reads ".proto" files and uses the protocol-buffers package to produce a tree of Haskell source files.  The program is called "hprotoc".  Usage is given by the program itself, the options themselves are processed in order.  It can take several input search paths, and allow an additional module prefix, a selectable output directory, and ends with a list of of proto file to generate from.
+- It is a command line tool that reads in `.proto` files and produces
+  Haskell source trees like Google's protoc.
 
-  The output has to be a tree of modules since each message is given its own namespace, and a module is the only partitioning of namespace in Haskell.  The keys for extension fields are defined alongside the message whose namespace they share.  Since message names are both a data type and a namespace the filename and the message name match (aside from the .hs file extension).
+- ...and it contains a very nice lexer and parser for the `.proto`
+  file...
+
+The hprotoc part is a executable program which reads `.proto` files
+and uses the `protocol-buffers` package to produce a tree of Haskell
+source files.  The program is called `hprotoc`.  Usage is given by the
+program itself, the options themselves are processed in order.  It can
+take several input search paths, and allow an additional module
+prefix, a selectable output directory, and ends with a list of of
+proto file to generate from.
+
+The output has to be a tree of modules since each message is given its
+own namespace, and a module is the only partitioning of namespace in
+Haskell.  The keys for extension fields are defined alongside the
+message whose namespace they share.  Since message names are both a
+data type and a namespace the filename and the message name match
+(aside from the .hs file extension).
 
 And what are the examples and tests sub-directories?
+----------------------------------------------------
 
-  The examples sub-directory is for duplicating the addressbook.proto example that Google has with its code.  The ABF and ABF2 file are included as binary addressbooks.  These can be read by the C++ examples from Google, and vice-versa.
+The examples sub-directory is for duplicating the `addressbook.proto`
+example that Google has with its code.  The `ABF` and `ABF2` file are
+included as binary addressbooks.  These can be read by the C++
+examples from Google, and vice-versa.
 
-  The tests sub-directory is where I have written some test code to drive the UnittestProto code generated from Google's unittest.proto (and unittest_import.proto) files.  The 'patchBoot' file has the needed file patches to fix up the recursive imports (no longer needed!).
+The `tests` sub-directory is where I have written some test code to
+drive the `UnittestProto` code generated from Google's
+`unittest.proto` (and `unittest_import.proto`) files.  The `patchBoot`
+file has the needed file patches to fix up the recursive imports (no
+longer needed!).
 
 What do I need to compile the code?
+-----------------------------------
 
-  I use ghc (version 6.10.3) and cabal (version 1.6.0.3).
+1. Install [Haskell Stack Tool](https://github.com/commercialhaskell/stack/)
+2. Run `stack build`
 
-  The dependencies are listed in the .cabal files, and these currently require you to go to hackage.haskell.org and get packages "binary" (I use version 0.5.0.1) and "utf8-string" (I use version 0.3.5) and hprotoc needs haskell-src-exts (exactly version 0.4.8 at the moment).
-
-  The hprotoc Lexer.hs is produced from Lexer.x by the alex program (I use version 2.3.1) which can be downloaded from http://www.haskell.org/alex/ if you edit Lexer.x and need to regenerate Lexer.hs.
-
-  The usual cabal configure/buid/install works for the protocol-buffers library (and haddock for API docs):
-    runhaskell Setup.hs configure 
-    runhaskell Setup.hs build
-    runhaskell Setup.hs haddock
-    runhaskell Setup.hs install
-  After installing protocol-buffers go into the describe sub-directory and configure/build/install the protocol-buffers-descriptor library.
-  After installing protocol-buffers  and protocol-buffers-descriptor go into the hprotoc sub-directory and configure/build/install the hprotoc executable.
-
-  Note: Patches to support other compilers are welcome.
+Alternatively, go with old-fashioned `cabal build`.
 
 How mature is this code?
+------------------------
 
-  It can write the wire encoding and read it back.  It will has been tested for interoperability against Google's read/write code with addressbook.proto.
+It can write the wire encoding and read it back.  It has been tested
+for interoperability against Google's read/write code with
+`addressbook.proto`.
 
-  hprotoc generates and uses the Text.DescriptorProtos tree from Google "descriptor.proto" file.
+`hprotoc` generates and uses the `Text.DescriptorProtos` tree from
+Google `descriptor.proto` file.
 
-  hprotoc has generated code from Google/protobuf/unittest.proto and Google/protobuf.unittest_import.  These compile after adding hs-boot files TestAllExtensions.hs-boot, TestFieldOrderings.hs-boot, and TestMutualRecursionA.hs-boot to resolve mutual recursion.  The TestEnumWithDupValue has duplicated values which cause a compilation warning.
+`hprotoc` has generated code from `Google/protobuf/unittest.proto` and
+`Google/protobuf.unittest_import`. These compile after adding hs-boot
+files `TestAllExtensions.hs-boot`, `TestFieldOrderings.hs-boot`, and
+`TestMutualRecursionA.hs-boot` to resolve mutual recursion. The
+`TestEnumWithDupValue` has duplicated values which cause a compilation
+warning.
 
-  There has been QuickCheck tests done for UnittestProto/TestAllType.hs and UnittestProto/TestAllExtensions.hs in the tests subdirectory.  These pass as of 2008-09-19 for version 0.2.7 (which has been tagged right after writing this).  These test that random messages can be roundtripped to the wire format without changing — with the caveat that the new extension keys are read back as raw bytes but compare equal because of the parsing done by (==).
+There has been QuickCheck tests done for
+`UnittestProto/TestAllType.hs` and
+`UnittestProto/TestAllExtensions.hs` in the tests subdirectory. These
+pass as of `2008-09-19` for version `0.2.7`. These test that random
+messages can be roundtripped to the wire format without changing —
+with the caveat that the new extension keys are read back as raw bytes
+but compare equal because of the parsing done by (==).
 
 Mutual recursion is a problem?
+------------------------------
 
-  Not using ghc.  The haskell-src-exts let me generate code with {-# SOURCE #-} annotated imports.  And hprotoc generates the needed hs-boot files for ghc.  And key import cycles are broken by creating 'Key.hs files, which users can ignore.
+Not using ghc.  The haskell-src-exts let me generate code with `{-#
+SOURCE #-}` annotated imports.  And `hprotoc` generates the needed
+hs-boot files for ghc.  And key import cycles are broken by creating
+`Key.hs` files, which users can ignore.
 
 How stable is the API?
+----------------------
 
-  This is the first working release of the code.  I do not promise to keep any of the API but I am lazy so most things will not change.  The reflection capabilities may get improved/altered.  Stricter warnings and error detection may be added.  Code will move between protocol-buffers and hprotoc projects.  The internals of reading from the wire may be improved.
+This is the first working release of the code.  I do not promise to
+keep any of the API but I am lazy so most things will not change. The
+reflection capabilities may get improved/altered. Stricter warnings
+and error detection may be added.  Code will move between
+protocol-buffers and hprotoc projects.  The internals of reading from
+the wire may be improved.
 
 Where is the API documentation?
+-------------------------------
 
-  These file should be able to have cabal run the haddock generation.  I am using Haddock version 2.4.2 at the moment.  The imports of Text.ProtocolBuffers are the public API.  The generated code's API is Text.ProtocolBuffers.Header.  The only usage examples are in the examples sub-directory and the tests sub-directory.  Since the messages are simply Haskell data types most of the manipulation should be easy.
+Generate haddock with `stack haddock` command.
 
-  The main thing that is weird is that messages with extension ranges get an ExtField record field that holds ... an internal data structure.  This is currently a Map from field number to a rather complicated existential + GADT combination that should really only be touched by the ExtKey and MessageAPI type class methods.  The ExtField data constructor is not hidden, though it could be and probably ought to be.
+You can also view API documentation online at
+[Hackage page](https://hackage.haskell.org/package/protocol-buffers).
 
-  Note that extension fields are inherently slower, especially in ghci (though ghc's -O2 helps quite a bit).
+The imports of `Text.ProtocolBuffers` are the public API. The
+generated code's API is `Text.ProtocolBuffers.Header`. The only usage
+examples are in the `examples` sub-directory and the `tests`
+sub-directory. Since the messages are simply Haskell data types most
+of the manipulation should be easy.
 
-  The entire proto file is stored in the top level module in wire-encoded form and can be accessed as a FileDescriptorProto.  The Haskell code also defines its own reflection data types, with one stored in each generated module and also in a master data type in the top level module (via Show and Read).
+The main thing that is weird is that messages with extension ranges
+get an ExtField record field that holds ... an internal data
+structure.  This is currently a `Map` from field number to a rather
+complicated existential + GADT combination that should really only be
+touched by the `ExtKey` and `MessageAPI` type class methods. The
+`ExtField` data constructor is not hidden, though it could be and
+probably ought to be.
+
+Note that extension fields are inherently slower, especially in ghci
+(though ghc's `-O2` helps quite a bit).
+
+The entire proto file is stored in the top level module in
+wire-encoded form and can be accessed as a `FileDescriptorProto`. The
+Haskell code also defines its own reflection data types, with one
+stored in each generated module and also in a master data type in the
+top level module (via `Show` and `Read`).
 
 Who reads this far?
+-------------------
 
-  I suspect no one ever will.
+I suspect no one ever will.
 
-Why define your own Haskell reflection types in addition to FileDescriptorProto's types?
+Why define your own Haskell reflection types in addition to
+`FileDescriptorProto`s types?
 
-  This allows for the protocol-buffers library package to not depend on a single thing defined in the protocol-buffers-descriptor package.  This lack of recursion made for much simpler bootstrapping and allows the descriptor.proto generated files to be build separately.
+This allows for the protocol-buffers library package to not depend on
+a single thing defined in the `protocol-buffers-descriptor` package.
+This lack of recursion made for much simpler bootstrapping and allows
+the `descriptor.proto` generated files to be build separately.
 
-  While descriptor.proto files are a great fit as output from parsing a proto file they are not as good a fit for code generation.  They mix fields and extension keys, they have all optional fields even though some things (especially names) are compulsory.  They obscure which descriptors are groups.  They have a nested structure which is useful when resolving the names but not for iterating over for code generation.
+While `descriptor.proto` files are a great fit as output from parsing
+a proto file they are not as good a fit for code generation. They mix
+fields and extension keys, they have all optional fields even though
+some things (especially names) are compulsory. They obscure which
+descriptors are groups. They have a nested structure which is useful
+when resolving the names but not for iterating over for code
+generation.
 
 What are the pieces of protocol-buffers doing?
+----------------------------------------------
 
-  Basic.hs defines the core data types (that are not already in Prelude) and many classes.
-  Mergeable.hs defines the standard instances of Mergeable for combining types.
-  Default.hs defines the standard default of the basic data types.
-  Reflections.hs defines the Haskell reflection data types (stored with each generated module).
-  Get.hs is here because I needed a slightly different style of binary Get monad (see binary and binary-strict packages).
-    This is standalone and could be put into any project.  It has long comments inside.
-  WireMessage.hs defines 3 things:
-    (1) The Wire instances for the basic data types
-    (2) The API for the generated module to use to define their own Wire instances
-    (3) The API for the user to load and save messages
-    This file would not compile with ghc-6.8.3 on a G4 (Mac OS X 10.5.4, XCode 3.1) without -fvia-C as the cabal file states.
-  Extensions.hs is rather large because it add everything needed for extension fields (see haddock API docs).
-    It should not export ExtField's constructor, but it currently does.
-  Header.hs re-exports what is needed for the instance messages.
-  ProtocolBuffer.hs re-exports what is needed for the user API.
+- `Basic.hs` defines the core data types (that are not already in
+  `Prelude`) and many classes.
+- `Mergeable.hs` defines the standard instances of `Mergeable` for
+  combining types.
+- `Default.hs` defines the standard default of the basic data types.
+- `Reflections.hs` defines the Haskell reflection data types (stored
+  with each generated module).
+- `Get.hs` is here because I needed a slightly different style of
+  binary `Get` monad (see binary and binary-strict packages). This is
+  standalone and could be put into any project. It has long comments
+  inside.
+- `WireMessage.hs` defines 3 things:
+  1. The Wire instances for the basic data types
+  2. The API for the generated module to use to define their own Wire
+     instances
+  3. The API for the user to load and save messages This file would
+     not compile with ghc-6.8.3 on a G4 (Mac OS X 10.5.4, XCode 3.1)
+     without -fvia-C as the cabal file states.
+- `Extensions.hs` is rather large because it add everything needed for
+  extension fields (see haddock API docs).  It should not export
+  ExtField's constructor, but it currently does.
+- `Header.hs` re-exports what is needed for the instance messages.
+- `ProtocolBuffer.hs` re-exports what is needed for the user API.
 
 What are the pieces of hprotoc doing?
+-------------------------------------
 
-  alex uses Lexer.x to generated Lexer.hs which slices up the ".proto" file into tokens.
-    The ".proto" layout is well designed, quite unambiguous, and easy to tokenize.
-    The lexer also does the jobs of decoding the backslash escape codes in quotes strings, and interpreting floating point numbers.
-    Errors and unexpected input are inserted into the token list, with at least line number level precision.
-  The Parser.hs file has a Parsec parser which are really used as nested parsers (allowing for the type of the user state to change).
-    The ".proto" grammar is well designed and the system never needs to backtrack over tokens.
-    The default values and options' values parsed according to the expected type, and string default are check for valid utf8 encoding.
-    (This also import the Instances.hs file)
-  The Resolve.hs has code to resolve all the names to a fully qualified form, including name mangling where necessary.
-    This includes code to load and parse all the imported ".proto" files, reusing parses for efficiency, and detecting import loops.
-    The context built from each imported file is combined to change the FileDescriptorProto into a modified FileDescriptorProto.
-    This stage also determines that extension keys are in a valid extensions range declaration, and enum default values exists.
-  The MakeReflections.hs file converts the nested FileDescriptorProto into a flatter Haskell reflection data structure.
-    This includes parsing the default value stored in the FileDescriptorProto.
-  The BreakRecursion.hs file builds graphs describing the imports and works out whether and how to create hs-boot and 'Key.hs files
-    to allow allow for warning-free compilation with ghc (as of 6.10.1).
-  The Gen.hs file takes a Haskell data structure from MakeReflections and builds a module syntax data structure.
-    The syntax data is quite verbose and several helper functions are used to help with the composition.
-    The result is easy to print as a string to a file.
-  The ProtoCompile.hs file is the Main module which defines the command line program 'hprotoc'.
-    This manages most of the interaction with the file system (aside from import loading in Resolve).
-    Everything that is needed is collected into the Options data type which is passed to "run".
-    The output style can be tweaked by changing "style" and "myMode".
+`alex` uses `Lexer.x` to generated `Lexer.hs` which slices up the
+`.proto` file into tokens.  The `.proto` layout is well designed,
+quite unambiguous, and easy to tokenize.  The lexer also does the jobs
+of decoding the backslash escape codes in quotes strings, and
+interpreting floating point numbers. Errors and unexpected input are
+inserted into the token list, with at least line number level
+precision.
+
+The `Parser.hs` file has a `Parsec` parser which are really used as
+nested parsers (allowing for the type of the user state to change).
+The `.proto` grammar is well designed and the system never needs to
+backtrack over tokens. The default values and options' values parsed
+according to the expected type, and string default are check for valid
+utf8 encoding.  (This also import the `Instances.hs` file)
+
+The `Resolve.hs` has code to resolve all the names to a fully
+qualified form, including name mangling where necessary. This includes
+code to load and parse all the imported `.proto` files, reusing parses
+for efficiency, and detecting import loops. The context built from
+each imported file is combined to change the `FileDescriptorProto`
+into a modified `FileDescriptorProto`. This stage also determines that
+extension keys are in a valid extensions range declaration, and enum
+default values exists.
+
+The `MakeReflections.hs` file converts the nested `FileDescriptorProto`
+into a flatter Haskell reflection data structure. This includes
+parsing the default value stored in the `FileDescriptorProto`.
+
+The `BreakRecursion.hs` file builds graphs describing the imports and
+works out whether and how to create hs-boot and `Key.hs` files to allow
+allow for warning-free compilation with ghc (as of 6.10.1).
+
+The `Gen.hs` file takes a Haskell data structure from
+`MakeReflections` and builds a module syntax data structure.  The
+syntax data is quite verbose and several helper functions are used to
+help with the composition.  The result is easy to print as a string to
+a file.
+
+The `ProtoCompile.hs` file is the Main module which defines the
+command line program `hprotoc`.  This manages most of the interaction
+with the file system (aside from import loading in Resolve).
+Everything that is needed is collected into the Options data type
+which is passed to "run". The output style can be tweaked by changing
+"style" and "myMode".
