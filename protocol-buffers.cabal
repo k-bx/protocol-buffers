@@ -33,7 +33,7 @@ Library
                    Text.ProtocolBuffers.Unknown
                    Text.ProtocolBuffers.WireMessage
 
-  build-depends: base == 4.*,
+  build-depends: base >= 4.7.0 && < 5,
                  array,
                  binary,
                  bytestring,

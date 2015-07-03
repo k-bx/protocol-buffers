@@ -5,6 +5,10 @@ This the README file for `protocol-buffers`,
 `protocol-buffers-descriptors`, and `hprotoc`. These are three
 interdependent Haskell packages originally written by Chris Kuklewicz.
 
+Currently, maintainership was taken by Kostiantyn Rybnikov. It is
+planned to only support GHC 7.8 and newer unless someone explicitly
+asks for support of earlier versions.
+
 (Needs check) This README was updated most recently to reflect version
 `2.0.7`. This code should be compatible with Google protobuf version
 `2.3.0`. Changes to keep up with Google protobuf version `2.4.0` are
