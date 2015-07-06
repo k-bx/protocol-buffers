@@ -42,9 +42,8 @@ script:
 
 matrix:
   allow_failures:
-   - env:
-     - CABALVER=head GHCVER=head
-     - CABALVER=1.16 GHCVER=7.0.4
-     - CABALVER=1.16 GHCVER=7.2.2
-     - CABALVER=1.16 GHCVER=7.4.2
-     - CABALVER=1.18 GHCVER=7.6.3
+   - env: CABALVER=head GHCVER=head
+   - env: CABALVER=1.16 GHCVER=7.0.4
+   - env: CABALVER=1.16 GHCVER=7.2.2
+   - env: CABALVER=1.16 GHCVER=7.4.2
+   - env: CABALVER=1.18 GHCVER=7.6.3
