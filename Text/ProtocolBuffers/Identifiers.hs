@@ -30,7 +30,7 @@ module Text.ProtocolBuffers.Identifiers
 import qualified Data.ByteString.Lazy.Char8 as LC
 import qualified Data.ByteString.Lazy.UTF8 as U
 import Data.Char
-import Data.List
+import Data.List hiding (uncons)
 import Data.Monoid
 import Data.Generics(Data)
 import Data.Typeable(Typeable)
