@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        2.1.1
+version:        2.1.2
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -22,8 +22,8 @@ source-repository head
 -- Text.DescriptorProtos.Options is NOT generated from descriptor.proto
 
 Library
-  build-depends: base >= 4.3.0 && < 5,
-                 protocol-buffers == 2.1.1,
+  build-depends: base >= 4.7.0 && < 5,
+                 protocol-buffers == 2.1.2,
                  bytestring,
                  containers
 
