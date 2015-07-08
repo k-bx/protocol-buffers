@@ -19,21 +19,16 @@ before_install:
    else
      travis_retry sudo apt-get install happy alex
    fi
-- wget -q -O- http://download.fpcomplete.com/ubuntu/fpco.key | sudo apt-key add -
-- echo 'deb http://download.fpcomplete.com/ubuntu/precise stable main' | sudo tee /etc/apt/sources.list.d/fpco.list
-- sudo apt-get update
-- sudo apt-get install stack -y
 
 install:
 - cabal --version
 - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
 - travis_retry cabal update
-- stack setup
 - cabal install --only-dependencies --enable-tests --enable-benchmarks
 
 # Here starts the actual work to be performed for the package under test; any command which exits with a non-zero exit code causes the build to fail.
 script:
-- stack test
+- make
 
 # Check that the resulting source distribution can be built & installed.
 # If there are no other `.tar.gz` files in `dist`, this can be even simpler:
