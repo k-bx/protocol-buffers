@@ -288,4 +288,3 @@ with the file system (aside from import loading in Resolve).
 Everything that is needed is collected into the Options data type
 which is passed to "run". The output style can be tweaked by changing
 "style" and "myMode".
-
