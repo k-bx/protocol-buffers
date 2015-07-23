@@ -641,16 +641,22 @@ instanceTextType di
 instanceTextMsg :: DescriptorInfo -> Decl
 instanceTextMsg di 
   = InstDecl src Nothing [] [] (private "TextMsg") [TyCon (unqualName (descName di))] [
-        inst "textPut" [patvar "msg"] (Do $ map printField flds)
+        inst "textPut" [patvar msgVar] genPrintFields
       , InsDecl $ FunBind [Match src (Ident "textGet") [] Nothing (UnGuardedRhs parser) (BDecls subparsers)]
       ]
   where flds = F.toList (fields di)
+        msgVar = distinctVar "msg"
+        distinctVar var = if var `elem` reservedVars then distinctVar (var ++ "'") else var
+        reservedVars = map toPrintName flds
+        toPrintName fi = let IName uname = last $ splitFI $ protobufName' (fieldName fi) in uToString uname
         printField fi = let Ident funcname = baseIdent' (fieldName fi)
-                            IName uname = last $ splitFI $ protobufName' (fieldName fi)
-                            printname = uToString uname
-                         in Qualifier $ pvar "tellT" $$ litStr printname $$ Paren (lvar funcname $$ lvar "msg")
+                            printname = toPrintName fi
+                         in Qualifier $ pvar "tellT" $$ litStr printname $$ Paren (lvar funcname $$ lvar msgVar)
+        genPrintFields = if null flds
+                           then preludevar "return" $$ Hse.Tuple Boxed []
+                           else Do $ map printField flds
         parser
-            | Seq.null (fields di) = pvar "return" $$ pvar "defaultValue"
+            | Seq.null (fields di) = preludevar "return" $$ pvar "defaultValue"
             | otherwise = Do [
                 Generator src (patvar "mods") 
                     $ pvar "sepEndBy" 
@@ -664,8 +670,7 @@ instanceTextMsg di
              ]
         parserName f = let Ident fname = baseIdent' (fieldName f) in "parse'" ++ fname
         subparsers = map (\f -> defun (parserName f) [] (getField f)) flds
-        getField fi = let IName uname = last $ splitFI $ protobufName' (fieldName fi)
-                          printname = uToString uname
+        getField fi = let printname = toPrintName fi
                           Ident funcname = baseIdent' (fieldName fi)
                           update = if canRepeat fi then pvar "append" $$ Paren (lvar funcname $$ lvar "o") $$ lvar "v" else lvar "v"
             in pvar "try" $$ Do [
