@@ -204,7 +204,7 @@ dump o imports (Just (LocalFP dumpFile)) fdp fdps = do
   outputWriteFile o dumpFile $ LC.unpack (messagePut $ defaultValue { D.FileDescriptorSet.file = s })
   outputReport o $ "finished dumping FileDescriptorSet binary of: "++show (D.FileDescriptorProto.name fdp)
 
-data (Monad m) => Output m = Output {
+data Output m = Output {
   outputReport :: String -> m (),
   outputWriteFile :: FilePath -> String -> m ()
 }
