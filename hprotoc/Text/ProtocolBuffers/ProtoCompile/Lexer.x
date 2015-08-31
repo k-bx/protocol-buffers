@@ -14,7 +14,7 @@ import qualified Data.ByteString.Lazy.Char8 as DBL8
 
 %wrapper "posn-bytestring"
 
-@inComment = ([^\*] | $white)+ | ([\*]+ [^\/])
+@inComment = ( [^\*] | $white | ([\*]+ ([^\*\/] | $white )))
 @comment = [\/] [\*] (@inComment)* [\*]+ [\/] | "//".* | "#".*
 
 $d = [0-9]
@@ -127,7 +127,7 @@ op one = go id where
 -- values in the range [0..255] and to be c-escaped (in order to
 -- render binary information printable).  This decodes the c-escaping
 -- and returns the binary data as Word8.
--- 
+--
 -- A decoding error causes (Left msg) to be returned.
 sDecode :: [Char] -> Either String [Word8]
 sDecode = op one where
@@ -152,7 +152,7 @@ sDecode = op one where
         Nothing -> Left $ "failed to decode hex sequence "++ys
     where hex = takeWhile isHexDigit (take 2 ys)
           len = length hex
-          rest = drop len ys          
+          rest = drop len ys
   unescape ('u':ys) | ok =
       case mayRead readHex hex of
         Just w -> do w' <- checkUnicode w
