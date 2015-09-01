@@ -35,7 +35,7 @@ Executable hprotoc
                    containers,
                    directory >= 1.0.0.1,
                    filepath >= 1.1.0.0,
-                   haskell-src-exts >= 1.16.0,
+                   haskell-src-exts >= 1.17.0,
                    mtl,
                    parsec,
                    utf8-string
