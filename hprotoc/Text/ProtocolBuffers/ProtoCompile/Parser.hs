@@ -127,7 +127,7 @@ rawStrMany = fmap mconcat (many1 singleStringLit)
 -- This assumes the initial (L _ '{' ) has already been parsed.
 getAggregate :: P s [Lexed]
 getAggregate = do
-  input <- getInput      
+  input <- getInput
   let count :: Int -> Int -> P s [Lexed]
       count !n !depth = do
         -- Not using getNextToken so that the value of 'n' in count is correct.
@@ -552,9 +552,9 @@ serviceOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
 
 rpc = pName (U.fromString "rpc") >> do
   name <- ident1
-  input <- between (pChar '(') (pChar ')') ident1
+  input <- between (pChar '(') (pChar ')') ident
   _ <- pName (U.fromString "returns")
-  output <- between (pChar '(') (pChar ')') ident1
+  output <- between (pChar '(') (pChar ')') ident
   let m1 = defaultValue { D.MethodDescriptorProto.name=Just name
                         , D.MethodDescriptorProto.input_type=Just input
                         , D.MethodDescriptorProto.output_type=Just output }
