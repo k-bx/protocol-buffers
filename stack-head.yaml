@@ -1,0 +1,6 @@
+packages:
+- '.'
+- descriptor/
+- hprotoc/
+extra-deps: []
+resolver: nightly-2015-09-13

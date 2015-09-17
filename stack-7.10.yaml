@@ -1,0 +1,6 @@
+packages:
+- '.'
+- descriptor/
+- hprotoc/
+extra-deps: []
+resolver: lts-3.5
