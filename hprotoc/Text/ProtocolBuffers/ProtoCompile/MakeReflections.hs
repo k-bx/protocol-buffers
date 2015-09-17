@@ -66,11 +66,11 @@ toHaskell reMap k = case M.lookup k reMap of
                       Nothing -> imp $ "toHaskell failed to find "++show k++" among "++show (M.keys reMap)
                       Just pn -> pn
 
-makeProtoInfo :: (Bool,Bool) -- unknownField and lazyFields for makeDescriptorInfo'
+makeProtoInfo :: (Bool,Bool,Bool) -- unknownField, lazyFields and lenses for makeDescriptorInfo'
               -> NameMap
               -> D.FileDescriptorProto 
               -> ProtoInfo
-makeProtoInfo (unknownField,lazyFieldsOpt) (NameMap (packageID,hPrefix,hParent) reMap)
+makeProtoInfo (unknownField,lazyFieldsOpt,lenses) (NameMap (packageID,hPrefix,hParent) reMap)
               fdp@(D.FileDescriptorProto { D.FileDescriptorProto.name = Just rawName })
      = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allKeys where
   packageName = getPackageID packageID :: FIName (Utf8)
@@ -79,7 +79,7 @@ makeProtoInfo (unknownField,lazyFieldsOpt) (NameMap (packageID,hPrefix,hParent) 
                         [] -> imp $ "makeProtoInfo: no hPrefix or hParent in NameMap for: "++show fdp
                         _ -> ProtoName packageName (init hPrefix) [] (last hPrefix)
                 _ -> ProtoName packageName hPrefix (init hParent) (last hParent)
-  keyInfos = Seq.fromList . map (\f -> (keyExtendee' reMap f,toFieldInfo' reMap packageName f))
+  keyInfos = Seq.fromList . map (\f -> (keyExtendee' reMap f,toFieldInfo' reMap packageName lenses f))
              . F.toList . D.FileDescriptorProto.extension $ fdp
   allMessages = concatMap (processMSG packageName False) (F.toList $ D.FileDescriptorProto.message_type fdp)
   allEnums = map (makeEnumInfo' reMap packageName) (F.toList $ D.FileDescriptorProto.enum_type fdp) 
@@ -93,7 +93,7 @@ makeProtoInfo (unknownField,lazyFieldsOpt) (NameMap (packageID,hPrefix,hParent) 
                                        (D.DescriptorProto.name x))
                             groups
         parent' = fqAppend parent [IName (fromJust (D.DescriptorProto.name msg))]
-    in makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFieldsOpt) msg
+    in makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFieldsOpt,lenses) msg
        : concatMap (\x -> processMSG parent' (checkGroup x) x)
                    (F.toList (D.DescriptorProto.nested_type msg))
   processENM parent msg = foldr ((:) . makeEnumInfo' reMap parent') nested
@@ -132,9 +132,9 @@ keyExtendee' reMap f = case D.FieldDescriptorProto.extendee f of
 makeDescriptorInfo' :: ReMap -> FIName Utf8
                     -> (ProtoName -> Seq FieldInfo)
                     -> Bool -- msgIsGroup
-                    -> (Bool,Bool) -- unknownField and lazyFields
+                    -> (Bool,Bool,Bool) -- unknownField, lazyFields and lenses
                     -> D.DescriptorProto -> DescriptorInfo
-makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFieldsOpt)
+makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFieldsOpt,lenses)
                     (D.DescriptorProto.DescriptorProto
                       { D.DescriptorProto.name = Just rawName
                       , D.DescriptorProto.field = rawFields
@@ -142,11 +142,11 @@ makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyField
                       , D.DescriptorProto.extension_range = extension_range })
     = let di = DescriptorInfo protoName (pnPath protoName) msgIsGroup
                               fieldInfos keyInfos extRangeList (getKnownKeys protoName)
-                              unknownField lazyFieldsOpt
+                              unknownField lazyFieldsOpt lenses
       in di -- trace (toString rawName ++ "\n" ++ show di ++ "\n\n") $ di
   where protoName = toHaskell reMap $ fqAppend parent [IName rawName]
-        fieldInfos = fmap (toFieldInfo' reMap (protobufName protoName)) rawFields
-        keyInfos = fmap (\f -> (keyExtendee' reMap f,toFieldInfo' reMap (protobufName protoName) f)) rawKeys
+        fieldInfos = fmap (toFieldInfo' reMap (protobufName protoName) lenses) rawFields
+        keyInfos = fmap (\f -> (keyExtendee' reMap f,toFieldInfo' reMap (protobufName protoName) lenses f)) rawKeys
         extRangeList = concatMap check unchecked
           where check x@(lo,hi) | hi < lo = []
                                 | hi<19000 || 19999<lo  = [x]
@@ -158,8 +158,13 @@ makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyField
                   (maybe minBound FieldId mStart, maybe maxBound (FieldId . pred) mEnd)
 makeDescriptorInfo' _ _ _ _ _ _ = imp $ "makeDescriptorInfo: missing name"
 
-toFieldInfo' :: ReMap -> FIName Utf8 -> D.FieldDescriptorProto -> FieldInfo
-toFieldInfo' reMap parent
+toFieldInfo'
+  :: ReMap
+  -> FIName Utf8
+  -> Bool -- ^ whether to use lences (if True, an underscore prefix is used)
+  -> D.FieldDescriptorProto
+  -> FieldInfo
+toFieldInfo' reMap parent lenses
              f@(D.FieldDescriptorProto.FieldDescriptorProto
                  { D.FieldDescriptorProto.name = Just name
                  , D.FieldDescriptorProto.number = Just number
@@ -171,7 +176,7 @@ toFieldInfo' reMap parent
     = fieldInfo
   where mayDef = parseDefaultValue f
         fieldInfo = let (ProtoName x a b c) = toHaskell reMap $ fqAppend parent [IName name]
-                        protoFName = ProtoFName x a b (mangle c)
+                        protoFName = ProtoFName x a b (mangle c) (if lenses then "_" else "")
                         fieldId = (FieldId (fromIntegral number))
                         fieldType = (FieldType (fromEnum type'))
 {- removed to update 1.5.5 to be compatible with protobuf-2.3.0
@@ -202,7 +207,7 @@ toFieldInfo' reMap parent
                                  (fmap (toHaskell reMap . FIName) mayTypeName)
                                  (fmap utf8 mayRawDef)
                                  mayDef
-toFieldInfo' _ _ f = imp $ "toFieldInfo: missing info in "++show f
+toFieldInfo' _ _ _ f = imp $ "toFieldInfo: missing info in "++show f
 
 collectedGroups :: D.DescriptorProto -> [Utf8] 
 collectedGroups = catMaybes
