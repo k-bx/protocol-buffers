@@ -95,9 +95,12 @@ prelude t = Qual (ModuleName "Prelude'") (Ident t)
 local :: String -> QName
 local t = UnQual (Ident t)
 
+localField :: DescriptorInfo -> String -> QName
+localField di t = UnQual (fieldIdent di t)
+
 -- pvar and preludevar and lvar are for lower-case identifiers
 isVar :: String -> Bool
-isVar (x:_) = isLower x
+isVar (x:_) = isLower x || x == '_'
 isVar _ = False
 
 isCon :: String -> Bool
@@ -223,15 +226,19 @@ joinMod ms = fmName $ foldr1 dotFM . map promoteFM $ ms
 baseIdent :: ProtoName -> Name
 baseIdent = Ident . mName . baseName
 baseIdent' :: ProtoFName -> Name
-baseIdent' = Ident . fName . baseName'
+baseIdent' pfn = Ident $ baseNamePrefix' pfn ++ fName (baseName' pfn)
+
+fieldIdent :: DescriptorInfo -> String -> Name
+fieldIdent di str | makeLenses di = Ident ('_':str)
+                  | otherwise = Ident str
 
 qualName :: ProtoName -> QName
 qualName p@(ProtoName _ _prefix [] _base) = UnQual (baseIdent p)
 qualName p@(ProtoName _ _prefix (parents) _base) = Qual (ModuleName (joinMod parents)) (baseIdent p)
 
 qualFName :: ProtoFName -> QName
-qualFName p@(ProtoFName _ _prefix [] _base) = UnQual (baseIdent' p)
-qualFName p@(ProtoFName _ _prefix parents _base) = Qual (ModuleName (joinMod parents)) (baseIdent' p)
+qualFName p@(ProtoFName _ _prefix [] _base _basePrefix) = UnQual (baseIdent' p)
+qualFName p@(ProtoFName _ _prefix parents _base _basePrefix) = Qual (ModuleName (joinMod parents)) (baseIdent' p)
 
 unqualName :: ProtoName -> QName
 unqualName p = UnQual (baseIdent p)
@@ -240,7 +247,7 @@ unqualFName :: ProtoFName -> QName
 unqualFName p = UnQual (baseIdent' p)
 
 mayQualName :: ProtoName -> ProtoFName -> QName
-mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix parents _base) =
+mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix parents _base _basePrefix) =
   if joinMod (c'prefix++c'parents++[c'base]) == joinMod (prefix++parents)
     then UnQual (baseIdent' name) -- name is local, make UnQual
     else qualFName name           -- name is imported, make Qual
@@ -249,7 +256,7 @@ mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix pa
 -- Define LANGUAGE options as [ModulePramga]
 --------------------------------------------
 modulePragmas :: [ModulePragma]
-modulePragmas = [ LanguagePragma src (map Ident ["BangPatterns","DeriveDataTypeable","FlexibleInstances","MultiParamTypeClasses"]) 
+modulePragmas = [ LanguagePragma src (map Ident ["BangPatterns","DeriveDataTypeable","FlexibleInstances","MultiParamTypeClasses","TemplateHaskell"])
                 , OptionsPragma src (Just GHC) " -fno-warn-unused-imports "
                 ]
 
@@ -261,7 +268,7 @@ enumModule ei
     = let protoName = enumName ei
       in Module src (ModuleName (fqMod protoName)) modulePragmas Nothing
            (Just [EThingAll (unqualName protoName)])
-           (standardImports True False) (enumDecls ei)
+           (standardImports True False False) (enumDecls ei)
 
 enumDecls :: EnumInfo -> [Decl]
 enumDecls ei =  map ($ ei) [ enumX
@@ -403,7 +410,7 @@ protoModule result pri fdpBS
                       extendees ++ mapMaybe typeName myKeys
     in Module src m modulePragmas Nothing (Just (exportKeys++exportNames)) imports
          (keysXTypeVal protoName (extensionKeys pri) ++ embed'ProtoInfo pri ++ embed'fdpBS fdpBS)
- where protoImports = standardImports False (not . Seq.null . extensionKeys $ pri) ++
+ where protoImports = standardImports False (not . Seq.null . extensionKeys $ pri) False ++
          [ ImportDecl src (ModuleName "Text.DescriptorProtos.FileDescriptorProto") False False False Nothing Nothing
                         (Just (False,[IAbs (Ident "FileDescriptorProto")]))
          , ImportDecl src (ModuleName "Text.ProtocolBuffers.Reflections") False False False Nothing Nothing
@@ -495,14 +502,25 @@ descriptorNormalModule result di
         myKeys' = if sepKey then [] else myKeys
         m = ModuleName (fqMod protoName)
         exportKeys = map (EVar NoNamespace . unqualFName . fieldName) myKeys
-        imports = (standardImports False (hasExt di) ++) . mergeImports . concat $
+        imports = (standardImports False (hasExt di) (makeLenses di) ++) . mergeImports . concat $
                     [ mapMaybe (importPN result m Normal) $
                         extendees' ++ mapMaybe typeName (myKeys' ++ (F.toList (fields di)))
                     , mapMaybe (importPFN result m) (map fieldName (myKeys ++ F.toList (knownKeys di))) ]
+        mkLenses = Var (Qual (ModuleName "Control.Lens.TH") (Ident "makeLenses"))
+        lenses | makeLenses di = [SpliceDecl src (mkLenses $$ TypQuote (unqualName protoName))]
+               | otherwise = []
         declKeys | sepKey = []
                  | otherwise = keysXTypeVal (descName di) (keys di)
-    in Module src m modulePragmas Nothing (Just (EThingAll un : exportKeys)) imports
-         (descriptorX di : declKeys ++ instancesDescriptor di)
+    in Module src m modulePragmas Nothing (Just (EThingAll un : exportLenses di ++ exportKeys)) imports
+         (descriptorX di : lenses ++ declKeys ++ instancesDescriptor di)
+
+exportLenses :: DescriptorInfo -> [ExportSpec]
+exportLenses di =
+  if makeLenses di
+    then map (EVar NoNamespace . unqualFName . stripPrefix . fieldName)
+             (F.toList (fields di))
+    else []
+  where stripPrefix pfn = pfn { baseNamePrefix' = "" }
 
 minimalImports :: [ImportDecl]
 minimalImports =
@@ -511,17 +529,19 @@ minimalImports =
   , ImportDecl src (ModuleName "Data.Data") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False False Nothing (Just (ModuleName "P'")) Nothing ]
 
-standardImports :: Bool -> Bool -> [ImportDecl]
-standardImports isEnumMod ext =
+standardImports :: Bool -> Bool -> Bool -> [ImportDecl]
+standardImports isEnumMod ext lenses =
   [ ImportDecl src (ModuleName "Prelude") False False False Nothing Nothing (Just (False,ops))
   , ImportDecl src (ModuleName "Prelude") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Data.Typeable") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Data.Data") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
-  , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False False Nothing (Just (ModuleName "P'")) Nothing ]
+  , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False False Nothing (Just (ModuleName "P'")) Nothing ] ++ lensTH
  where ops | ext = map (IVar NoNamespace . Symbol) $ base ++ ["==","<=","&&"]
            | otherwise = map (IVar NoNamespace . Symbol) base
        base | isEnumMod = ["+","/","."]
             | otherwise = ["+","/"]
+       lensTH | lenses = [ImportDecl src (ModuleName "Control.Lens.TH") True False False Nothing Nothing Nothing]
+              | otherwise = []
 
 keysXType :: ProtoName -> Seq KeyInfo -> [Decl]
 keysXType self ks = map (makeKeyType self) . F.toList $ ks
@@ -583,9 +603,9 @@ descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] de
                           $ (if storeUnknown di then [unknownField] else [])
         bangType = if lazyFields di then TyParen {- UnBangedTy -} else TyBang BangedTy . TyParen
         -- extfield :: ([Name],BangType)
-        extfield = ([Ident "ext'field"], bangType (TyCon (private "ExtField")))
+        extfield = ([fieldIdent di "ext'field"], bangType (TyCon (private "ExtField")))
         -- unknownField :: ([Name],BangType)
-        unknownField = ([Ident "unknown'field"], bangType (TyCon (private  "UnknownField")))
+        unknownField = ([fieldIdent di "unknown'field"], bangType (TyCon (private  "UnknownField")))
         -- fieldX :: FieldInfo -> ([Name],BangType)
         fieldX fi = ([baseIdent' . fieldName $ fi], bangType (labeled (TyCon typed)))
           where labeled | canRepeat fi = typeApp "Seq"
@@ -616,19 +636,19 @@ instancesDescriptor di = map ($ di) $
 instanceExtendMessage :: DescriptorInfo -> Decl
 instanceExtendMessage di
     = InstDecl src Nothing [] [] (private "ExtendMessage") [TyCon (unqualName (descName di))]
-        [ inst "getExtField" [] (lvar "ext'field")
+        [ inst "getExtField" [] (Var (localField di "ext'field"))
         , inst "putExtField" [patvar "e'f", patvar "msg"] putextfield
         , inst "validExtRanges" [patvar "msg"] (pvar "extRanges" $$ (Paren $ pvar "reflectDescriptorInfo" $$ lvar "msg"))
         ]
-  where putextfield = RecUpdate (lvar "msg") [ FieldUpdate (local "ext'field") (lvar "e'f") ]
+  where putextfield = RecUpdate (lvar "msg") [ FieldUpdate (localField di "ext'field") (lvar "e'f") ]
 
 instanceUnknownMessage :: DescriptorInfo -> Decl
 instanceUnknownMessage di
     = InstDecl src Nothing [] [] (private "UnknownMessage") [TyCon (unqualName (descName di))]
-        [ inst "getUnknownField" [] (lvar "unknown'field")
+        [ inst "getUnknownField" [] (Var (localField di "unknown'field"))
         , inst "putUnknownField" [patvar "u'f",patvar "msg"] putunknownfield
         ]
-  where putunknownfield = RecUpdate (lvar "msg") [ FieldUpdate (local "unknown'field") (lvar "u'f") ]
+  where putunknownfield = RecUpdate (lvar "msg") [ FieldUpdate (localField di "unknown'field") (lvar "u'f") ]
 
 instanceTextType :: DescriptorInfo -> Decl
 instanceTextType di 

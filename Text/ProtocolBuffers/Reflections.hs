@@ -55,6 +55,7 @@ data ProtoFName = ProtoFName { protobufName' :: FIName Utf8     -- ^ fully quali
                              , haskellPrefix' :: [MName String] -- ^ Haskell specific prefix to module hierarchy (e.g. Text.Foo)
                              , parentModule' :: [MName String]  -- ^ .proto specified namespace (like Com.Google.Bar)
                              , baseName' :: FName String
+                             , baseNamePrefix' :: String -- "_" if lenses are generated
                              }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
@@ -77,6 +78,7 @@ data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , knownKeys :: Seq FieldInfo
                                      , storeUnknown :: Bool
                                      , lazyFields :: Bool
+                                     , makeLenses :: Bool
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 

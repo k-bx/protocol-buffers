@@ -47,11 +47,11 @@ data Options = Options { optPrefix :: [MName String]
                        , optInclude :: [LocalFP]
                        , optProto :: LocalFP
                        , optDesc :: Maybe (LocalFP)
-                       , optImports,optVerbose,optUnknownFields,optLazy,optDryRun :: Bool }
+                       , optImports,optVerbose,optUnknownFields,optLazy,optLenses,optDryRun :: Bool }
   deriving Show
 
 setPrefix,setTarget,setInclude,setProto,setDesc :: String -> Options -> Options
-setImports,setVerbose,setUnknown,setLazy,setDryRun :: Options -> Options
+setImports,setVerbose,setUnknown,setLazy,setLenses,setDryRun :: Options -> Options
 setPrefix   s o = o { optPrefix = toPrefix s }
 setTarget   s o = o { optTarget = (LocalFP s) }
 setInclude  s o = o { optInclude = LocalFP s : optInclude o }
@@ -61,6 +61,7 @@ setImports    o = o { optImports = True }
 setVerbose    o = o { optVerbose = True }
 setUnknown    o = o { optUnknownFields = True }
 setLazy       o = o { optLazy = True }
+setLenses     o = o { optLenses = True }
 setDryRun     o = o { optDryRun = True }
 
 toPrefix :: String -> [MName String]
@@ -107,6 +108,8 @@ optionList =
                "generated messages and groups all support unknown fields"
   , Option ['l'] ["lazy_fields"] (NoArg (Mutate setLazy))
                "new default is now messages with strict fields, this reverts to generating lazy fields"
+  , Option [] ["lenses"] (NoArg (Mutate setLenses))
+               "generate lenses for accessing fields"
   , Option ['v'] ["verbose"] (NoArg (Mutate  setVerbose))
                "increase amount of printed information"
   , Option [] ["version"]  (NoArg (Switch VersionInfo))
@@ -148,6 +151,7 @@ defaultOptions = do
                    , optVerbose = False
                    , optUnknownFields = False
                    , optLazy = False
+                   , optLenses = False
                    , optDryRun = False }
 
 main :: IO ()
@@ -249,7 +253,7 @@ run' o@(Output print' writeFile') options env fdps = do
   -- This is the part that uses the (optional) package name
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
   print' "Haskell name mangling done"
-  let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options) nameMap fdp
+  let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options,optLenses options) nameMap fdp
       result = makeResult protoInfo
   seq result (print' "Recursive modules resolved")
   let produceMSG di = do
