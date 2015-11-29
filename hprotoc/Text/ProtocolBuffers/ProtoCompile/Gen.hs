@@ -256,7 +256,7 @@ mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix pa
 -- Define LANGUAGE options as [ModulePramga]
 --------------------------------------------
 modulePragmas :: [ModulePragma]
-modulePragmas = [ LanguagePragma src (map Ident ["BangPatterns","DeriveDataTypeable","FlexibleInstances","MultiParamTypeClasses","TemplateHaskell"])
+modulePragmas = [ LanguagePragma src (map Ident ["BangPatterns","DeriveDataTypeable","FlexibleInstances","MultiParamTypeClasses"])
                 , OptionsPragma src (Just GHC) " -fno-warn-unused-imports "
                 ]
 
