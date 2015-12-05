@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable,GeneralizedNewtypeDeriving #-}
 -- | "Text.ProtocolBuffers.Basic" defines or re-exports most of the
 -- basic field types; 'Maybe','Bool', 'Double', and 'Float' come from
--- the Prelude instead. This module also defined the 'Mergeable' and
+-- the Prelude instead. This module also defines the 'Mergeable' and
 -- 'Default' classes. The 'Wire' class is not defined here to avoid orphans.
 module Text.ProtocolBuffers.Basic
   ( -- * Basic types for protocol buffer fields in Haskell
@@ -30,7 +30,7 @@ import Data.ByteString.Lazy.UTF8 as U (toString,fromString)
 -- Num instances are derived below for the purpose of getting fromInteger for case matching
 
 -- | 'Utf8' is used to mark 'ByteString' values that (should) contain
--- valud utf8 encoded strings.  This type is used to represent
+-- valid utf8 encoded strings.  This type is used to represent
 -- 'TYPE_STRING' values.
 newtype Utf8 = Utf8 ByteString deriving (Data,Typeable,Eq,Ord)
 
@@ -134,13 +134,13 @@ instance Bounded FieldType where
 -- | 'EnumCode' is the Int32 assoicated with a
 -- EnumValueDescriptorProto and is in the range 0 to 2^31-1.
 newtype EnumCode = EnumCode { getEnumCode :: Int32 }  -- really [0..maxBound::Int32] of some .proto defined enumeration
-  deriving (Eq,Ord,Read,Show,Num,Data,Typeable) 
+  deriving (Eq,Ord,Read,Show,Num,Data,Typeable)
 
 instance Bounded EnumCode where
   minBound = 0
-  maxBound = 2147483647 -- 2^-31 -1 
+  maxBound = 2147483647 -- 2^-31 -1
 
--- | 'WireSize' is the Int64 size type associate with the lazy
+-- | 'WireSize' is the Int64 size type associated with the lazy
 -- bytestrings used in the 'Put' and 'Get' monads.
 type WireSize = Int64
 
@@ -150,7 +150,7 @@ type WireSize = Int64
 -- 'mergeConcat' defaults to @foldl@ associativity.
 --
 -- NOTE: 'mergeEmpty' has been removed in protocol buffers version 2.
--- Use defaultValue instead.  New strict fields would mean that required
+-- Use 'defaultValue' instead.  New strict fields would mean that required
 -- fields in messages will be automatic errors with 'mergeEmpty'.
 class Default a => Mergeable a where
 {-
