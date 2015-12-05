@@ -255,10 +255,13 @@ mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix pa
 --------------------------------------------
 -- Define LANGUAGE options as [ModulePramga]
 --------------------------------------------
-modulePragmas :: [ModulePragma]
-modulePragmas = [ LanguagePragma src (map Ident ["BangPatterns","DeriveDataTypeable","FlexibleInstances","MultiParamTypeClasses"])
-                , OptionsPragma src (Just GHC) " -fno-warn-unused-imports "
-                ]
+modulePragmas :: Bool -> [ModulePragma]
+modulePragmas templateHaskell =
+  [ LanguagePragma src (map Ident $ thPragma ++ ["BangPatterns","DeriveDataTypeable","FlexibleInstances","MultiParamTypeClasses"])
+  , OptionsPragma src (Just GHC) " -fno-warn-unused-imports "
+  ]
+  where thPragma | templateHaskell = ["TemplateHaskell"]
+                 | otherwise       = []
 
 --------------------------------------------
 -- EnumDescriptorProto module creation
@@ -266,7 +269,7 @@ modulePragmas = [ LanguagePragma src (map Ident ["BangPatterns","DeriveDataTypea
 enumModule :: EnumInfo -> Module
 enumModule ei
     = let protoName = enumName ei
-      in Module src (ModuleName (fqMod protoName)) modulePragmas Nothing
+      in Module src (ModuleName (fqMod protoName)) (modulePragmas False) Nothing
            (Just [EThingAll (unqualName protoName)])
            (standardImports True False False) (enumDecls ei)
 
@@ -408,7 +411,7 @@ protoModule result pri fdpBS
         imports = (protoImports ++) . mergeImports $
                     mapMaybe (importPN result m Normal) $
                       extendees ++ mapMaybe typeName myKeys
-    in Module src m modulePragmas Nothing (Just (exportKeys++exportNames)) imports
+    in Module src m (modulePragmas False) Nothing (Just (exportKeys++exportNames)) imports
          (keysXTypeVal protoName (extensionKeys pri) ++ embed'ProtoInfo pri ++ embed'fdpBS fdpBS)
  where protoImports = standardImports False (not . Seq.null . extensionKeys $ pri) False ++
          [ ImportDecl src (ModuleName "Text.DescriptorProtos.FileDescriptorProto") False False False Nothing Nothing
@@ -462,7 +465,7 @@ descriptorBootModule di
                        [TyVar (Ident "msg'"), TyFun (TyVar (Ident "msg'")) (TyCon un),  (TyCon un)] []
         dataDecl = DataDecl src DataType [] (baseIdent protoName) [] [] []
         mkInst s = InstDecl src Nothing [] [] s [TyCon un] []
-    in Module src (ModuleName (fqMod protoName)) modulePragmas Nothing (Just [EAbs un]) minimalImports
+    in Module src (ModuleName (fqMod protoName)) (modulePragmas $ makeLenses di) Nothing (Just [EAbs un]) minimalImports
          (dataDecl : instMesAPI : map mkInst classes)
 
 -- This builds on the output of descriptorBootModule and declares a hs-boot that
@@ -488,7 +491,7 @@ descriptorKeyfileModule result di
         importTypes = mergeImports . mapMaybe (importPN result mBase KeyFile) . nubSort $
                         extendees ++ mapMaybe typeName myKeys
         declKeys = keysXTypeVal protoName'Key (keys di)
-    in Module src m modulePragmas Nothing (Just exportKeys) (minimalImports++importTypes) declKeys
+    in Module src m (modulePragmas $ makeLenses di) Nothing (Just exportKeys) (minimalImports++importTypes) declKeys
 
 -- This builds the normal module
 descriptorNormalModule :: Result -> DescriptorInfo -> Module
@@ -511,7 +514,7 @@ descriptorNormalModule result di
                | otherwise = []
         declKeys | sepKey = []
                  | otherwise = keysXTypeVal (descName di) (keys di)
-    in Module src m modulePragmas Nothing (Just (EThingAll un : exportLenses di ++ exportKeys)) imports
+    in Module src m (modulePragmas $ makeLenses di) Nothing (Just (EThingAll un : exportLenses di ++ exportKeys)) imports
          (descriptorX di : lenses ++ declKeys ++ instancesDescriptor di)
 
 exportLenses :: DescriptorInfo -> [ExportSpec]
