@@ -12,7 +12,7 @@
 -- 'getVal' and 'isSet'.  These allow uniform access to normal and
 -- extension fields for users.
 --
--- Access to extension fields is strictly though keys.  There is not
+-- Access to extension fields is strictly through keys.  There is not
 -- currently any way to query or change or clear any other extension
 -- field data.
 --
@@ -57,7 +57,7 @@ err msg = error $ "Text.ProtocolBuffers.Extensions error\n"++msg
 -- The 'Key' type (opaque to the user) has a phantom type of Maybe
 -- or Seq that corresponds to Optional or Repeated fields. And a
 -- second phantom type that matches the message type it must be used
--- with.  The third type parameter corresonds to the Haskell value
+-- with.  The third type parameter corresponds to the Haskell value
 -- type.
 --
 -- The 'Key' is a GADT that puts all the needed class instances into
@@ -121,17 +121,17 @@ data GPDynSeq where
 
 -- | The 'PackedSeq' is needed to distinguish the packed repeated format from the repeated format.
 -- This is only used in the phantom type of Key.
-newtype PackedSeq a = PackedSeq { unPackedSeq ::  (Seq a) }
+newtype PackedSeq a = PackedSeq { unPackedSeq :: Seq a }
   deriving (Typeable)
 
--- | The WireType is used to ensure the Seq is homogenous.
+-- | The WireType is used to ensure the Seq is homogeneous.
 -- The ByteString is the unparsed input after the tag.
 data ExtFieldValue = ExtFromWire !(Seq EP) -- XXX must store wiretype with ByteString
                    | ExtOptional !FieldType !GPDyn
                    | ExtRepeated !FieldType !GPDynSeq
                    | ExtPacked   !FieldType !GPDynSeq
   deriving (Typeable,Ord,Show)
-           
+
 -- | For making a Data instance for ExtField
 data ExtDataPair = ExtDataPair FieldId (Seq EP)
   deriving (Typeable,Data,Show)
@@ -178,12 +178,11 @@ con_ExtField = mkConstr ty_ExtField "ExtField" [] Prefix
 
 instance Data ExtField where
   gfoldl f z m = z dataFromList `f` dataToList m
-  gunfold k z c = case constrIndex c of
-                    _ -> k (z dataFromList)
+  gunfold k z c = k (z dataFromList)
   toConstr (ExtField _) = con_ExtField
   dataTypeOf _ = ty_ExtField
 
-  
+
 instance ExtendMessage DummyMessageType where
   getExtField = undefined
   putExtField = undefined
@@ -210,7 +209,7 @@ instance Eq ExtFieldValue where
     in case parseWireExtMaybe key wt s' of
          Right (_,y) -> x==y
          _ -> False
-  (==) y@(ExtFromWire {}) x@(ExtOptional {})  = x == y
+  (==) y@ExtFromWire {} x@ExtOptional {}  = x == y
   (==) x@(ExtRepeated ft (GPDynSeq w)) (ExtFromWire s') =
     let wt = toWireType ft
         makeKeyType :: Seq a -> Key Seq DummyMessageType a
@@ -219,7 +218,7 @@ instance Eq ExtFieldValue where
     in case parseWireExtSeq key wt s' of
          Right (_,y) -> x==y
          _ -> False
-  (==) y@(ExtFromWire {}) x@(ExtRepeated {})  = x == y
+  (==) y@ExtFromWire {} x@ExtRepeated {}  = x == y
   (==) x@(ExtPacked ft (GPDynSeq w)) (ExtFromWire s') =
     let wt = 2 -- all packed types have wire type 2, length delimited
         makeKeyType :: Seq a -> Key PackedSeq DummyMessageType a
@@ -228,7 +227,7 @@ instance Eq ExtFieldValue where
     in case parseWireExtPackedSeq key wt s' of
          Right (_,y) -> x==y
          _ -> False
-  (==) y@(ExtFromWire {}) x@(ExtPacked {})  = x == y
+  (==) y@ExtFromWire {} x@ExtPacked {}  = x == y
   (==) _ _ = False
 
 -- | 'ExtendMessage' abstracts the operations of storing and
@@ -246,7 +245,7 @@ wireGetKeyToUnPacked :: (ExtendMessage msg,GPB v) => Key Seq msg v -> msg -> Get
 wireGetKeyToUnPacked k@(Key i t mv) msg = do
   let myCast :: Maybe a -> Get (Seq a)
       myCast = undefined
-  vv <- wireGetPacked t `asTypeOf` (myCast mv)
+  vv <- wireGetPacked t `asTypeOf` myCast mv
   let (ExtField ef) = getExtField msg
   v' <- case M.lookup i ef of
           Nothing -> return $ ExtRepeated t (GPDynSeq vv)
@@ -277,7 +276,7 @@ wireGetKeyToPacked k@(Key i t mv) msg = do
   let wt = toWireType t
       myCast :: Maybe a -> Get a
       myCast = undefined
-  v <- wireGet t `asTypeOf` (myCast mv)
+  v <- wireGet t `asTypeOf` myCast mv
   let (ExtField ef) = getExtField msg
   v' <- case M.lookup i ef of
           Nothing -> return $ ExtPacked t (GPDynSeq (Seq.singleton v))
@@ -450,13 +449,13 @@ instance ExtKey Maybe where
            case cast d of
              Nothing -> Left $ "getExt Maybe: Key's value cast failed: "++show (k,typeOf d)
              Just d' -> Right (Just d')
-         getExt' (ExtFromWire {}) = err $ "Impossible? getExt.getExt' Maybe should not have ExtFromWire case (after parseWireExt)!"
+         getExt' ExtFromWire {} = err "Impossible? getExt.getExt' Maybe should not have ExtFromWire case (after parseWireExt)!"
 
   wireGetKey k@(Key i t mv) msg = do
     let wt = toWireType t
         myCast :: Maybe a -> Get a
         myCast = undefined
-    v <- wireGet t `asTypeOf` (myCast mv)
+    v <- wireGet t `asTypeOf` myCast mv
     let (ExtField ef) = getExtField msg
     v' <- case M.lookup i ef of
             Nothing -> return $ ExtOptional t (GPDyn v)
