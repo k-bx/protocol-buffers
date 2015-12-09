@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 {-| Analysis and design of this module
 
 If there are SCCs then additional files are inevitable.
@@ -109,12 +111,14 @@ import Data.List
 import qualified Data.Map as Map
 import Data.Map(Map)
 import Data.Maybe(mapMaybe)
-import Data.Monoid
 import qualified Data.Set as Set
 import Data.Set(Set)
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections
+#if __GLASGOW_HASKELL__ < 710
+import Data.Monoid
+#endif
 
 import Debug.Trace(trace)
 

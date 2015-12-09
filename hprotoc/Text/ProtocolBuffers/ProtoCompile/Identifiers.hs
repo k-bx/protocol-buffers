@@ -1,4 +1,5 @@
-{-# LANGUAGE MultiParamTypeClasses,FlexibleInstances,TypeSynonymInstances,FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses,FlexibleInstances,TypeSynonymInstances,FlexibleContexts,CPP #-}
+
 -- | This modules collects utility routines related to the different
 -- incarnations of identifiers in the code.  The basic identifier is
 -- always ASCII, but because of the self gereneted DescriptorProto
@@ -21,10 +22,12 @@ import qualified Data.ByteString.Lazy.Char8 as LC
 import qualified Data.ByteString.Lazy.UTF8 as U
 import Data.Char
 import Data.List hiding (uncons)
-import Data.Monoid
 import Data.Set(Set)
 import qualified Data.Set as S
 import Text.ProtocolBuffers.Basic
+#if __GLASGOW_HASKELL__ < 710
+import Data.Monoid
+#endif
 
 -- | Contains one identifier name
 newtype IName a = IName {iName::a} deriving (Show,Read,Eq,Ord)
