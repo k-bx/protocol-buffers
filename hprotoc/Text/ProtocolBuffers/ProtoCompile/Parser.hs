@@ -38,6 +38,8 @@ import qualified Text.DescriptorProtos.MethodDescriptorProto          as D(Metho
 import qualified Text.DescriptorProtos.MethodDescriptorProto          as D.MethodDescriptorProto(MethodDescriptorProto(..))
 -- import qualified Text.DescriptorProtos.MethodOptions                  as D(MethodOptions)
 import qualified Text.DescriptorProtos.MethodOptions                  as D.MethodOptions(MethodOptions(..))
+import qualified Text.DescriptorProtos.OneofDescriptorProto           as D(OneofDescriptorProto)
+import qualified Text.DescriptorProtos.OneofDescriptorProto           as D.OneofDescriptorProto(OneofDescriptorProto(..))
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D(ServiceDescriptorProto)
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D.ServiceDescriptorProto(ServiceDescriptorProto(..))
 -- import qualified Text.DescriptorProtos.ServiceOptions                 as D(ServiceOptions)
@@ -333,6 +335,22 @@ fileOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
       "javanano_use_deprecated_package" -> boolLit >>= \p -> return' (old {D.FileOptions.javanano_use_deprecated_package =Just p})
       _ -> unexpected $ "FileOptions has no option named " ++ optName
 
+oneof :: (D.OneofDescriptorProto -> P s ()) -> P s ()
+oneof up = pName (U.fromString "oneof") >> do
+  self <- ident1
+  up =<< subParser (pChar '{' >> subOneof) (defaultValue {D.OneofDescriptorProto.name=Just self})
+
+subOneof :: P D.OneofDescriptorProto ()
+subOneof = (pChar '}') <|> (choice [ eol
+                                   , field upNestedMsg Nothing >>= upMsgField
+                                   ] >> subOneof
+                           )
+  where upNestedMsg msg = update' (\s -> s {D.DescriptorProto.nested_type=D.DescriptorProto.nested_type s |> msg})
+        upMsgField f    = update' (\s -> s {D.DescriptorProto.field=D.DescriptorProto.field s |> f})
+
+
+
+
 message :: (D.DescriptorProto -> P s ()) -> P s ()
 message up = pName (U.fromString "message") >> do
   self <- ident1
@@ -344,12 +362,15 @@ subMessage = (pChar '}') <|> (choice [ eol
                                      , field upNestedMsg Nothing >>= upMsgField
                                      , message upNestedMsg
                                      , enum upNestedEnum
+                                     , oneof upMsgOneof
                                      , extensions
                                      , extend upNestedMsg upExtField
-                                     , messageOption] >> subMessage)
+                                     , messageOption] >> subMessage
+                                     )
   where upNestedMsg msg = update' (\s -> s {D.DescriptorProto.nested_type=D.DescriptorProto.nested_type s |> msg})
         upNestedEnum e  = update' (\s -> s {D.DescriptorProto.enum_type=D.DescriptorProto.enum_type s |> e})
         upMsgField f    = update' (\s -> s {D.DescriptorProto.field=D.DescriptorProto.field s |> f})
+        upMsgOneof o    = update' (\s -> s {D.DescriptorProto.oneof_decl=D.DescriptorProto.oneof_decl s |> o})
         upExtField f    = update' (\s -> s {D.DescriptorProto.extension=D.DescriptorProto.extension s |> f})
 
 messageOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
@@ -374,7 +395,7 @@ field :: (D.DescriptorProto -> P s ()) -> Maybe Utf8 -> P s D.FieldDescriptorPro
 field upGroup maybeExtendee = do
   let allowedLabels = case maybeExtendee of
                         Nothing -> ["optional","repeated","required"]
-                        Just {} -> ["optional","repeated"] -- cannot declare a required extension
+                        Just {} -> ["optional","repeated"] -- cannot declare a required extension and an oneof extension. 
   sLabel <- choice . map (pName . U.fromString) $ allowedLabels
   theLabel <- maybe (fail ("not a valid Label :"++show sLabel)) return (parseLabel (uToString sLabel))
   sType <- ident
