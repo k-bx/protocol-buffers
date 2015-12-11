@@ -250,7 +250,9 @@ parser = proto >> getState
                                 , message upTopMsg
                                 , enum upTopEnum
                                 , extend upTopMsg upTopExt
-                                , service] >> proto)
+                                , service
+                                , syntax
+                                ] >> proto)
         upTopMsg msg = update' (\s -> s {D.FileDescriptorProto.message_type=D.FileDescriptorProto.message_type s |> msg})
         upTopEnum e  = update' (\s -> s {D.FileDescriptorProto.enum_type=D.FileDescriptorProto.enum_type s |> e})
         upTopExt f   = update' (\s -> s {D.FileDescriptorProto.extension=D.FileDescriptorProto.extension s |> f})
@@ -318,10 +320,17 @@ fileOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
       "java_outer_classname"  -> strLit  >>= \p -> return' (old {D.FileOptions.java_outer_classname=Just p})
       "java_multiple_files"   -> boolLit >>= \p -> return' (old {D.FileOptions.java_multiple_files =Just p})
       "java_generate_equals_and_hash" -> boolLit >>= \p -> return' (old {D.FileOptions.java_generate_equals_and_hash =Just p})
+      "java_string_check_utf8"-> boolLit >>= \p -> return' (old {D.FileOptions.java_string_check_utf8 = Just p})
       "optimize_for"          -> enumLit >>= \p -> return' (old {D.FileOptions.optimize_for        =Just p})
+      "go_package"            -> strLit  >>= \p -> return' (old {D.FileOptions.go_package          =Just p})
       "cc_generic_services"   -> boolLit >>= \p -> return' (old {D.FileOptions.cc_generic_services =Just p})
       "java_generic_services" -> boolLit >>= \p -> return' (old {D.FileOptions.java_generic_services =Just p})
       "py_generic_services"   -> boolLit >>= \p -> return' (old {D.FileOptions.py_generic_services =Just p})
+      "deprecated"            -> boolLit >>= \p -> return' (old {D.FileOptions.deprecated          =Just p})
+      "cc_enable_arenas"      -> boolLit >>= \p -> return' (old {D.FileOptions.cc_enable_arenas      =Just p})
+      "objc_class_prefix"     -> strLit  >>= \p -> return' (old {D.FileOptions.objc_class_prefix   =Just p})
+      "csharp_namespace"      -> strLit  >>= \p -> return' (old {D.FileOptions.csharp_namespace    =Just p})
+      "javanano_use_deprecated_package" -> boolLit >>= \p -> return' (old {D.FileOptions.javanano_use_deprecated_package =Just p})
       _ -> unexpected $ "FileOptions has no option named " ++ optName
 
 message :: (D.DescriptorProto -> P s ()) -> P s ()
@@ -464,9 +473,9 @@ fieldOption label mt = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where
       "ctype" | (Just TYPE_STRING) == mt -> do
         enumLit >>= \p -> return' (old {D.FieldOptions.ctype=Just p})
               | otherwise -> unexpected $ "field option cyte is only defined for string fields"
-      "experimental_map_key" | Nothing == mt -> do
-        strLit >>= \p -> return' (old {D.FieldOptions.experimental_map_key=Just p})
-                             | otherwise -> unexpected $ "field option experimental_map_key is only defined for messages"
+      -- "experimental_map_key" | Nothing == mt -> do
+       -- strLit >>= \p -> return' (old {D.FieldOptions.experimental_map_key=Just p})
+       --                      | otherwise -> unexpected $ "field option experimental_map_key is only defined for messages"
       "packed" | isValidPacked label mt -> do
         boolLit >>= \p -> return' (old {D.FieldOptions.packed=Just p})
                | otherwise -> unexpected $ "field option packed is not defined for this kind of field"
@@ -539,6 +548,11 @@ service = pName (U.fromString "service") >> do
   update' (\s -> s {D.FileDescriptorProto.service=D.FileDescriptorProto.service s |> f})
 
  where subService = pChar '}' <|> (choice [ eol, rpc, serviceOption ] >> subService)
+
+syntax = pName (U.fromString "syntax") >> do
+  pChar '=' 
+  p <- strLit
+  update' (\s -> s {D.FileDescriptorProto.syntax=Just p})
 
 serviceOption,rpc :: P D.ServiceDescriptorProto ()
 serviceOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
