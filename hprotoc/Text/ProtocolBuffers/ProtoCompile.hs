@@ -216,6 +216,7 @@ data Output m = Output {
 runStandalone :: Options -> IO ()
 runStandalone options = do
   (env,fdps) <- loadProto (optInclude options) (optProto options)
+  print fdps
   putStrLn "All proto files loaded"
   run' standaloneMode options env fdps where
     standaloneMode :: Output IO
