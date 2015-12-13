@@ -64,8 +64,8 @@ import Data.Char(isUpper,toLower)
 import Data.Ix(inRange)
 import Data.Maybe(fromMaybe)
 import Data.Monoid(mconcat)
-import Data.Sequence((|>))
-import qualified Data.Sequence as Seq(fromList)
+import Data.Sequence((|>),(><))
+import qualified Data.Sequence as Seq(fromList,length,empty)
 import Data.Word(Word8)
 import Numeric(showOct)
 --import System.FilePath(takeFileName)
@@ -335,27 +335,34 @@ fileOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
       "javanano_use_deprecated_package" -> boolLit >>= \p -> return' (old {D.FileOptions.javanano_use_deprecated_package =Just p})
       _ -> unexpected $ "FileOptions has no option named " ++ optName
 
-oneof :: (D.OneofDescriptorProto -> P s ()) -> P s ()
+oneof :: (D.OneofDescriptorProto -> Seq D.FieldDescriptorProto -> P s ()) -> P s ()
 oneof up = pName (U.fromString "oneof") >> do
   self <- ident1
-  up =<< subParser (pChar '{' >> subOneof) (defaultValue {D.OneofDescriptorProto.name=Just self})
+  (o,fs) <- subParser (pChar '{' >> subOneof) (defaultValue {D.OneofDescriptorProto.name=Just self}, Seq.empty)
+  up o fs
 
-subOneof :: P D.OneofDescriptorProto ()
-subOneof = skipMany nonCurly >> (pChar '}')
-  where nonCurly = tok (\l -> case l of
-                                L _ x -> if x == '}' then Nothing else return ()
-                                _ -> return ()
-                       ) <?> "character }"
-
-                       -- <|> (choice [ eol
-                       --            , field upNestedMsg Nothing >>= upMsgField
-                       --            ] >> subOneof
-                       --    )
---  where upNestedMsg msg = update' (\s -> s {D.DescriptorProto.nested_type=D.DescriptorProto.nested_type s |> msg})
- --       upMsgField f    = update' (\s -> s {D.DescriptorProto.field=D.DescriptorProto.field s |> f})
+subOneof :: P (D.OneofDescriptorProto,Seq D.FieldDescriptorProto) ()
+subOneof = pChar '}' <|> (choice [ eof
+                                 , fieldOneof >>= upMsgField] >> subOneof)
+  where upMsgField f = update' (\(o,fs) -> (o,fs |> f))                    
 
 
-
+fieldOneof :: P s D.FieldDescriptorProto
+fieldOneof = do
+  sType <- ident
+  -- parseType may return Nothing, this is fixed up in Text.ProtocolBuffers.ProtoCompile.Resolve.fqField
+  let (maybeTypeCode,maybeTypeName) = case parseType (uToString sType) of
+                                        Just t -> (Just t,Nothing)
+                                        Nothing -> (Nothing, Just sType)
+  name <- ident1
+  number <- pChar '=' >> fieldInt
+  let v1 = defaultValue { D.FieldDescriptorProto.name = Just name
+                        , D.FieldDescriptorProto.number = Just number
+                        , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
+                        , D.FieldDescriptorProto.type' = maybeTypeCode
+                        , D.FieldDescriptorProto.type_name = maybeTypeName
+                        }
+  eol >> return v1
 
 message :: (D.DescriptorProto -> P s ()) -> P s ()
 message up = pName (U.fromString "message") >> do
@@ -376,7 +383,13 @@ subMessage = (pChar '}') <|> (choice [ eol
   where upNestedMsg msg = update' (\s -> s {D.DescriptorProto.nested_type=D.DescriptorProto.nested_type s |> msg})
         upNestedEnum e  = update' (\s -> s {D.DescriptorProto.enum_type=D.DescriptorProto.enum_type s |> e})
         upMsgField f    = update' (\s -> s {D.DescriptorProto.field=D.DescriptorProto.field s |> f})
-        upMsgOneof o    = update' (\s -> s {D.DescriptorProto.oneof_decl=D.DescriptorProto.oneof_decl s |> o})
+        upMsgOneof o xs  = update' $ \s ->
+          let n = Seq.length (D.DescriptorProto.oneof_decl s)
+              xs' = fmap (\s -> s { D.FieldDescriptorProto.oneof_index = Just (fromIntegral n) }) xs
+          in s {D.DescriptorProto.oneof_decl=D.DescriptorProto.oneof_decl s |> o
+               ,D.DescriptorProto.field=D.DescriptorProto.field s >< xs'
+               }
+           
         upExtField f    = update' (\s -> s {D.DescriptorProto.extension=D.DescriptorProto.extension s |> f})
 
 messageOption = pOptionWith getOld >>= setOption >>= setNew >> eol where

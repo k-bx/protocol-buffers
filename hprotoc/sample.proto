@@ -1,0 +1,12 @@
+message SampleMessage {
+  oneof test_oneof { 
+    string name = 1;
+    int32 age = 2;
+  }
+  optional string key = 3;
+  optional int32 value = 4;
+
+  oneof newtest {
+    string bar = 5;
+  }
+}
