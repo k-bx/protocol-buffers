@@ -81,20 +81,21 @@ makeProtoInfo (unknownField,lazyFieldsOpt,lenses) (NameMap (packageID,hPrefix,hP
                 _ -> ProtoName packageName hPrefix (init hParent) (last hParent)
   keyInfos = Seq.fromList . map (\f -> (keyExtendee' reMap f,toFieldInfo' reMap packageName lenses f))
              . F.toList . D.FileDescriptorProto.extension $ fdp
-  allMessages = concatMap (processMSG packageName False) (F.toList $ D.FileDescriptorProto.message_type fdp)
+  allMessages = concatMap (processMSG packageName False False) (F.toList $ D.FileDescriptorProto.message_type fdp)
   allEnums = map (makeEnumInfo' reMap packageName) (F.toList $ D.FileDescriptorProto.enum_type fdp) 
              ++ concatMap (processENM packageName) (F.toList $ D.FileDescriptorProto.message_type fdp)
   allKeys = M.fromListWith mappend . map (\(k,a) -> (k,Seq.singleton a))
             . F.toList . mconcat $ keyInfos : map keys allMessages
-  processMSG parent msgIsGroup msg = 
+  processMSG parent msgIsGroup msgIsOneof msg = 
     let getKnownKeys protoName' = fromMaybe Seq.empty (M.lookup protoName' allKeys)
         groups = collectedGroups msg
         checkGroup x = elem (fromMaybe (imp $ "no message name in makeProtoInfo.processMSG.checkGroup:\n"++show msg)
                                        (D.DescriptorProto.name x))
                             groups
+        checkOneof x = False 
         parent' = fqAppend parent [IName (fromJust (D.DescriptorProto.name msg))]
-    in makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFieldsOpt,lenses) msg
-       : concatMap (\x -> processMSG parent' (checkGroup x) x)
+    in makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup msgIsOneof (unknownField,lazyFieldsOpt,lenses) msg
+       : concatMap (\x -> processMSG parent' (checkGroup x) (checkOneof x) x)
                    (F.toList (D.DescriptorProto.nested_type msg))
   processENM parent msg = foldr ((:) . makeEnumInfo' reMap parent') nested
                           (F.toList (D.DescriptorProto.enum_type msg))
@@ -132,15 +133,16 @@ keyExtendee' reMap f = case D.FieldDescriptorProto.extendee f of
 makeDescriptorInfo' :: ReMap -> FIName Utf8
                     -> (ProtoName -> Seq FieldInfo)
                     -> Bool -- msgIsGroup
+                    -> Bool -- msgIsOneof
                     -> (Bool,Bool,Bool) -- unknownField, lazyFields and lenses
                     -> D.DescriptorProto -> DescriptorInfo
-makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFieldsOpt,lenses)
+makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup msgIsOneof (unknownField,lazyFieldsOpt,lenses)
                     (D.DescriptorProto.DescriptorProto
                       { D.DescriptorProto.name = Just rawName
                       , D.DescriptorProto.field = rawFields
                       , D.DescriptorProto.extension = rawKeys
                       , D.DescriptorProto.extension_range = extension_range })
-    = let di = DescriptorInfo protoName (pnPath protoName) msgIsGroup
+    = let di = DescriptorInfo protoName (pnPath protoName) msgIsGroup msgIsOneof
                               fieldInfos keyInfos extRangeList (getKnownKeys protoName)
                               unknownField lazyFieldsOpt lenses
       in di -- trace (toString rawName ++ "\n" ++ show di ++ "\n\n") $ di
@@ -156,7 +158,7 @@ makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyField
                             { D.DescriptorProto.ExtensionRange.start = mStart
                             , D.DescriptorProto.ExtensionRange.end = mEnd }) =
                   (maybe minBound FieldId mStart, maybe maxBound (FieldId . pred) mEnd)
-makeDescriptorInfo' _ _ _ _ _ _ = imp $ "makeDescriptorInfo: missing name"
+makeDescriptorInfo' _ _ _ _ _ _ _ = imp $ "makeDescriptorInfo: missing name"
 
 toFieldInfo'
   :: ReMap

@@ -69,9 +69,12 @@ data ProtoInfo = ProtoInfo { protoMod :: ProtoName        -- ^ blank protobufNam
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
+-- data MessageType = Ordinary | Group | Oneof
+
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , descFilePath :: [FilePath]
                                      , isGroup :: Bool
+                                     , isOneof :: Bool
                                      , fields :: Seq FieldInfo 
                                      , keys :: Seq KeyInfo
                                      , extRanges :: [(FieldId,FieldId)]

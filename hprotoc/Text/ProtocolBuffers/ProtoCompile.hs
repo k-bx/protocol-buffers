@@ -258,11 +258,12 @@ run' o@(Output print' writeFile') options env fdps = do
   -- Compute the nameMap that determine how to translate from proto names to haskell names
   -- This is the part that uses the (optional) package name
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
-  let NameMap _ rm = nameMap
-  trace (concatMap (\x -> show x ++ "\n") rm) $ do
+  -- let NameMap _ rm = nameMap
+  -- trace (concatMap (\x -> show x ++ "\n") rm) $ do
   print' "Haskell name mangling done"
   let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options,optLenses options) nameMap fdp
       result = makeResult protoInfo
+  trace (concatMap (\x -> show x ++ "\n-------\n") (messages protoInfo)) $ do
   seq result (print' "Recursive modules resolved")
   let produceMSG di = do
         unless (optDryRun options) $ do
