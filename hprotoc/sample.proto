@@ -3,10 +3,19 @@ message SampleMessage {
     string name = 1;
     int32 age = 2;
   }
+ 
   optional string key = 3;
   optional int32 value = 4;
 
   oneof newtest {
     string bar = 5;
   }
+
+  message User {
+    required int32 id    = 1;
+    optional string name = 2;
+  }
+
+  repeated User users = 6;
+
 }

@@ -115,6 +115,8 @@ import qualified Text.DescriptorProtos.FileDescriptorProto            as D(FileD
 import qualified Text.DescriptorProtos.FileDescriptorProto            as D.FileDescriptorProto(FileDescriptorProto(..))
 import qualified Text.DescriptorProtos.MethodDescriptorProto          as D(MethodDescriptorProto)
 import qualified Text.DescriptorProtos.MethodDescriptorProto          as D.MethodDescriptorProto(MethodDescriptorProto(..))
+import qualified Text.DescriptorProtos.OneofDescriptorProto           as D(OneofDescriptorProto)
+import qualified Text.DescriptorProtos.OneofDescriptorProto           as D.OneofDescriptorProto(OneofDescriptorProto(..))
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D(ServiceDescriptorProto)
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D.ServiceDescriptorProto(ServiceDescriptorProto(..))
 import qualified Text.DescriptorProtos.UninterpretedOption            as D(UninterpretedOption)
@@ -643,8 +645,10 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
       F.mapM_ mrmEnum    (D.DescriptorProto.enum_type   dp)
       F.mapM_ mrmField   (D.DescriptorProto.extension   dp)
       F.mapM_ mrmField   (D.DescriptorProto.field       dp)
+      F.mapM_ mrmOneof   (D.DescriptorProto.oneof_decl  dp)
       F.mapM_ mrmMsg     (D.DescriptorProto.nested_type dp)
   mrmField fdp = mrmName "mrmField.name" D.FieldDescriptorProto.name fdp
+  mrmOneof odp = mrmName "mrmOneof.name" D.OneofDescriptorProto.name odp
   mrmEnum edp = do
     template <- mrmName "mrmEnum.name" D.EnumDescriptorProto.name edp
     local (const template) $ F.mapM_ mrmEnumValue (D.EnumDescriptorProto.value edp)

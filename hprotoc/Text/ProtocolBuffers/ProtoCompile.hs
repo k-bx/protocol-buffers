@@ -31,7 +31,9 @@ import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(makeResult)
 import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule)
 import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadCodeGenRequest,makeNameMaps,getTLS
-                                                ,Env,LocalFP(..),CanonFP(..),TopLevel(..))
+                                                ,Env,LocalFP(..),CanonFP(..),TopLevel(..)
+                                                ,NameMap(..)
+                                                )
 
 import Text.Google.Protobuf.Compiler.CodeGeneratorRequest
 import Text.Google.Protobuf.Compiler.CodeGeneratorResponse hiding (error, file)
@@ -40,6 +42,9 @@ import qualified Text.Google.Protobuf.Compiler.CodeGeneratorResponse.File as CGR
 
 -- The Paths_hprotoc module is produced by cabal
 import Paths_hprotoc(version)
+
+
+import Debug.Trace
 
 data Options = Options { optPrefix :: [MName String]
                        , optAs :: [(CanonFP,[MName String])]
@@ -253,6 +258,8 @@ run' o@(Output print' writeFile') options env fdps = do
   -- Compute the nameMap that determine how to translate from proto names to haskell names
   -- This is the part that uses the (optional) package name
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
+  let NameMap _ rm = nameMap
+  trace (concatMap (\x -> show x ++ "\n") rm) $ do
   print' "Haskell name mangling done"
   let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options,optLenses options) nameMap fdp
       result = makeResult protoInfo
