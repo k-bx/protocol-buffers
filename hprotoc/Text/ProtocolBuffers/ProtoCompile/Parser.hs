@@ -341,12 +341,18 @@ oneof up = pName (U.fromString "oneof") >> do
   up =<< subParser (pChar '{' >> subOneof) (defaultValue {D.OneofDescriptorProto.name=Just self})
 
 subOneof :: P D.OneofDescriptorProto ()
-subOneof = (pChar '}') <|> (choice [ eol
-                                   , field upNestedMsg Nothing >>= upMsgField
-                                   ] >> subOneof
-                           )
-  where upNestedMsg msg = update' (\s -> s {D.DescriptorProto.nested_type=D.DescriptorProto.nested_type s |> msg})
-        upMsgField f    = update' (\s -> s {D.DescriptorProto.field=D.DescriptorProto.field s |> f})
+subOneof = skipMany nonCurly >> (pChar '}')
+  where nonCurly = tok (\l -> case l of
+                                L _ x -> if x == '}' then Nothing else return ()
+                                _ -> return ()
+                       ) <?> "character }"
+
+                       -- <|> (choice [ eol
+                       --            , field upNestedMsg Nothing >>= upMsgField
+                       --            ] >> subOneof
+                       --    )
+--  where upNestedMsg msg = update' (\s -> s {D.DescriptorProto.nested_type=D.DescriptorProto.nested_type s |> msg})
+ --       upMsgField f    = update' (\s -> s {D.DescriptorProto.field=D.DescriptorProto.field s |> f})
 
 
 
