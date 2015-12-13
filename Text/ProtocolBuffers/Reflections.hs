@@ -15,6 +15,7 @@ module Text.ProtocolBuffers.Reflections
   ( ProtoName(..),ProtoFName(..),ProtoInfo(..),DescriptorInfo(..),FieldInfo(..),KeyInfo
   , HsDefault(..),SomeRealFloat(..),EnumInfo(..),EnumInfoApp
   , ReflectDescriptor(..),ReflectEnum(..),GetMessageInfo(..)
+  , OneofInfo(..)
   , makePNF, toRF, fromRF
   ) where
 
@@ -65,16 +66,14 @@ data ProtoInfo = ProtoInfo { protoMod :: ProtoName        -- ^ blank protobufNam
                            , extensionKeys :: Seq KeyInfo -- ^ top level keys
                            , messages :: [DescriptorInfo] -- ^ all messages and groups
                            , enums :: [EnumInfo]          -- ^ all enums
+                           , oneofs :: [OneofInfo]
                            , knownKeyMap :: Map ProtoName (Seq FieldInfo) -- all keys in namespace
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
--- data MessageType = Ordinary | Group | Oneof
-
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , descFilePath :: [FilePath]
                                      , isGroup :: Bool
-                                     , isOneof :: Bool
                                      , fields :: Seq FieldInfo 
                                      , keys :: Seq KeyInfo
                                      , extRanges :: [(FieldId,FieldId)]
@@ -84,6 +83,14 @@ data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , makeLenses :: Bool
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
+
+data OneofInfo = OneofInfo { oneofName :: ProtoName
+                           , oneofFilePath :: [FilePath]
+                           -- , oneofFields :: Seq FieldInfo 
+                           -- , makeLenses :: Bool
+                           }
+  deriving (Show,Read,Eq,Ord,Data,Typeable)
+
 
 -- | 'GetMessageInfo' is used in getting messages from the wire.  It
 -- supplies the 'Set' of precomposed wire tags that must be found in

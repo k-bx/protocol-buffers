@@ -263,7 +263,7 @@ run' o@(Output print' writeFile') options env fdps = do
   print' "Haskell name mangling done"
   let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options,optLenses options) nameMap fdp
       result = makeResult protoInfo
-  trace (concatMap (\x -> show x ++ "\n-------\n") (messages protoInfo)) $ do
+  trace (concatMap (\x -> show x ++ "\n-------\n") (oneofs protoInfo)) $ do
   seq result (print' "Recursive modules resolved")
   let produceMSG di = do
         unless (optDryRun options) $ do
