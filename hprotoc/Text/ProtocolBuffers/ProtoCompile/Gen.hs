@@ -34,7 +34,7 @@ import Language.Haskell.Exts.Syntax as Hse
 import Data.Char(isLower,isUpper)
 import qualified Data.Map as M
 import Data.Maybe(mapMaybe)
-import qualified Data.Sequence as Seq(null,length)
+import qualified Data.Sequence as Seq(null,length,empty)
 import qualified Data.Set as S
 import System.FilePath(joinPath)
 
@@ -691,7 +691,10 @@ descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] de
         con = RecDecl name eFields
                 where eFields = F.foldr ((:) . fieldX) end (fields di)
                       end = (if hasExt di then (extfield:) else id) 
-                          $ (if storeUnknown di then [unknownField] else [])
+                            . (if storeUnknown di then (unknownField:) else id)
+                            $ eOneof
+                      eOneof = F.foldr ((:) . fieldOneofX) [] (descOneofs di)
+                      
         bangType = if lazyFields di then TyParen {- UnBangedTy -} else TyBang BangedTy . TyParen
         -- extfield :: ([Name],BangType)
         extfield = ([fieldIdent di "ext'field"], bangType (TyCon (private "ExtField")))
@@ -709,6 +712,9 @@ descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] de
                                        Just s | self /= s -> qualName s
                                               | otherwise -> unqualName s
                                        Nothing -> error $  "No Name for Field!\n" ++ show fi
+        -- fieldOneofX :: OneofInfo -> ([Name],BangType)
+        fieldOneofX oi = ([baseIdent' . oneofFName $ oi], TyParen (TyCon typed))
+          where typed = qualName (oneofName oi)
 
 instancesDescriptor :: DescriptorInfo -> [Decl]
 instancesDescriptor di = map ($ di) $

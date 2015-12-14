@@ -47,6 +47,7 @@ import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..),getPackageID)
 -- import Text.ProtocolBuffers.Reflections
 
 import qualified Data.Foldable as F(foldr,toList)
+import           Data.Sequence ((<|))
 import qualified Data.Sequence as Seq(fromList,empty,singleton,null,filter)
 import Numeric(readHex,readOct,readDec)
 import Data.Monoid(mconcat,mappend)
@@ -135,8 +136,9 @@ makeOneofInfo' :: ReMap -> FIName Utf8
 makeOneofInfo' reMap parent lenses parentProto
               (n, e@(D.OneofDescriptorProto.OneofDescriptorProto
                   { D.OneofDescriptorProto.name = Just rawName }))
-    = OneofInfo protoName (pnPath protoName) fieldInfos lenses
-  where protoName = toHaskell reMap $ fqAppend parent [IName rawName]
+    = OneofInfo protoName protoFName (pnPath protoName) fieldInfos lenses
+  where protoName@(ProtoName x a b c) = toHaskell reMap $ fqAppend parent [IName rawName]
+        protoFName = ProtoFName x a b (mangle c) (if lenses then "_" else "")
         rawFields = D.DescriptorProto.field parentProto
         rawFieldsOneof = Seq.filter ((== Just n) . D.FieldDescriptorProto.oneof_index) rawFields
         getFieldProtoName fdp
@@ -163,18 +165,23 @@ makeDescriptorInfo' :: ReMap -> FIName Utf8
                     -> (Bool,Bool,Bool) -- unknownField, lazyFields and lenses
                     -> D.DescriptorProto -> DescriptorInfo
 makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyFieldsOpt,lenses)
-                    (D.DescriptorProto.DescriptorProto
+                    msg@(D.DescriptorProto.DescriptorProto
                       { D.DescriptorProto.name = Just rawName
                       , D.DescriptorProto.field = rawFields
+                      , D.DescriptorProto.oneof_decl = rawOneofs
                       , D.DescriptorProto.extension = rawKeys
                       , D.DescriptorProto.extension_range = extension_range })
     = let di = DescriptorInfo protoName (pnPath protoName) msgIsGroup 
-                              fieldInfos keyInfos extRangeList (getKnownKeys protoName)
+                              fieldInfos oneofInfos keyInfos extRangeList
+                              (getKnownKeys protoName)
                               unknownField lazyFieldsOpt lenses
       in di -- trace (toString rawName ++ "\n" ++ show di ++ "\n\n") $ di
   where protoName = toHaskell reMap $ fqAppend parent [IName rawName]
         rawFieldsNotOneof = Seq.filter (\x -> D.FieldDescriptorProto.oneof_index x == Nothing) rawFields
         fieldInfos = fmap (toFieldInfo' reMap (protobufName protoName) lenses) rawFieldsNotOneof
+        oneofInfos = F.foldr ((<|) . makeOneofInfo' reMap (protobufName protoName) lenses msg) Seq.empty
+                          (zip [0..] (F.toList rawOneofs))
+          
         keyInfos = fmap (\f -> (keyExtendee' reMap f,toFieldInfo' reMap (protobufName protoName) lenses f)) rawKeys
         extRangeList = concatMap check unchecked
           where check x@(lo,hi) | hi < lo = []

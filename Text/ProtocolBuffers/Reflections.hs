@@ -74,7 +74,8 @@ data ProtoInfo = ProtoInfo { protoMod :: ProtoName        -- ^ blank protobufNam
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , descFilePath :: [FilePath]
                                      , isGroup :: Bool
-                                     , fields :: Seq FieldInfo 
+                                     , fields :: Seq FieldInfo
+                                     , descOneofs :: Seq OneofInfo 
                                      , keys :: Seq KeyInfo
                                      , extRanges :: [(FieldId,FieldId)]
                                      , knownKeys :: Seq FieldInfo
@@ -149,6 +150,7 @@ fromRF x | isNaN x = SRF'nan
          | otherwise = SRF'Rational (toRational x)
 
 data OneofInfo = OneofInfo { oneofName :: ProtoName
+                           , oneofFName :: ProtoFName  
                            , oneofFilePath :: [FilePath]
                            , oneofFields :: Seq (ProtoName,FieldInfo)
                            , oneofMakeLenses :: Bool
