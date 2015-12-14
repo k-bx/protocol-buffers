@@ -14,11 +14,11 @@
 -- The names are also assumed to have become fully-qualified, and all
 -- the optional type codes have been set.
 --
-module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,prettyPrint) where
+module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,oneofModule,prettyPrint) where
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
-import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),DescriptorInfo(..),ProtoInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..))
+import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),DescriptorInfo(..),ProtoInfo(..),OneofInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..))
 
 import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(Result(..),VertexKind(..),pKey,pfKey,getKind,Part(..))
 
@@ -276,6 +276,19 @@ modulePragmas templateHaskell =
   ]
   where thPragma | templateHaskell = ["TemplateHaskell"]
                  | otherwise       = []
+
+--------------------------------------------
+-- OneofDescriptorProto module creation
+--------------------------------------------
+oneofModule :: OneofInfo -> Module
+oneofModule oi
+  = let protoName = oneofName oi
+    in Module src (ModuleName (fqMod protoName)) (modulePragmas False) Nothing
+         Nothing
+         (standardImports True False False) (oneofDecls oi)
+         
+oneofDecls :: OneofInfo -> [Decl]
+oneofDecls oi = [ ]
 
 --------------------------------------------
 -- EnumDescriptorProto module creation

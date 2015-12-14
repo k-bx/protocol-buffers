@@ -4,7 +4,7 @@ message sample_message {
     int32 age = 2;
   }
  
-  optional string key = 3;
+  required string key = 3;
   optional int32 value = 4;
 
   oneof newtest {

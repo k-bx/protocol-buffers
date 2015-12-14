@@ -656,15 +656,12 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
       F.mapM_ mrmField   (D.DescriptorProto.extension   dp)
       F.mapM_ mrmField   (fieldNotOneof                 dp)
       F.mapM_ mrmOneof   (oneofFieldMap                 dp)      
-      -- F.mapM_ mrmOneofField (D.DescriptorProto.oneof_decl  dp) (fieldOneof dp)
       F.mapM_ mrmMsg     (D.DescriptorProto.nested_type dp)
   mrmField fdp = mrmName "mrmField.name" D.FieldDescriptorProto.name fdp
   mrmOneof (odp,fdps) = do
     template <- mrmName "mrmOneof.name" D.OneofDescriptorProto.name odp
     local (const template) $
       F.mapM_ mrmField fdps
-  --  mrmOneofField odps fdp = do
-  --   mrmName "mrmField.name" D.FieldDescriptorProto.name fdp 
   mrmEnum edp = do
     template <- mrmName "mrmEnum.name" D.EnumDescriptorProto.name edp
     local (const template) $ F.mapM_ mrmEnumValue (D.EnumDescriptorProto.value edp)

@@ -19,7 +19,7 @@ import System.IO (stdin, stdout)
 
 import Text.ProtocolBuffers.Basic(defaultValue, Utf8(..), utf8)
 import Text.ProtocolBuffers.Identifiers(MName,checkDIString,mangle)
-import Text.ProtocolBuffers.Reflections(ProtoInfo(..),EnumInfo(..))
+import Text.ProtocolBuffers.Reflections(ProtoInfo(..),EnumInfo(..),OneofInfo(..))
 import Text.ProtocolBuffers.WireMessage (messagePut, messageGet)
 
 import qualified Text.DescriptorProtos.FileDescriptorProto as D(FileDescriptorProto)
@@ -28,7 +28,7 @@ import qualified Text.DescriptorProtos.FileDescriptorProto as D.FileDescriptorPr
 import qualified Text.DescriptorProtos.FileDescriptorSet   as D.FileDescriptorSet(FileDescriptorSet(..))
 
 import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(makeResult,displayResult)
-import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule)
+import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,oneofModule)
 import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadCodeGenRequest,makeNameMaps,getTLS
                                                 ,Env,LocalFP(..),CanonFP(..),TopLevel(..)
@@ -264,7 +264,7 @@ run' o@(Output print' writeFile') options env fdps = do
   let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options,optLenses options) nameMap fdp
       result = makeResult protoInfo
   -- trace (concatMap (\x -> show x ++ "\n-------\n") (messages protoInfo)) $ do -- DEBUG
-  -- trace (concatMap (\x -> show x ++ "\n-------\n") (oneofs protoInfo)) $ do -- DEBUG
+  trace (concatMap (\x -> show x ++ "\n-------\n") (oneofs protoInfo)) $ do -- DEBUG
 
   -- trace (displayResult result) $ do
   seq result (print' "Recursive modules resolved")
@@ -277,7 +277,11 @@ run' o@(Output print' writeFile') options env fdps = do
       produceENM ei = do
         let file = joinPath . enumFilePath $ ei
         writeFile' file (prettyPrintStyleMode style myMode (enumModule ei))
+      produceONO oi = do
+        let file = joinPath . oneofFilePath $ oi
+        writeFile' file (prettyPrintStyleMode style myMode (oneofModule oi))
   mapM_ produceMSG (messages protoInfo)
   mapM_ produceENM (enums protoInfo)
+  mapM_ produceONO (oneofs protoInfo)
   let file = joinPath . protoFilePath $ protoInfo
   writeFile' file (prettyPrintStyleMode style myMode (protoModule result protoInfo (serializeFDP fdp)))

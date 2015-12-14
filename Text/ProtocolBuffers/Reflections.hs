@@ -84,13 +84,6 @@ data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
-data OneofInfo = OneofInfo { oneofName :: ProtoName
-                           , oneofFilePath :: [FilePath]
-                           , oneofFields :: Seq FieldInfo
-                           , oneofMakeLenses :: Bool
-                           }
-  deriving (Show,Read,Eq,Ord,Data,Typeable)
-
 
 -- | 'GetMessageInfo' is used in getting messages from the wire.  It
 -- supplies the 'Set' of precomposed wire tags that must be found in
@@ -155,6 +148,13 @@ fromRF x | isNaN x = SRF'nan
          | isInfinite x = if 0 < x then SRF'inf else SRF'ninf
          | otherwise = SRF'Rational (toRational x)
 
+data OneofInfo = OneofInfo { oneofName :: ProtoName
+                           , oneofFilePath :: [FilePath]
+                           , oneofFields :: Seq FieldInfo
+                           , oneofMakeLenses :: Bool
+                           }
+  deriving (Show,Read,Eq,Ord,Data,Typeable)
+
 data EnumInfo = EnumInfo { enumName :: ProtoName
                          , enumFilePath :: [FilePath]
                          , enumValues :: [(EnumCode,String)] -- ^ The String is the Haskell name to write into the generated source files
@@ -162,6 +162,7 @@ data EnumInfo = EnumInfo { enumName :: ProtoName
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 type EnumInfoApp e = [(EnumCode,String,e)]
+
 
 class ReflectEnum e where
   reflectEnum :: EnumInfoApp e
