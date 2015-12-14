@@ -543,7 +543,8 @@ descriptorBootModule di
         un = unqualName protoName
         classes = [prelude "Show",prelude "Eq",prelude "Ord",prelude "Typeable",prelude "Data"
                   ,private "Mergeable",private "Default"
-                  -- ,private "Wire",private "GPB",private "ReflectDescriptor", private "TextType", private "TextMsg"
+                  -- ,private "Wire",private "GPB",private "ReflectDescriptor"
+                  , private "TextType", private "TextMsg"
                   ]
                   ++ if hasExt di then [private "ExtendMessage"] else []
                   ++ if storeUnknown di then [private "UnknownMessage"] else []
@@ -752,8 +753,8 @@ instancesDescriptor di = map ($ di) $
    -- , instanceMessageAPI . descName
    -- , instanceGPB . descName                 
    -- , instanceReflectDescriptor
-   -- , instanceTextType
-   -- , instanceTextMsg
+   , instanceTextType
+   , instanceTextMsg
    ]
 
 instanceExtendMessage :: DescriptorInfo -> Decl
