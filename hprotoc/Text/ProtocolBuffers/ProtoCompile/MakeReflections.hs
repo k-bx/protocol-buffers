@@ -139,7 +139,12 @@ makeOneofInfo' reMap parent lenses parentProto
   where protoName = toHaskell reMap $ fqAppend parent [IName rawName]
         rawFields = D.DescriptorProto.field parentProto
         rawFieldsOneof = Seq.filter ((== Just n) . D.FieldDescriptorProto.oneof_index) rawFields
-        fieldInfos = fmap (toFieldInfo' reMap (protobufName protoName) lenses) rawFieldsOneof
+        getFieldProtoName fdp
+          = case D.FieldDescriptorProto.name fdp of
+              Just name -> toHaskell reMap $ fqAppend (protobufName protoName) [IName name]
+              Nothing -> imp $ "getFieldProtoName: missing info in " ++ show fdp
+        getFieldInfo = toFieldInfo' reMap (protobufName protoName) lenses
+        fieldInfos = fmap (\x->(getFieldProtoName x,getFieldInfo x)) rawFieldsOneof
 makeOneofInfo' _ _ _ _ _ = imp "makeOneofInfo: missing name"
 
 

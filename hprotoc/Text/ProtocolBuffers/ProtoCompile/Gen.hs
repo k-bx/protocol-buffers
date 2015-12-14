@@ -288,7 +288,23 @@ oneofModule oi
          (standardImports True False False) (oneofDecls oi)
          
 oneofDecls :: OneofInfo -> [Decl]
-oneofDecls oi = [ ]
+oneofDecls oi = [oneofX oi]
+
+oneofX :: OneofInfo -> Decl
+oneofX oi = DataDecl src DataType [] (baseIdent (oneofName oi)) []
+              (map oneofValueX (F.toList (oneofFields oi) ))
+              []
+  where oneofValueX (pname,fi) = QualConDecl src [] [] con 
+          where con = RecDecl (baseIdent pname) [fieldX]
+                fieldX = ([baseIdent' . fieldName $ fi], TyParen (TyCon typed ))
+                typed = case useType (getFieldType (typeCode fi)) of
+                          Just s -> private s
+                          Nothing -> case typeName fi of
+                                       Just s -> qualName s
+                                       Nothing -> imp $ "No Name for Field!\n" ++ show fi
+                         
+
+
 
 --------------------------------------------
 -- EnumDescriptorProto module creation

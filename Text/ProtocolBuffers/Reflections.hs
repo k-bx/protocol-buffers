@@ -150,7 +150,7 @@ fromRF x | isNaN x = SRF'nan
 
 data OneofInfo = OneofInfo { oneofName :: ProtoName
                            , oneofFilePath :: [FilePath]
-                           , oneofFields :: Seq FieldInfo
+                           , oneofFields :: Seq (ProtoName,FieldInfo)
                            , oneofMakeLenses :: Bool
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
