@@ -47,7 +47,7 @@ import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..),getPackageID)
 -- import Text.ProtocolBuffers.Reflections
 
 import qualified Data.Foldable as F(foldr,toList)
-import qualified Data.Sequence as Seq(fromList,empty,singleton,null)
+import qualified Data.Sequence as Seq(fromList,empty,singleton,null,filter)
 import Numeric(readHex,readOct,readDec)
 import Data.Monoid(mconcat,mappend)
 import qualified Data.Map as M(fromListWith,lookup,keys)
@@ -105,8 +105,8 @@ makeProtoInfo (unknownField,lazyFieldsOpt,lenses) (NameMap (packageID,hPrefix,hP
                           (F.toList (D.DescriptorProto.enum_type msg))
     where parent' = fqAppend parent [IName (fromJust (D.DescriptorProto.name msg))]
           nested = concatMap (processENM parent') (F.toList (D.DescriptorProto.nested_type msg))
-  processONO parent msg = foldr ((:) . makeOneofInfo' reMap parent') nested
-                          (F.toList (D.DescriptorProto.oneof_decl msg))
+  processONO parent msg = foldr ((:) . makeOneofInfo' reMap parent' lenses msg) nested
+                          (zip [0..] (F.toList (D.DescriptorProto.oneof_decl msg)))
     where parent' = fqAppend parent [IName (fromJust (D.DescriptorProto.name msg))]
           nested = concatMap (processONO parent') (F.toList (D.DescriptorProto.nested_type msg))                          
 makeProtoInfo _ _ _ = imp $ "makeProtoInfo: missing name or package"
@@ -129,13 +129,18 @@ makeEnumInfo' reMap parent
                 oneValue evdp = imp $ "no name or number for evdp passed to makeEnumInfo.oneValue: "++show evdp
 makeEnumInfo' _ _ _ = imp "makeEnumInfo: missing name"
 
-makeOneofInfo' :: ReMap -> FIName Utf8 -> D.OneofDescriptorProto -> OneofInfo
-makeOneofInfo' reMap parent
-              e@(D.OneofDescriptorProto.OneofDescriptorProto
-                  { D.OneofDescriptorProto.name = Just rawName })
-    = OneofInfo protoName (pnPath protoName)
+makeOneofInfo' :: ReMap -> FIName Utf8
+               -> Bool -- ^ makeLenses
+               -> D.DescriptorProto -> (Int32,D.OneofDescriptorProto) -> OneofInfo
+makeOneofInfo' reMap parent lenses parentProto
+              (n, e@(D.OneofDescriptorProto.OneofDescriptorProto
+                  { D.OneofDescriptorProto.name = Just rawName }))
+    = OneofInfo protoName (pnPath protoName) fieldInfos lenses
   where protoName = toHaskell reMap $ fqAppend parent [IName rawName]
-makeOneofInfo' _ _ _ = imp "makeOneofInfo: missing name"
+        rawFields = D.DescriptorProto.field parentProto
+        rawFieldsOneof = Seq.filter ((== Just n) . D.FieldDescriptorProto.oneof_index) rawFields
+        fieldInfos = fmap (toFieldInfo' reMap (protobufName protoName) lenses) rawFieldsOneof
+makeOneofInfo' _ _ _ _ _ = imp "makeOneofInfo: missing name"
 
 
 keyExtendee' :: ReMap -> D.FieldDescriptorProto.FieldDescriptorProto -> ProtoName
@@ -163,7 +168,8 @@ makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyField
                               unknownField lazyFieldsOpt lenses
       in di -- trace (toString rawName ++ "\n" ++ show di ++ "\n\n") $ di
   where protoName = toHaskell reMap $ fqAppend parent [IName rawName]
-        fieldInfos = fmap (toFieldInfo' reMap (protobufName protoName) lenses) rawFields
+        rawFieldsNotOneof = Seq.filter (\x -> D.FieldDescriptorProto.oneof_index x == Nothing) rawFields
+        fieldInfos = fmap (toFieldInfo' reMap (protobufName protoName) lenses) rawFieldsNotOneof
         keyInfos = fmap (\f -> (keyExtendee' reMap f,toFieldInfo' reMap (protobufName protoName) lenses f)) rawKeys
         extRangeList = concatMap check unchecked
           where check x@(lo,hi) | hi < lo = []

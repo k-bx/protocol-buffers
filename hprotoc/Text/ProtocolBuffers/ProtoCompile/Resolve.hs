@@ -158,7 +158,7 @@ import Data.Ratio
 import Data.Ix(inRange)
 import Data.List(foldl',stripPrefix,isPrefixOf,isSuffixOf)
 import Data.Map(Map)
-import Data.Maybe(mapMaybe)
+import Data.Maybe(mapMaybe,isNothing)
 import Data.Typeable
 -- import Data.Monoid()
 import System.Directory(doesFileExist,canonicalizePath)
@@ -633,6 +633,16 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
     runMRM'Reader (mrmFile fdp) template
     return (packageName,hPrefix,hParent)
   -- Traversal of the named DescriptorProto types
+  fieldNotOneof :: D.DescriptorProto -> Seq D.FieldDescriptorProto
+  fieldNotOneof = Seq.filter (isNothing . D.FieldDescriptorProto.oneof_index) . D.DescriptorProto.field
+
+  oneofFieldMap :: D.DescriptorProto -> [(D.OneofDescriptorProto,Seq D.FieldDescriptorProto)]
+  oneofFieldMap dp = zip odps fdpss
+    where odps = F.toList (D.DescriptorProto.oneof_decl dp)
+          fdps = D.DescriptorProto.field dp
+          fdpss = map  (\i->Seq.filter ((== Just i) . D.FieldDescriptorProto.oneof_index) fdps) [0..]
+
+  
   mrmFile :: D.FileDescriptorProto -> MRM ()
   mrmFile fdp = do
     F.mapM_ mrmMsg     (D.FileDescriptorProto.message_type fdp)
@@ -644,11 +654,17 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
     local (const template) $ do
       F.mapM_ mrmEnum    (D.DescriptorProto.enum_type   dp)
       F.mapM_ mrmField   (D.DescriptorProto.extension   dp)
-      F.mapM_ mrmField   (D.DescriptorProto.field       dp)
-      F.mapM_ mrmOneof   (D.DescriptorProto.oneof_decl  dp)
+      F.mapM_ mrmField   (fieldNotOneof                 dp)
+      F.mapM_ mrmOneof   (oneofFieldMap                 dp)      
+      -- F.mapM_ mrmOneofField (D.DescriptorProto.oneof_decl  dp) (fieldOneof dp)
       F.mapM_ mrmMsg     (D.DescriptorProto.nested_type dp)
   mrmField fdp = mrmName "mrmField.name" D.FieldDescriptorProto.name fdp
-  mrmOneof odp = mrmName "mrmOneof.name" D.OneofDescriptorProto.name odp
+  mrmOneof (odp,fdps) = do
+    template <- mrmName "mrmOneof.name" D.OneofDescriptorProto.name odp
+    local (const template) $
+      F.mapM_ mrmField fdps
+  --  mrmOneofField odps fdp = do
+  --   mrmName "mrmField.name" D.FieldDescriptorProto.name fdp 
   mrmEnum edp = do
     template <- mrmName "mrmEnum.name" D.EnumDescriptorProto.name edp
     local (const template) $ F.mapM_ mrmEnumValue (D.EnumDescriptorProto.value edp)

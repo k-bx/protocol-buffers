@@ -1,4 +1,4 @@
-message SampleMessage {
+message sample_message {
   oneof test_oneof { 
     string name = 1;
     int32 age = 2;
@@ -11,11 +11,12 @@ message SampleMessage {
     string bar = 5;
   }
 
-  message User {
+  message user {
     required int32 id    = 1;
     optional string name = 2;
+    optional sample_message msg =3;
   }
 
-  repeated User users = 6;
+  repeated user users = 6;
 
 }

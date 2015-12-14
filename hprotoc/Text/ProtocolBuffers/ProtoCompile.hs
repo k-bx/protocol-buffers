@@ -27,7 +27,7 @@ import qualified Text.DescriptorProtos.FileDescriptorProto as D.FileDescriptorPr
 -- import qualified Text.DescriptorProtos.FileDescriptorSet   as D(FileDescriptorSet)
 import qualified Text.DescriptorProtos.FileDescriptorSet   as D.FileDescriptorSet(FileDescriptorSet(..))
 
-import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(makeResult)
+import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(makeResult,displayResult)
 import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule)
 import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadCodeGenRequest,makeNameMaps,getTLS
@@ -221,7 +221,7 @@ data Output m = Output {
 runStandalone :: Options -> IO ()
 runStandalone options = do
   (env,fdps) <- loadProto (optInclude options) (optProto options)
-  print fdps
+  -- print fdps -- DEBUG
   putStrLn "All proto files loaded"
   run' standaloneMode options env fdps where
     standaloneMode :: Output IO
@@ -258,12 +258,15 @@ run' o@(Output print' writeFile') options env fdps = do
   -- Compute the nameMap that determine how to translate from proto names to haskell names
   -- This is the part that uses the (optional) package name
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
-  -- let NameMap _ rm = nameMap
-  -- trace (concatMap (\x -> show x ++ "\n") rm) $ do
+  let NameMap _ rm = nameMap  -- DEBUG
+  trace (concatMap (\x -> show x ++ "\n") rm) $ do -- DEBUG
   print' "Haskell name mangling done"
   let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options,optLenses options) nameMap fdp
       result = makeResult protoInfo
-  trace (concatMap (\x -> show x ++ "\n-------\n") (oneofs protoInfo)) $ do
+  -- trace (concatMap (\x -> show x ++ "\n-------\n") (messages protoInfo)) $ do -- DEBUG
+  -- trace (concatMap (\x -> show x ++ "\n-------\n") (oneofs protoInfo)) $ do -- DEBUG
+
+  -- trace (displayResult result) $ do
   seq result (print' "Recursive modules resolved")
   let produceMSG di = do
         unless (optDryRun options) $ do
