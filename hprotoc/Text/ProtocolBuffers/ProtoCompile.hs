@@ -259,13 +259,13 @@ run' o@(Output print' writeFile') options env fdps = do
   -- This is the part that uses the (optional) package name
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
   let NameMap _ rm = nameMap  -- DEBUG
-  trace (concatMap (\x -> show x ++ "\n") rm) $ do -- DEBUG
+  -- trace (concatMap (\x -> show x ++ "\n") rm) $ do -- DEBUG
   print' "Haskell name mangling done"
   let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options,optLenses options) nameMap fdp
       result = makeResult protoInfo
   -- trace (concatMap (\x -> show x ++ "\n-------\n") (messages protoInfo)) $ do -- DEBUG
-  trace (concatMap (\x -> show x ++ "\n-------\n") (oneofs protoInfo)) $ do -- DEBUG
-
+  -- trace (concatMap (\x -> show x ++ "\n-------\n") (oneofs protoInfo)) $ do -- DEBUG
+  trace (show result) $ do
   -- trace (displayResult result) $ do
   seq result (print' "Recursive modules resolved")
   let produceMSG di = do

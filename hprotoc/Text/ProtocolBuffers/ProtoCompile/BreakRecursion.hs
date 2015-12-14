@@ -177,7 +177,7 @@ type SCCs = [G]
 data Result = Result { rKind :: Map MKey VertexKind
                      , rIBoot :: Set (MKey,Part,MKey)
                      , rIKey :: Set (MKey,MKey) }
-  deriving Eq
+  deriving (Eq,Show)
 
 displayResult :: Result -> String
 displayResult (Result {rKind = kv, rIBoot = ab, rIKey=ab'keys }) = unlines $
@@ -236,7 +236,8 @@ makeResult protoInfo =
                     , "! PLEASE REPORT THIS FAILURE ALONG WITH THE PROTO FILE."
                     , "! The failed subset is:"
                     ] ++ showSCCs remainingProblems ++ "\n</!!!!!!!!!!!>"
-  in if null remainingProblems then ecart (showG finalGraph) answer
+  in trace (show pvs) $ -- (show initResult) $
+       if null remainingProblems then ecart (showG finalGraph) answer
        else trace msg answer
 
 -- Build the graph using the vertices and the Result so far.
@@ -247,7 +248,7 @@ makeG vs r = concatMap (makeEdgesForV r) vs
 -- the snd [V] is from the DescriptorInfo.
 makeVertices :: ProtoInfo -> (V,[V])
 makeVertices pi = answer where
-  answer =  ( protoInfoV , map makeV (messages pi) )
+  answer =  ( protoInfoV , map makeV (messages pi) ++ map makeVoneof (oneofs pi) )
 
   protoInfoV = V { vMKey = pKey (protoMod pi)
                  , vNeedsKeys = mempty
@@ -257,13 +258,22 @@ makeVertices pi = answer where
   makeV di = V { vMKey = pKey (descName di)
                , vNeedsKeys = nk (knownKeys di)
                , vKeysNeedsTypes = knt (keys di)
-               , vTypeNeedsTypes = tnt (fields di) }
+               , vTypeNeedsTypes = Set.union (tnt (fields di)) (ont (descOneofs di)) }
+
+  makeVoneof oi = V { vMKey = pKey (oneofName oi)
+                    , vNeedsKeys = mempty
+                    , vKeysNeedsTypes = mempty
+                    , vTypeNeedsTypes = (tnt . fmap snd . oneofFields) oi
+                    }                    
 
   allK = Set.fromList (pKey (protoMod pi) : map (pKey . descName) (messages pi))
-  allT = Set.fromList (map (pKey . descName) (messages pi))
+  allT = Set.fromList $ (map (pKey . descName) (messages pi)) ++ (map (pKey . oneofName) (oneofs pi))
 
   tnt :: Seq FieldInfo -> Set MKey
   tnt fs = Set.intersection allT $ Set.fromList $ map pKey . mapMaybe typeName . F.toList $ fs
+
+  ont :: Seq OneofInfo -> Set MKey
+  ont os = Set.intersection allT $ Set.fromList $ map (pKey . oneofName) . F.toList $ os
 
   knt :: Seq KeyInfo -> Set MKey
   knt ks =

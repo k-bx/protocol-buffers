@@ -2,6 +2,7 @@ message sample_message {
   oneof test_oneof { 
     string name = 1;
     int32 age = 2;
+    sample_message tt = 8;
   }
  
   required string key = 3;
@@ -19,4 +20,9 @@ message sample_message {
 
   repeated user users = 6;
 
+  message simple {
+    required int32 tester = 1;
+  }
+
+  optional simple mytest = 7;
 }
