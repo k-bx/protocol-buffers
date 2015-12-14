@@ -221,6 +221,28 @@ importPFN r m@(ModuleName self) pfn =
                 ,("ans",show ans)]) $
      ans
 
+
+importPNO :: Result -> ModuleName -> Part -> ProtoName -> Maybe [ImportDecl]
+importPNO r selfMod@(ModuleName self) part pn =
+  let o = pKey pn
+      m1 = ModuleName (joinMod (haskellPrefix pn ++ parentModule pn ++ [baseName pn]))
+      m2 = ModuleName (joinMod (parentModule pn))
+      m3 = ModuleName (joinMod (parentModule pn ++ [baseName pn]))      
+      fromSource = S.member (FMName self,part,o) (rIBoot r)
+#if MIN_VERSION_haskell_src_exts(1, 17, 0)
+      iabs1 = IAbs NoNamespace (Ident (mName (baseName pn)))
+#else
+      iabs1 = IAbs (Ident (mName (baseName pn)))
+#endif
+      iabs2 = IThingAll (Ident (mName (baseName pn)))
+      ans1 =  ImportDecl src m1 True fromSource False Nothing (Just m2)
+                (Just (False,[iabs1]))
+      ans2 =  ImportDecl src m1 True fromSource False Nothing (Just m3)
+                (Just (False,[iabs2]))
+  in  if m1 == selfMod && part /= KeyFile
+        then Nothing
+        else Just [ans1,ans2]
+
 -- Several items might be taken from the same module, combine these statements
 mergeImports :: [ImportDecl] -> [ImportDecl]
 mergeImports importsIn =
@@ -292,7 +314,10 @@ oneofModule result oi
 
 
 oneofDecls :: OneofInfo -> [Decl]
-oneofDecls oi = map ($ oi) [oneofX, instanceDefaultOneof, instanceMergeableOneof]
+oneofDecls oi = map ($ oi) [ oneofX
+                           , instanceDefaultOneof
+                           , instanceMergeableOneof
+                           ]
 
 oneofX :: OneofInfo -> Decl
 oneofX oi = DataDecl src DataType [] (baseIdent (oneofName oi)) []
@@ -327,7 +352,72 @@ instanceMergeableOneof oi
   = InstDecl src Nothing [] [] (private "Mergeable") [TyCon (unqualName (oneofName oi))] []
 
 
+{- instanceTextTypeOneof :: OneofInfo -> Decl
+instanceTextTypeOneof oi
+  = InstDecl src Nothing [] [] (private "TextType") [TyCon (unqualName (oneofName oi))] [
+        inst "tellT" [] (pvar "tellShow")
+      , inst "getT" [] (pvar "getRead")
+      ]
+-}
 
+{-
+instanceTextMsgOneof :: OneofInfo -> Decl
+instanceTextMsgOneof oi 
+  = InstDecl src Nothing [] [] (private "TextMsg") [TyCon (unqualName (descName di))] [
+        inst "textPut" [patvar msgVar] genPrint
+      , InsDecl $ FunBind [Match src (Ident "textGet") [] Nothing (UnGuardedRhs parser) bdecls]
+      ]
+  where
+#if MIN_VERSION_haskell_src_exts(1, 17, 0)
+        bdecls = Just (BDecls subparsers)
+#else
+        bdecls = BDecls subparsers
+#endif
+        flds = F.toList (fields di)
+        os = F.toList (descOneofs di)
+        msgVar = distinctVar "msg"
+        distinctVar var = if var `elem` reservedVars then distinctVar (var ++ "'") else var
+        reservedVars = map toPrintName flds
+        toPrintName fi = let IName uname = last $ splitFI $ protobufName' (fieldName fi) in uToString uname
+        printField fi = let Ident funcname = baseIdent' (fieldName fi)
+                            printname = toPrintName fi
+                         in Qualifier $ pvar "tellT" $$ litStr printname $$ Paren (lvar funcname $$ lvar msgVar)
+        genPrintFields = map printField flds
+        printOneof oi = let Ident funcname = baseIdent' (oneofFName oi)
+                            IName uname = last $ splitFI $ protobufName' (oneofFName oi)
+                            printname = uToString uname
+                        in Qualifier $ pvar "tellT" $$ litStr printname $$ Paren (lvar funcname $$ lvar msgVar)
+        genPrintOneofs = map printOneof os
+        genPrint = if null flds && null os
+                   then preludevar "return" $$ Hse.Tuple Boxed []
+                   else Do $ genPrintFields ++ genPrintOneofs
+                   
+        parser
+            | Seq.null (fields di) = preludevar "return" $$ pvar "defaultValue"
+            | otherwise = Do [
+                Generator src (patvar "mods") 
+                    $ pvar "sepEndBy" 
+                        $$ Paren (pvar "choice" $$ List (map (lvar . parserName) flds)) 
+                        $$ pvar "spaces",
+                Qualifier $ (preludevar "return")
+                    $$ Paren (preludevar "foldl"
+                        $$ Lambda src [patvar "v", patvar "f"] (lvar "f" $$ lvar "v") 
+                        $$ pvar "defaultValue" 
+                        $$ lvar "mods")
+             ]
+        parserName f = let Ident fname = baseIdent' (fieldName f) in "parse'" ++ fname
+        subparsers = map (\f -> defun (parserName f) [] (getField f)) flds
+        getField fi = let printname = toPrintName fi
+                          Ident funcname = baseIdent' (fieldName fi)
+                          update = if canRepeat fi then pvar "append" $$ Paren (lvar funcname $$ lvar "o") $$ lvar "v" else lvar "v"
+            in pvar "try" $$ Do [
+                Generator src (patvar "v") $ pvar "getT" $$ litStr printname,
+                Qualifier $ (preludevar "return")
+                    $$ Paren (Lambda src [patvar "o"]
+                        (RecUpdate (lvar "o") [ FieldUpdate (local funcname) update]))
+            ]
+
+-}
 
 --------------------------------------------
 -- EnumDescriptorProto module creation
@@ -612,7 +702,7 @@ descriptorNormalModule result di
         imports = (standardImports False (hasExt di) (makeLenses di) ++) . mergeImports . concat $
                     [ mapMaybe (importPN result m Normal) $
                         extendees' ++ mapMaybe typeName (myKeys' ++ (F.toList (fields di)))
-                        ++ map oneofName (F.toList (descOneofs di))
+                    , concat . mapMaybe (importPNO result m Normal) $ map oneofName (F.toList (descOneofs di))
                     , mapMaybe (importPFN result m) (map fieldName (myKeys ++ F.toList (knownKeys di))) ]
         mkLenses = Var (Qual (ModuleName "Control.Lens.TH") (Ident "makeLenses"))
         lenses | makeLenses di = [SpliceDecl src (mkLenses $$ TypQuote (unqualName protoName))]
@@ -739,7 +829,7 @@ descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] de
                                        Just s | self /= s -> qualName s
                                               | otherwise -> unqualName s
                                        Nothing -> error $  "No Name for Field!\n" ++ show fi
-        -- fieldOneofX :: OneofInfo -> ([Name],BangType)
+        fieldOneofX :: OneofInfo -> ([Name],Type)
         fieldOneofX oi = ([baseIdent' . oneofFName $ oi], TyParen (TyCon typed))
           where typed = qualName (oneofName oi)
 
@@ -785,7 +875,7 @@ instanceTextType di
 instanceTextMsg :: DescriptorInfo -> Decl
 instanceTextMsg di 
   = InstDecl src Nothing [] [] (private "TextMsg") [TyCon (unqualName (descName di))] [
-        inst "textPut" [patvar msgVar] genPrintFields
+        inst "textPut" [patvar msgVar] genPrint
       , InsDecl $ FunBind [Match src (Ident "textGet") [] Nothing (UnGuardedRhs parser) bdecls]
       ]
   where
@@ -795,16 +885,16 @@ instanceTextMsg di
         bdecls = BDecls subparsers
 #endif
         flds = F.toList (fields di)
+        os = F.toList (descOneofs di)
         msgVar = distinctVar "msg"
         distinctVar var = if var `elem` reservedVars then distinctVar (var ++ "'") else var
         reservedVars = map toPrintName flds
-        toPrintName fi = let IName uname = last $ splitFI $ protobufName' (fieldName fi) in uToString uname
-        printField fi = let Ident funcname = baseIdent' (fieldName fi)
-                            printname = toPrintName fi
-                         in Qualifier $ pvar "tellT" $$ litStr printname $$ Paren (lvar funcname $$ lvar msgVar)
-        genPrintFields = if null flds
-                           then preludevar "return" $$ Hse.Tuple Boxed []
-                           else Do $ map printField flds
+        genPrintFields = map (Qualifier . printField msgVar) flds
+        genPrintOneofs = map (Qualifier . printOneof msgVar) os
+        genPrint = if null flds && null os
+                   then preludevar "return" $$ Hse.Tuple Boxed []
+                   else Do $ genPrintFields ++ genPrintOneofs
+                   
         parser
             | Seq.null (fields di) = preludevar "return" $$ pvar "defaultValue"
             | otherwise = Do [
@@ -830,6 +920,30 @@ instanceTextMsg di
                         (RecUpdate (lvar "o") [ FieldUpdate (local funcname) update]))
             ]
 
+
+printField :: String -> FieldInfo -> Exp
+printField msgVar fi
+  = let Ident funcname = baseIdent' (fieldName fi)
+        printname = toPrintName fi
+        
+    in pvar "tellT" $$ litStr printname $$ Paren (lvar funcname $$ lvar msgVar)
+
+toPrintName :: FieldInfo -> String
+toPrintName fi = let IName uname = last $ splitFI $ protobufName' (fieldName fi) in uToString uname
+
+printOneof :: String -> OneofInfo -> Exp
+printOneof msgVar oi
+    = Case (Paren (lvar funcname $$ lvar msgVar)) (map caseAlt flds)
+  where Ident funcname = baseIdent' (oneofFName oi)
+        IName uname = last $ splitFI $ protobufName' (oneofFName oi)
+        printname = uToString uname
+        flds = F.toList (oneofFields oi)
+        caseAlt :: (ProtoName,FieldInfo) -> Alt
+        caseAlt (name,fi) = Alt src patt  (UnGuardedRhs rhs) noWhere
+          where fName@(Ident fname) = baseIdent' (fieldName fi)
+                patt = PApp (qualName name) [PVar fName]
+                rhs = pvar "tellT" $$ litStr fname $$ (lvar fname)
+                
 instanceMergeable :: DescriptorInfo -> Decl
 instanceMergeable di
     = InstDecl src Nothing [] [] (private "Mergeable") [TyCon un]

@@ -1,12 +1,12 @@
 message sample_message {
   oneof test_oneof { 
     string name = 1;
-    int32 age = 2;
-    sample_message tt = 8;
+    int32 age = 8;
+    sample_message tt = 2;
   }
  
-  required string key = 3;
-  optional int32 value = 4;
+  required string key = 4 ;
+  optional int32 value = 3;
 
   oneof newtest {
     string bar = 5;
