@@ -542,7 +542,9 @@ descriptorBootModule di
   = let protoName = descName di
         un = unqualName protoName
         classes = [prelude "Show",prelude "Eq",prelude "Ord",prelude "Typeable",prelude "Data"
-                  ,private "Mergeable",private "Default",private "Wire",private "GPB",private "ReflectDescriptor", private "TextType", private "TextMsg"]
+                  ,private "Mergeable",private "Default"
+                  -- ,private "Wire",private "GPB",private "ReflectDescriptor", private "TextType", private "TextMsg"
+                  ]
                   ++ if hasExt di then [private "ExtendMessage"] else []
                   ++ if storeUnknown di then [private "UnknownMessage"] else []
         instMesAPI = InstDecl src Nothing [] [] (private "MessageAPI")
@@ -555,7 +557,7 @@ descriptorBootModule di
         eabs = EAbs un
 #endif
     in Module src (ModuleName (fqMod protoName)) (modulePragmas $ makeLenses di) Nothing (Just [eabs]) minimalImports
-         (dataDecl : instMesAPI : map mkInst classes)
+         (dataDecl : {- instMesAPI : -} map mkInst classes)
 
 -- This builds on the output of descriptorBootModule and declares a hs-boot that
 -- declares the data type and the keys
@@ -746,12 +748,12 @@ instancesDescriptor di = map ($ di) $
    (if storeUnknown di then (instanceUnknownMessage:) else id) $
    [ instanceMergeable
    , instanceDefault
-   , instanceWireDescriptor
-   , instanceMessageAPI . descName
-   , instanceGPB . descName                 
-   , instanceReflectDescriptor
-   , instanceTextType
-   , instanceTextMsg
+   -- , instanceWireDescriptor
+   -- , instanceMessageAPI . descName
+   -- , instanceGPB . descName                 
+   -- , instanceReflectDescriptor
+   -- , instanceTextType
+   -- , instanceTextMsg
    ]
 
 instanceExtendMessage :: DescriptorInfo -> Decl
