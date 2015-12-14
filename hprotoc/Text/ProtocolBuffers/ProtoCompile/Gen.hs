@@ -280,13 +280,16 @@ modulePragmas templateHaskell =
 --------------------------------------------
 -- OneofDescriptorProto module creation
 --------------------------------------------
-oneofModule :: OneofInfo -> Module
-oneofModule oi
-  = let protoName = oneofName oi
-    in Module src (ModuleName (fqMod protoName)) (modulePragmas False) Nothing
-         Nothing
-         (standardImports True False False) (oneofDecls oi)
-         
+oneofModule :: Result -> OneofInfo -> Module
+oneofModule result oi
+  = Module src (ModuleName (fqMod protoName)) (modulePragmas False) Nothing
+         Nothing imports (oneofDecls oi)
+  where protoName = oneofName oi
+        typs = mapMaybe typeName . F.toList . fmap snd . oneofFields $ oi
+        imports = (standardImports False False (oneofMakeLenses oi))
+                  ++ (mergeImports (mapMaybe (importPN result (ModuleName (fqMod protoName)) Normal) typs))
+
+
 oneofDecls :: OneofInfo -> [Decl]
 oneofDecls oi = [oneofX oi]
 

@@ -279,7 +279,7 @@ run' o@(Output print' writeFile') options env fdps = do
         writeFile' file (prettyPrintStyleMode style myMode (enumModule ei))
       produceONO oi = do
         let file = joinPath . oneofFilePath $ oi
-        writeFile' file (prettyPrintStyleMode style myMode (oneofModule oi))
+        writeFile' file (prettyPrintStyleMode style myMode (oneofModule result oi))
   mapM_ produceMSG (messages protoInfo)
   mapM_ produceENM (enums protoInfo)
   mapM_ produceONO (oneofs protoInfo)
