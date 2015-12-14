@@ -589,6 +589,7 @@ descriptorNormalModule result di
         imports = (standardImports False (hasExt di) (makeLenses di) ++) . mergeImports . concat $
                     [ mapMaybe (importPN result m Normal) $
                         extendees' ++ mapMaybe typeName (myKeys' ++ (F.toList (fields di)))
+                        ++ map oneofName (F.toList (descOneofs di))
                     , mapMaybe (importPFN result m) (map fieldName (myKeys ++ F.toList (knownKeys di))) ]
         mkLenses = Var (Qual (ModuleName "Control.Lens.TH") (Ident "makeLenses"))
         lenses | makeLenses di = [SpliceDecl src (mkLenses $$ TypQuote (unqualName protoName))]
