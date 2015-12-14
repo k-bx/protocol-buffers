@@ -34,7 +34,8 @@ import Language.Haskell.Exts.Syntax as Hse
 import Data.Char(isLower,isUpper)
 import qualified Data.Map as M
 import Data.Maybe(mapMaybe)
-import qualified Data.Sequence as Seq(null,length,empty)
+import           Data.Sequence (ViewL(..))
+import qualified Data.Sequence as Seq(null,length,empty,viewl)
 import qualified Data.Set as S
 import System.FilePath(joinPath)
 
@@ -291,12 +292,12 @@ oneofModule result oi
 
 
 oneofDecls :: OneofInfo -> [Decl]
-oneofDecls oi = [oneofX oi]
+oneofDecls oi = map ($ oi) [oneofX, instanceDefaultOneof, instanceMergeableOneof]
 
 oneofX :: OneofInfo -> Decl
 oneofX oi = DataDecl src DataType [] (baseIdent (oneofName oi)) []
               (map oneofValueX (F.toList (oneofFields oi) ))
-              []
+              derives
   where oneofValueX (pname,fi) = QualConDecl src [] [] con 
           where con = RecDecl (baseIdent pname) [fieldX]
                 fieldX = ([baseIdent' . fieldName $ fi], TyParen (TyCon typed ))
@@ -305,7 +306,26 @@ oneofX oi = DataDecl src DataType [] (baseIdent (oneofName oi)) []
                           Nothing -> case typeName fi of
                                        Just s -> qualName s
                                        Nothing -> imp $ "No Name for Field!\n" ++ show fi
-                         
+
+{- oneof field does not have to have a default value, but for convenience
+   (to make all messages an instance of Default and Mergeable), we make
+   the first case as default like enum. -}
+
+instanceDefaultOneof :: OneofInfo -> Decl
+instanceDefaultOneof oi
+    =  InstDecl src Nothing [] [] (private "Default") [TyCon (unqualName (oneofName oi))]
+      [ inst "defaultValue" [] firstValue ]
+  where firstValue :: Exp
+        firstValue = case Seq.viewl (oneofFields oi) of
+                       EmptyL -> imp ("instanceDefaultOneof: empty in " ++ show oi)
+                       (n,_) :< _ -> case (baseIdent n) of
+                                       Ident str -> App (lcon str) (pvar "defaultValue")
+                                       Symbol _ -> imp ("instanceDefaultOneof: " ++ show n)
+
+instanceMergeableOneof :: OneofInfo -> Decl
+instanceMergeableOneof oi 
+  = InstDecl src Nothing [] [] (private "Mergeable") [TyCon (unqualName (oneofName oi))] []
+
 
 
 
@@ -817,7 +837,7 @@ instanceMergeable di
   where un = unqualName (descName di)
         len = (if hasExt di then succ else id)
             $ (if storeUnknown di then succ else id)
-            $ Seq.length (fields di)
+            $ Seq.length (fields di) + Seq.length (descOneofs di)
         patternVars1,patternVars2 :: [Pat]
         patternVars1 = take len inf
             where inf = map (\ n -> patvar ("x'" ++ show n)) [(1::Int)..]
@@ -837,7 +857,8 @@ instanceDefault di
   where un = unqualName (descName di)
         deflistExt = F.foldr ((:) . defX) end (fields di)
         end = (if hasExt di then (pvar "defaultValue":) else id) 
-            $ (if storeUnknown di then [pvar "defaultValue"] else [])
+            . (if storeUnknown di then (pvar "defaultValue":) else id)
+            $ F.foldr ((:) . defOneof) [] (descOneofs di)  
 
         defX :: FieldInfo -> Exp
         defX fi | isRequired fi = dv1
@@ -848,6 +869,9 @@ instanceDefault di
                 dv2 = case hsDefault fi of
                         Nothing -> pvar "defaultValue"
                         Just hsdef -> Paren $ preludecon "Just" $$ defToSyntax (typeCode fi) hsdef
+        defOneof :: OneofInfo -> Exp
+        defOneof oi= pvar "defaultValue"
+
 
 instanceMessageAPI :: ProtoName -> Decl
 instanceMessageAPI protoName
