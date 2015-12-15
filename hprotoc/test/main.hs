@@ -17,7 +17,7 @@ testmsg = Sample_message { key = uFromString "key"
                          , value = Just 30
                          , users = Seq.fromList [ User 30 (Just (uFromString "hello")) Nothing ]
                          , mytest = Nothing
-                         , test_oneof = Age 38
+                         , test_oneof = Just (Age 38)
                          , newtest = defaultValue
                          }
 

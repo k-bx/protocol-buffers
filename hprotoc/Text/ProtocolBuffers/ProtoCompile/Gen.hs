@@ -772,7 +772,7 @@ descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] de
                                               | otherwise -> unqualName s
                                        Nothing -> error $  "No Name for Field!\n" ++ show fi
         fieldOneofX :: OneofInfo -> ([Name],Type)
-        fieldOneofX oi = ([baseIdent' . oneofFName $ oi], TyParen (TyCon typed))
+        fieldOneofX oi = ([baseIdent' . oneofFName $ oi], typeApp "Maybe" (TyParen (TyCon typed)))
           where typed = qualName (oneofName oi)
 
 instancesDescriptor :: DescriptorInfo -> [Decl]
@@ -875,7 +875,7 @@ instanceTextMsg di
                         getOneofField n f =
                           let Ident oname = baseIdent' (oneofFName o)
                               printname = toPrintName f
-                              update = Con (qualName n) $$ lvar "v"
+                              update = preludecon "Just" $$ Paren (Con (qualName n) $$ lvar "v")
                           in pvar "try" $$ Do [
                                Generator src (patvar "v") $ pvar "getT" $$ litStr printname,
                                Qualifier $ (preludevar "return")
@@ -897,7 +897,7 @@ toPrintName fi = let IName uname = last $ splitFI $ protobufName' (fieldName fi)
 
 printOneof :: String -> OneofInfo -> Exp
 printOneof msgVar oi
-    = Case (Paren (lvar funcname $$ lvar msgVar)) (map caseAlt flds)
+    = Case (Paren (lvar funcname $$ lvar msgVar)) (map caseAlt flds ++ [caseAltNothing])
   where Ident funcname = baseIdent' (oneofFName oi)
         IName uname = last $ splitFI $ protobufName' (oneofFName oi)
         printname = uToString uname
@@ -905,9 +905,11 @@ printOneof msgVar oi
         caseAlt :: (ProtoName,FieldInfo) -> Alt
         caseAlt (name,fi) = Alt src patt  (UnGuardedRhs rhs) noWhere
           where fName@(Ident fname) = baseIdent' (fieldName fi)
-                patt = PApp (qualName name) [PVar fName]
+                patt = PApp (prelude "Just") [PParen (PApp (qualName name) [PVar fName])]
                 rhs = pvar "tellT" $$ litStr fname $$ (lvar fname)
-                
+        caseAltNothing :: Alt
+        caseAltNothing = Alt src (PApp (prelude "Nothing") []) (UnGuardedRhs rhs) noWhere
+          where rhs = preludevar "return" $$ unit_con
 instanceMergeable :: DescriptorInfo -> Decl
 instanceMergeable di
     = InstDecl src Nothing [] [] (private "Mergeable") [TyCon un]
