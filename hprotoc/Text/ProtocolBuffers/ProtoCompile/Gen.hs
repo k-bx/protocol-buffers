@@ -62,6 +62,15 @@ noWhere :: Binds
 noWhere = BDecls []
 #endif
 
+#if MIN_VERSION_haskell_src_exts(1, 17, 0)
+whereBinds :: Binds -> Maybe Binds
+whereBinds = Just
+#else
+whereBinds :: Binds -> Binds
+whereBinds = id
+#endif
+
+
 ($$) :: Exp -> Exp -> Exp
 ($$) = App
 
@@ -880,9 +889,9 @@ instanceTextMsg di
       ]
   where
 #if MIN_VERSION_haskell_src_exts(1, 17, 0)
-        bdecls = Just (BDecls subparsers)
+        bdecls = Just (BDecls (subparsers ++ subparsersO))
 #else
-        bdecls = BDecls subparsers
+        bdecls = BDecls (subparsers ++ subparsersO)
 #endif
         flds = F.toList (fields di)
         os = F.toList (descOneofs di)
@@ -896,11 +905,11 @@ instanceTextMsg di
                    else Do $ genPrintFields ++ genPrintOneofs
                    
         parser
-            | Seq.null (fields di) = preludevar "return" $$ pvar "defaultValue"
+            | null flds && null os = preludevar "return" $$ pvar "defaultValue"
             | otherwise = Do [
                 Generator src (patvar "mods") 
                     $ pvar "sepEndBy" 
-                        $$ Paren (pvar "choice" $$ List (map (lvar . parserName) flds)) 
+                        $$ Paren (pvar "choice" $$ List (map (lvar . parserName) flds ++ map (lvar . parserNameO) os))
                         $$ pvar "spaces",
                 Qualifier $ (preludevar "return")
                     $$ Paren (preludevar "foldl"
@@ -909,6 +918,7 @@ instanceTextMsg di
                         $$ lvar "mods")
              ]
         parserName f = let Ident fname = baseIdent' (fieldName f) in "parse'" ++ fname
+        parserNameO o = let Ident oname = baseIdent' (oneofFName o) in "parse'" ++ oname
         subparsers = map (\f -> defun (parserName f) [] (getField f)) flds
         getField fi = let printname = toPrintName fi
                           Ident funcname = baseIdent' (fieldName fi)
@@ -919,6 +929,27 @@ instanceTextMsg di
                     $$ Paren (Lambda src [patvar "o"]
                         (RecUpdate (lvar "o") [ FieldUpdate (local funcname) update]))
             ]
+                     
+        subparsersO = map funbind os
+        funbind o = FunBind [Match src (Ident (parserNameO o)) [] Nothing (UnGuardedRhs (getOneof)) whereParse]
+          where getOneof = pvar "try" $$
+                             (pvar "choice" $$ List (map (Var . UnQual . Ident) parsefs))
+                oflds = F.toList (oneofFields o)
+                flds = map snd oflds
+                parsefs = map parserName flds
+                whereParse = whereBinds $ BDecls (map decl oflds)
+                  where decl (n,f) = defun (parserName f) [] (getOneofField n f)
+                        getOneofField n f =
+                          let Ident oname = baseIdent' (oneofFName o)
+                              printname = toPrintName f
+                              update = Con (qualName n) $$ lvar "v"
+                          in pvar "try" $$ Do [
+                               Generator src (patvar "v") $ pvar "getT" $$ litStr printname,
+                               Qualifier $ (preludevar "return")
+                               $$ Paren (Lambda src [patvar "s"]
+                                (RecUpdate (lvar "s") [ FieldUpdate (local oname) update]))
+                               ]
+
 
 
 printField :: String -> FieldInfo -> Exp
