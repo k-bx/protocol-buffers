@@ -34,7 +34,7 @@ import Language.Haskell.Exts.Syntax as Hse
 import Data.Char(isLower,isUpper)
 import qualified Data.Map as M
 import Data.Maybe(mapMaybe)
-import           Data.Sequence (ViewL(..))
+import           Data.Sequence (ViewL(..),(><))
 import qualified Data.Sequence as Seq(null,length,empty,viewl)
 import qualified Data.Set as S
 import System.FilePath(joinPath)
@@ -298,6 +298,31 @@ mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix pa
     then UnQual (baseIdent' name) -- name is local, make UnQual
     else qualFName name           -- name is imported, make Qual
 
+
+--------------------------------------------
+-- utility for OneofInfo
+--------------------------------------------
+
+oneofCon :: (ProtoName,FieldInfo) -> Exp
+oneofCon (name,_) = Con (qualName name)
+
+oneofPat :: (ProtoName,FieldInfo) -> (Pat,Pat)
+oneofPat (name,fi) =
+  let fName@(Ident fname) = baseIdent' (fieldName fi)
+  in (PApp (qualName name) [PVar fName],PApp (unqualName name) [PVar fName]) 
+
+oneofRec :: (ProtoName,FieldInfo) -> (Exp,Exp)
+oneofRec (_,fi) =
+  let fName@(Ident fname) = baseIdent' (fieldName fi)
+  in (litStr fname,lvar fname)
+
+oneofGet :: (ProtoName,FieldInfo) -> String
+oneofGet (_,fi) =
+  let Ident fname = baseIdent' (fieldName fi)
+  in "get'" ++ fname
+
+
+
 --------------------------------------------
 -- Define LANGUAGE options as [ModulePramga]
 --------------------------------------------
@@ -323,10 +348,10 @@ oneofModule result oi
 
 
 oneofDecls :: OneofInfo -> [Decl]
-oneofDecls oi = map ($ oi) [ oneofX
-                           , instanceDefaultOneof
-                           , instanceMergeableOneof
-                           ]
+oneofDecls oi = (oneofX oi : oneofFuncs oi) ++
+                  [ instanceDefaultOneof oi
+                  , instanceMergeableOneof oi
+                  ]
 
 oneofX :: OneofInfo -> Decl
 oneofX oi = DataDecl src DataType [] (baseIdent (oneofName oi)) []
@@ -340,6 +365,18 @@ oneofX oi = DataDecl src DataType [] (baseIdent (oneofName oi)) []
                           Nothing -> case typeName fi of
                                        Just s -> qualName s
                                        Nothing -> imp $ "No Name for Field!\n" ++ show fi
+
+oneofFuncs :: OneofInfo -> [Decl]
+oneofFuncs oi = map mkfuns (F.toList (oneofFields oi))
+  where mkfuns f = defun (oneofGet f) [patvar "x"] $
+                     Case (lvar "x")
+                       [ Alt src (snd (oneofPat f))
+                         (UnGuardedRhs (preludecon "Just" $$ snd (oneofRec f))) noWhere
+                       , Alt src PWildCard
+                         (UnGuardedRhs (preludecon "Nothing")) noWhere
+                       ] 
+
+
 
 {- oneof field does not have to have a default value, but for convenience
    (to make all messages an instance of Default and Mergeable), we make
@@ -871,11 +908,11 @@ instanceTextMsg di
                 flds = map snd oflds
                 parsefs = map parserName flds
                 whereParse = whereBinds $ BDecls (map decl oflds)
-                  where decl (n,f) = defun (parserName f) [] (getOneofField n f)
-                        getOneofField n f =
+                  where decl (n,f) = defun (parserName f) [] (getOneofField (n,f))
+                        getOneofField p@(n,f) =
                           let Ident oname = baseIdent' (oneofFName o)
                               printname = toPrintName f
-                              update = preludecon "Just" $$ Paren (Con (qualName n) $$ lvar "v")
+                              update = preludecon "Just" $$ Paren (oneofCon p $$ lvar "v")
                           in pvar "try" $$ Do [
                                Generator src (patvar "v") $ pvar "getT" $$ litStr printname,
                                Qualifier $ (preludevar "return")
@@ -884,12 +921,10 @@ instanceTextMsg di
                                ]
 
 
-
 printField :: String -> FieldInfo -> Exp
 printField msgVar fi
   = let Ident funcname = baseIdent' (fieldName fi)
         printname = toPrintName fi
-        
     in pvar "tellT" $$ litStr printname $$ Paren (lvar funcname $$ lvar msgVar)
 
 toPrintName :: FieldInfo -> String
@@ -903,13 +938,14 @@ printOneof msgVar oi
         printname = uToString uname
         flds = F.toList (oneofFields oi)
         caseAlt :: (ProtoName,FieldInfo) -> Alt
-        caseAlt (name,fi) = Alt src patt  (UnGuardedRhs rhs) noWhere
-          where fName@(Ident fname) = baseIdent' (fieldName fi)
-                patt = PApp (prelude "Just") [PParen (PApp (qualName name) [PVar fName])]
-                rhs = pvar "tellT" $$ litStr fname $$ (lvar fname)
+        caseAlt f = Alt src patt  (UnGuardedRhs rhs) noWhere
+          where patt = PApp (prelude "Just") [fst (oneofPat f)]
+                (rstr,rvar) = oneofRec f
+                rhs = pvar "tellT" $$ rstr $$ rvar -- litStr fname $$ (lvar fname)
         caseAltNothing :: Alt
         caseAltNothing = Alt src (PApp (prelude "Nothing") []) (UnGuardedRhs rhs) noWhere
           where rhs = preludevar "return" $$ unit_con
+
 instanceMergeable :: DescriptorInfo -> Decl
 instanceMergeable di
     = InstDecl src Nothing [] [] (private "Mergeable") [TyCon un]
@@ -966,13 +1002,14 @@ instanceMessageAPI protoName
 instanceWireDescriptor :: DescriptorInfo -> Decl
 instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                           , fields = fieldInfos
+                                          , descOneofs = oneofInfos
                                           , extRanges = allowedExts
                                           , knownKeys = fieldExts })
   = let me = unqualName protoName
         extensible = not (null allowedExts)
         len = (if extensible then succ else id) 
             $ (if storeUnknown di then succ else id)
-            $ Seq.length fieldInfos
+            $ Seq.length fieldInfos + Seq.length oneofInfos
         mine = PApp me . take len . map (\ n -> patvar ("x'" ++ show n)) $ [(1::Int)..]
         vars = take len . map (\ n -> lvar ("x'" ++ show n)) $ [(1::Int)..]
         mExt | extensible = Just (vars !! Seq.length fieldInfos)
@@ -1003,14 +1040,25 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                           | otherwise = sizesListExt
                 sizesListExt | Just v <- mExt = sizesListFields ++ [ pvar "wireSizeExtField" $$ v ] 
                              | otherwise = sizesListFields
-                sizesListFields =  zipWith toSize vars . F.toList $ fieldInfos
-        toSize var fi = let f = if isPacked fi then "wireSizePacked"
-                                  else if isRequired fi then "wireSizeReq"
-                                         else if canRepeat fi then "wireSizeRep"
-                                                else "wireSizeOpt"
-                        in foldl' App (pvar f) [ litInt (wireTagLength fi)
-                                                 , litInt (getFieldType (typeCode fi))
-                                                 , var]
+                sizesListFields =  concat . zipWith toSize vars . F.toList $
+                                     fmap Left fieldInfos >< fmap Right oneofInfos
+        toSize var (Left fi)
+          = let f = if isPacked fi then "wireSizePacked"
+                    else if isRequired fi then "wireSizeReq"
+                         else if canRepeat fi then "wireSizeRep"
+                              else "wireSizeOpt"
+            in [foldl' App (pvar f) [ litInt (wireTagLength fi)
+                                    , litInt (getFieldType (typeCode fi))
+                                    , var]]
+        toSize var (Right oi) = map (toSize' var) . F.toList . oneofFields $ oi
+          where toSize' var r@(n,fi)
+                  = let f = "wireSizeOpt"
+                        rc = oneofRec r
+                        var' = snd rc $$ var
+                    in foldl' App (pvar f) [ litInt (wireTagLength fi)
+                                           , litInt (getFieldType (typeCode fi))
+                                           , var']
+
 
 -- wirePut generation
         putCases = UnGuardedRhs $ cases
