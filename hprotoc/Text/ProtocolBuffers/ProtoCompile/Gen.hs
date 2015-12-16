@@ -1084,7 +1084,6 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                 | otherwise = sortedPutStmtsList
                 sortedPutStmtsList = map snd                                          -- remove number
                                      . sortBy (compare `on` fst)                      -- sort by number
-                                     -- . zip [1..] {- (map fieldNumber . F.toList $ fieldInfos) -}  -- add number as fst
                                      $ putStmtsList
                 putStmtsList = concat . zipWith toPut vars . F.toList $
                                  fmap Left fieldInfos >< fmap Right oneofInfos
@@ -1107,7 +1106,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                        ,Qualifier $
                           foldl' App (pvar f) [ litInt (getWireTag (wireTag fi))
                                               , litInt (getFieldType (typeCode fi))
-                                              , var]
+                                              , var']
                        )
 
 -- wireGet generation
