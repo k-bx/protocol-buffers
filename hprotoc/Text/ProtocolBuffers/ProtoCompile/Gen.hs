@@ -1126,6 +1126,10 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                 (Case (lvar "wire'Tag") updateAlts)
         -- update cases are all normal fields then all known extensions then wildcard
         updateAlts = concatMap toUpdate (F.toList fieldInfos)
+                     ++ (do -- in list monad
+                          o <- F.toList oneofInfos
+                          f <- F.toList (oneofFields o)
+                          toUpdateO o f)
                      ++ (if extensible then concatMap toUpdateExt (F.toList fieldExts) else [])
                      ++ [Alt src PWildCard (UnGuardedRhs wildcardAlt) noWhere]
         -- the wildcard alternative handles new extensions and 
@@ -1171,6 +1175,9 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
 -- wireGet without extensions
         toUpdate fi | Just (wt1,wt2) <- packedTag fi = [toUpdateUnpacked wt1 fi, toUpdatePacked wt2 fi]
                     | otherwise                      = [toUpdateUnpacked (wireTag fi) fi]
+
+
+
         toUpdateUnpacked wt1 fi =
           Alt src (litIntP . getWireTag $ wt1) (UnGuardedRhs $ 
             preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
@@ -1203,6 +1210,42 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         -- knowledge that only TYPE_MESSAGE and TYPE_GROUP have merges
         -- that are not right-biased replacements.  The "mergeAppend" uses
         -- knowledge of how all repeated fields get merged.
+
+
+        -- for fields in OneofInfo
+        toUpdateO oi f@(_n,fi)
+          | Just (wt1,wt2) <- packedTag fi = [toUpdateUnpackedO oi wt1 f, toUpdatePackedO oi wt2 f] 
+          | otherwise                      = [toUpdateUnpackedO oi (wireTag fi) f]
+
+        toUpdateUnpackedO oi wt1 f@(_,fi) =
+          Alt src (litIntP . getWireTag $ wt1) (UnGuardedRhs $ 
+            preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
+                              RecUpdate (lvar "old'Self")
+                                        [FieldUpdate (unqualFName . oneofFName $ oi)
+                                                     (labelUpdateUnpackedO oi f)])
+                        $$ (Paren (pvar "wireGet" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
+        labelUpdateUnpackedO oi f@(_,fi) = qMerge (preludecon "Just" $$
+                                               (oneofCon f $$ lvar "new'Field")
+                                            )
+            where qMerge x | fromIntegral (getFieldType (typeCode fi)) `elem` [10,(11::Int)] =
+                               pvar "mergeAppend" $$ Paren ( (Var . unqualFName . oneofFName $ oi)
+                                                               $$ lvar "old'Self" )
+                                                  $$ Paren x
+                           | otherwise = x
+        toUpdatePackedO oi wt2 f@(_,fi) =
+          Alt src (litIntP . getWireTag $ wt2) (UnGuardedRhs $ 
+            preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
+                              RecUpdate (lvar "old'Self")
+                                        [FieldUpdate (unqualFName . oneofFName $ oi)
+                                                     (labelUpdatePackedO oi f)])
+                        $$ (Paren (pvar "wireGetPacked" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
+        labelUpdatePackedO oi f@(_,fi) = pvar "mergeAppend" $$ Paren ((Var . unqualFName . oneofFName $ oi)
+                                                                 $$ lvar "old'Self")
+                                                  $$ Paren (preludecon "Just" $$
+                                                              (oneofCon f $$ lvar "new'Field"))
+ 
+
+
 
     in InstDecl src Nothing [] [] (private "Wire") [TyCon me] . map InsDecl $
         [ FunBind [Match src (Ident "wireSize") [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] Nothing sizeCases whereCalcSize]
