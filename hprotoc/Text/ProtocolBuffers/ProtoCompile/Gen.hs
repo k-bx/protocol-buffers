@@ -1084,17 +1084,32 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                 | otherwise = sortedPutStmtsList
                 sortedPutStmtsList = map snd                                          -- remove number
                                      . sortBy (compare `on` fst)                      -- sort by number
-                                     . zip (map fieldNumber . F.toList $ fieldInfos)  -- add number as fst
+                                     -- . zip [1..] {- (map fieldNumber . F.toList $ fieldInfos) -}  -- add number as fst
                                      $ putStmtsList
-                putStmtsList = zipWith toPut vars . F.toList $ fieldInfos
-        toPut var fi = let f = if isPacked fi then "wirePutPacked"
-                                 else if isRequired fi then "wirePutReq"
-                                        else if canRepeat fi then "wirePutRep"
-                                               else "wirePutOpt"
-                       in Qualifier $
+                putStmtsList = concat . zipWith toPut vars . F.toList $
+                                 fmap Left fieldInfos >< fmap Right oneofInfos
+        toPut var (Left fi)
+          = let f = if isPacked fi then "wirePutPacked"
+                    else if isRequired fi then "wirePutReq"
+                         else if canRepeat fi then "wirePutRep"
+                              else "wirePutOpt"
+            in [(fieldNumber fi,
+                 Qualifier $
+                   foldl' App (pvar f) [ litInt (getWireTag (wireTag fi))
+                                       , litInt (getFieldType (typeCode fi))
+                                       , var]
+                 )]
+        toPut var (Right oi) = map (toPut' var) . F.toList . oneofFields $ oi
+          where toPut' var r@(n,fi)
+                  = let f = "wirePutOpt"
+                        var' = mkOp "Prelude'.=<<" (Var (qualName (snd (oneofGet r)))) var
+                    in (fieldNumber fi
+                       ,Qualifier $
                           foldl' App (pvar f) [ litInt (getWireTag (wireTag fi))
-                                                , litInt (getFieldType (typeCode fi))
-                                                , var]
+                                              , litInt (getFieldType (typeCode fi))
+                                              , var]
+                       )
+
 -- wireGet generation
 -- new for 1.5.7, rewriting this a great deal!
         getCases = let param = if storeUnknown di
