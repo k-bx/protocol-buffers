@@ -231,23 +231,27 @@ importPFN r m@(ModuleName self) pfn =
      ans
 
 
-importPNO :: Result -> ModuleName -> Part -> ProtoName -> Maybe [ImportDecl]
-importPNO r selfMod@(ModuleName self) part pn =
-  let o = pKey pn
+importO :: Result -> ModuleName -> Part -> OneofInfo -> Maybe [ImportDecl]
+importO r selfMod@(ModuleName self) part oi =
+  let pn = oneofName oi
+      o = pKey pn
       m1 = ModuleName (joinMod (haskellPrefix pn ++ parentModule pn ++ [baseName pn]))
       m2 = ModuleName (joinMod (parentModule pn))
       m3 = ModuleName (joinMod (parentModule pn ++ [baseName pn]))      
       fromSource = S.member (FMName self,part,o) (rIBoot r)
 #if MIN_VERSION_haskell_src_exts(1, 17, 0)
       iabs1 = IAbs NoNamespace (Ident (mName (baseName pn)))
+      iabsget = map (IAbs NoNamespace . Ident . fst . oneofGet) . F.toList .  oneofFields $ oi
 #else
       iabs1 = IAbs (Ident (mName (baseName pn)))
+      iabsget = map (IAbs . Ident . fst . oneofGet) . F.toList . oneofFields $ oi
 #endif
-      iabs2 = IThingAll (Ident (mName (baseName pn)))
+      ithall = IThingAll (Ident (mName (baseName pn)))
+              
       ans1 =  ImportDecl src m1 True fromSource False Nothing (Just m2)
                 (Just (False,[iabs1]))
       ans2 =  ImportDecl src m1 True fromSource False Nothing (Just m3)
-                (Just (False,[iabs2]))
+                (Just (False,ithall:iabsget))
   in  if m1 == selfMod && part /= KeyFile
         then Nothing
         else Just [ans1,ans2]
@@ -316,12 +320,12 @@ oneofRec (_,fi) =
   let fName@(Ident fname) = baseIdent' (fieldName fi)
   in (litStr fname,lvar fname)
 
-oneofGet :: (ProtoName,FieldInfo) -> String
-oneofGet (_,fi) =
+oneofGet :: (ProtoName,FieldInfo) -> (String,ProtoName)
+oneofGet (p,fi) =
   let Ident fname = baseIdent' (fieldName fi)
-  in "get'" ++ fname
-
-
+      unqual = "get'" ++ fname
+      p' = p { baseName = MName unqual }
+  in (unqual,p')
 
 --------------------------------------------
 -- Define LANGUAGE options as [ModulePramga]
@@ -368,7 +372,7 @@ oneofX oi = DataDecl src DataType [] (baseIdent (oneofName oi)) []
 
 oneofFuncs :: OneofInfo -> [Decl]
 oneofFuncs oi = map mkfuns (F.toList (oneofFields oi))
-  where mkfuns f = defun (oneofGet f) [patvar "x"] $
+  where mkfuns f = defun (fst (oneofGet f)) [patvar "x"] $
                      Case (lvar "x")
                        [ Alt src (snd (oneofPat f))
                          (UnGuardedRhs (preludecon "Just" $$ snd (oneofRec f))) noWhere
@@ -612,7 +616,7 @@ descriptorBootModule di
         un = unqualName protoName
         classes = [prelude "Show",prelude "Eq",prelude "Ord",prelude "Typeable",prelude "Data"
                   ,private "Mergeable",private "Default"
-                  -- ,private "Wire",private "GPB",private "ReflectDescriptor"
+                  ,private "Wire",private "GPB",private "ReflectDescriptor"
                   , private "TextType", private "TextMsg"
                   ]
                   ++ if hasExt di then [private "ExtendMessage"] else []
@@ -627,7 +631,7 @@ descriptorBootModule di
         eabs = EAbs un
 #endif
     in Module src (ModuleName (fqMod protoName)) (modulePragmas $ makeLenses di) Nothing (Just [eabs]) minimalImports
-         (dataDecl : {- instMesAPI : -} map mkInst classes)
+         (dataDecl : instMesAPI : map mkInst classes)
 
 -- This builds on the output of descriptorBootModule and declares a hs-boot that
 -- declares the data type and the keys
@@ -681,7 +685,7 @@ descriptorNormalModule result di
         imports = (standardImports False (hasExt di) (makeLenses di) ++) . mergeImports . concat $
                     [ mapMaybe (importPN result m Normal) $
                         extendees' ++ mapMaybe typeName (myKeys' ++ (F.toList (fields di)))
-                    , concat . mapMaybe (importPNO result m Normal) $ map oneofName (F.toList (descOneofs di))
+                    , concat . mapMaybe (importO result m Normal) $ F.toList (descOneofs di)
                     , mapMaybe (importPFN result m) (map fieldName (myKeys ++ F.toList (knownKeys di))) ]
         mkLenses = Var (Qual (ModuleName "Control.Lens.TH") (Ident "makeLenses"))
         lenses | makeLenses di = [SpliceDecl src (mkLenses $$ TypQuote (unqualName protoName))]
@@ -818,10 +822,10 @@ instancesDescriptor di = map ($ di) $
    (if storeUnknown di then (instanceUnknownMessage:) else id) $
    [ instanceMergeable
    , instanceDefault
-   -- , instanceWireDescriptor
-   -- , instanceMessageAPI . descName
-   -- , instanceGPB . descName                 
-   -- , instanceReflectDescriptor
+   , instanceWireDescriptor
+   , instanceMessageAPI . descName
+   , instanceGPB . descName                 
+   , instanceReflectDescriptor
    , instanceTextType
    , instanceTextMsg
    ]
@@ -1053,8 +1057,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         toSize var (Right oi) = map (toSize' var) . F.toList . oneofFields $ oi
           where toSize' var r@(n,fi)
                   = let f = "wireSizeOpt"
-                        rc = oneofRec r
-                        var' = snd rc $$ var
+                        var' = mkOp "Prelude'.=<<" (Var (qualName (snd (oneofGet r)))) var
                     in foldl' App (pvar f) [ litInt (wireTagLength fi)
                                            , litInt (getFieldType (typeCode fi))
                                            , var']
