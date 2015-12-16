@@ -36,13 +36,10 @@ int main1(int argc, char* argv[])
 
   cout << data << endl;
    
-  
-
-  
 }
 
 
-int main(int argc, char* argv[])
+int main2(int argc, char* argv[])
 {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -64,6 +61,53 @@ int main(int argc, char* argv[])
   google::protobuf::TextFormat::PrintToString( *a , &text );
 
   cout << text << endl;
-  
     
+}
+
+
+int main3(int argc, char* argv[])
+{
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  if( argc != 2 ) {
+    cerr << "Usage: " << argv[0] << " File" << endl;
+  }
+
+  sample_message a;
+
+  
+  fstream input(argv[1], ios::in | ios::binary);
+  a.ParseFromIstream(&input);
+
+  string text; 
+  google::protobuf::TextFormat::PrintToString( a , &text );
+
+  cout << text << endl;
+  
+  
+}
+
+int main(int argc, char* argv[])
+{
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  if( argc != 3 ) {
+    cerr << "Usage: " << argv[0] << " inFile outFile" << endl;
+  }
+
+  sample_message *a = new sample_message();
+  ifstream input;
+  input.open(argv[1]);
+
+  int fileDescriptor = open(argv[1],O_RDONLY);
+  google::protobuf::io::FileInputStream fileInput( fileDescriptor );
+  // string data(istreambuf_iterator<char>(input), istreambuf_iterator< char>() );
+  
+  google::protobuf::TextFormat::Parse(&fileInput, a ) ;
+
+
+  fstream output( argv[2], ios::out | ios::trunc | ios::binary );
+  a->SerializeToOstream(&output);
+  
+ 
 }

@@ -1,9 +1,12 @@
+import qualified Data.ByteString.Lazy.Char8 as LB
 import qualified Data.Sequence as Seq
 import System.Environment
 import System.IO
 --
+import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Header
 import Text.ProtocolBuffers.TextMessage
+import Text.ProtocolBuffers.WireMessage
 -- 
 import Sample.Sample
 import Sample.Sample.Sample_message
@@ -22,9 +25,19 @@ testmsg = Sample_message { key = uFromString "key"
                          }
 
 
-main = do
-  let encoded = messagePutText testmsg
-      decoded = messageGetText encoded :: Either String Sample_message
-  putStrLn encoded
+main' = do
+  let encoded = messagePut testmsg
+      decoded = messageGet encoded :: Either String (Sample_message,LB.ByteString)
+  -- putStrLn encoded
   print decoded
 
+  LB.writeFile "binarytest.dat" encoded
+
+
+main = do
+  let fn = args !! 0
+  lbstr <- LB.readFile fn
+  let m = messageGet lbstr :: Either String (Sample_message,LB.ByteString)
+  print m
+
+ 
