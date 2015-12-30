@@ -44,8 +44,6 @@ import qualified Text.Google.Protobuf.Compiler.CodeGeneratorResponse.File as CGR
 import Paths_hprotoc(version)
 
 
-import Debug.Trace
-
 data Options = Options { optPrefix :: [MName String]
                        , optAs :: [(CanonFP,[MName String])]
                        , optTarget :: LocalFP
@@ -221,7 +219,6 @@ data Output m = Output {
 runStandalone :: Options -> IO ()
 runStandalone options = do
   (env,fdps) <- loadProto (optInclude options) (optProto options)
-  -- print fdps -- DEBUG
   putStrLn "All proto files loaded"
   run' standaloneMode options env fdps where
     standaloneMode :: Output IO

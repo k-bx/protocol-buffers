@@ -39,8 +39,6 @@ import qualified Data.Sequence as Seq(null,length,empty,viewl)
 import qualified Data.Set as S
 import System.FilePath(joinPath)
 
---import Debug.Trace(trace)
-
 ecart :: String -> a -> a
 ecart _ x = x
 

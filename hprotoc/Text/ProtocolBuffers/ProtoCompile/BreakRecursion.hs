@@ -236,9 +236,8 @@ makeResult protoInfo =
                     , "! PLEASE REPORT THIS FAILURE ALONG WITH THE PROTO FILE."
                     , "! The failed subset is:"
                     ] ++ showSCCs remainingProblems ++ "\n</!!!!!!!!!!!>"
-  in trace (show pvs) $ -- (show initResult) $
-       if null remainingProblems then ecart (showG finalGraph) answer
-       else trace msg answer
+  in if null remainingProblems then ecart (showG finalGraph) answer
+     else trace msg answer
 
 -- Build the graph using the vertices and the Result so far.
 makeG :: [V] -> Result -> G
