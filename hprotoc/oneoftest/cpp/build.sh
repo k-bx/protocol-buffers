@@ -1,4 +1,6 @@
-protoc --proto_path=.. --cpp_out=. ../sample.proto
-g++ -c main.cc `pkg-config --cflags protobuf`
-g++ -c sample.pb.cc `pkg-config --cflags protobuf`
-g++ -o main main.o sample.pb.o `pkg-config --libs protobuf`
+protoc --proto_path=.. --cpp_out=. school.proto
+g++ -c encode.cc `pkg-config --cflags protobuf`
+g++ -c decode.cc `pkg-config --cflags protobuf`
+g++ -c school.pb.cc `pkg-config --cflags protobuf`
+g++ -o encode encode.o school.pb.o `pkg-config --libs protobuf`
+g++ -o decode decode.o school.pb.o `pkg-config --libs protobuf`
