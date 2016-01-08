@@ -310,7 +310,7 @@ source codes. Assuming we run `hprotoc` on the `oneoftest` directory and generat
 source code in `hs` directory: 
 
 ```
-> hprotoc --proto_path=. --haskell_out=hs school.proto
+oneoftest> hprotoc --proto_path=. --haskell_out=hs school.proto
 ```
 
 We will have `School.Member` module which defines `Member` by
@@ -345,18 +345,18 @@ library and `pkg-config`. We assume that `hprotoc` was already executed as shown
 
 Here are examples.
 ```
-hs $ ./encode serialized.dat
-hs $ cd ../cpp
-cpp$ ./decode ../hs/serialized.dat
+hs >   ./encode serialized.dat
+hs >   cd ../cpp
+cpp>   ./decode ../hs/serialized.dat
 
 
 
 ```
 
 ```
-cpp$ ./encode serialized.dat
-cpp$ cd ../hs
-hs $ ./decode ../cpp/serialized.dat
+cpp>   ./encode serialized.dat
+cpp>   cd ../hs
+hs >   ./decode ../cpp/serialized.dat
 
 
 ```

@@ -1,0 +1,29 @@
+message dormitory {
+  required string name = 1;
+  repeated member members = 2;
+}
+
+message member {
+  required int32 id      = 1;
+  required string name   = 2;
+  
+  oneof property {
+    student prop_student = 3;
+    faculty prop_faculty = 4;
+    admin   prop_admin   = 5;
+  }
+
+  message student {
+    required int32  grade     = 1;    
+    optional string specialty = 2; 
+  }
+  message faculty {
+    required string subject   = 1;
+    optional string title     = 2;
+    repeated string duty      = 3;
+  }
+  message admin {
+    required string title     = 1;
+  }
+
+}
