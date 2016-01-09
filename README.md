@@ -292,8 +292,9 @@ which is passed to "run". The output style can be tweaked by changing
 New oneof implementation
 ------------------------
 
-Since protocol-buffers version 2.6, the upstream protocol-buffers library
-and too support oneof keyword, which is a union of different data types.
+Since `protocol-buffers` version 2.6, the upstream `protocol-buffers`
+supports [oneof](https://developers.google.com/protocol-buffers/docs/proto?hl=en#oneof)
+keyword, which is a union of different data types.
 It is very natural to combine the oneof specification into Haskell
 ADT, so we implement the feature.
 
