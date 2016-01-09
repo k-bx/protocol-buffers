@@ -6,108 +6,45 @@
 
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
-#include "sample.pb.h"
+#include "school.pb.h"
 
 using namespace std;
-
-int main1(int argc, char* argv[])
-{
-  //GOOGLE_PROTOBUF_VERIFY_VERSION;
-
-  sample_message a;
-  sample_message_user* u1;
-  
-  string data; 
-  
-  a.set_key("key");
-  a.set_value(30);
-  a.set_name("hi");
-  a.set_age(5);
-  u1 = a.add_users( );
-  u1->set_id( 30 );
-  u1->set_name( "hello" );
-
-  u1 = a.add_users();
-  u1->set_id( 45 );
-  u1->set_name( "world");
-  
-  // a.SerializeToString(&data);
-  google::protobuf::TextFormat::PrintToString( a , &data );
-
-  cout << data << endl;
-   
-}
-
-
-int main2(int argc, char* argv[])
-{
-  GOOGLE_PROTOBUF_VERIFY_VERSION;
-
-  if( argc != 2 ) {
-    cerr << "Usage: " << argv[0] << " File" << endl;
-  }
-  
-  sample_message *a = new sample_message();
-  ifstream input;
-  input.open(argv[1]);
-
-  int fileDescriptor = open(argv[1],O_RDONLY);
-  google::protobuf::io::FileInputStream fileInput( fileDescriptor );
-  // string data(istreambuf_iterator<char>(input), istreambuf_iterator< char>() );
-  
-  google::protobuf::TextFormat::Parse(&fileInput, a ) ;
-
-  string text; 
-  google::protobuf::TextFormat::PrintToString( *a , &text );
-
-  cout << text << endl;
-    
-}
-
-
-int main3(int argc, char* argv[])
-{
-  GOOGLE_PROTOBUF_VERIFY_VERSION;
-
-  if( argc != 2 ) {
-    cerr << "Usage: " << argv[0] << " File" << endl;
-  }
-
-  sample_message a;
-
-  
-  fstream input(argv[1], ios::in | ios::binary);
-  a.ParseFromIstream(&input);
-
-  string text; 
-  google::protobuf::TextFormat::PrintToString( a , &text );
-
-  cout << text << endl;
-  
-  
-}
 
 int main(int argc, char* argv[])
 {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-  if( argc != 3 ) {
-    cerr << "Usage: " << argv[0] << " inFile outFile" << endl;
+  if( argc != 2 ) {
+    cerr << "Usage: " << argv[0] << " File" << endl;
+    exit(-1);
   }
-
-  sample_message *a = new sample_message();
-  ifstream input;
-  input.open(argv[1]);
-
-  int fileDescriptor = open(argv[1],O_RDONLY);
-  google::protobuf::io::FileInputStream fileInput( fileDescriptor );
-  // string data(istreambuf_iterator<char>(input), istreambuf_iterator< char>() );
+  char* filename = argv[1];
   
-  google::protobuf::TextFormat::Parse(&fileInput, a ) ;
+  dormitory d;
+  d.set_name("Gryffindor");
+  member* m;
+  m = d.add_members( );
+  m->set_id( 1 );
+  m->set_name( "Albus Dumbledore" );
+  member_faculty* f;
+  f = m->mutable_prop_faculty();
+  f->set_subject("allmighty");
+  f->set_title("headmaster");
 
+  m = d.add_members();
+  m->set_id( 2 );
+  m->set_name( "Harry Potter");
+  member_student *s;
+  s = m->mutable_prop_student();
+  s->set_grade(5);
+  s->set_specialty("defense of dart arts");
 
-  fstream output( argv[2], ios::out | ios::trunc | ios::binary );
-  a->SerializeToOstream(&output);
+  //string str;   
+  //google::protobuf::TextFormat::PrintToString( d , &str);
+  //cout << str << endl;
+
+  fstream output( filename, ios::out | ios::trunc | ios::binary );
+  d.SerializeToOstream(&output);
   
- 
 }
+
