@@ -7,38 +7,42 @@ import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Header
 import Text.ProtocolBuffers.TextMessage
 import Text.ProtocolBuffers.WireMessage
--- 
-import Sample.Sample
-import Sample.Sample.Sample_message
-import Sample.Sample.Sample_message.Test_oneof
-import Sample.Sample.Sample_message.Newtest
-import Sample.Sample.Sample_message.User
+--
+import School.Dormitory
+import School.Member
+import School.Member.Property
+import School.Member.Faculty
+import School.Member.Student
+import School.Member.Admin
 --
 
-testmsg :: Sample_message
-testmsg = Sample_message { key = uFromString "key"
-                         , value = Just 30
-                         , users = Seq.fromList [ User 30 (Just (uFromString "hello")) Nothing ]
-                         , mytest = Nothing
-                         , test_oneof = Just (Age 38)
-                         , newtest = defaultValue
-                         }
+grynffindor = Dormitory { School.Dormitory.name = uFromString "Grynffindor"
+                        , members = Seq.fromList [ dumbledore, harrypotter ] }
 
+dumbledore  = Member { School.Member.id = 1
+                     , School.Member.name = uFromString "Albus Dumbledore"
+                     , property = Just . Prop_faculty $
+                                    Faculty { subject = uFromString "allmighty"
+                                            , School.Member.Faculty.title =
+                                                Just (uFromString "headmaster")
+                                            , duty = Seq.empty }
+                     }
 
-main' = do
-  let encoded = messagePut testmsg
-      decoded = messageGet encoded :: Either String (Sample_message,LB.ByteString)
-  -- putStrLn encoded
-  print decoded
-
-  LB.writeFile "binarytest.dat" encoded
-
-
+harrypotter = Member { School.Member.id = 2
+                     , School.Member.name = uFromString "Harry Potter"
+                     , property = Just . Prop_student $
+                                    Student { grade = 5
+                                            , specialty = Just (uFromString "defense of dark arts") }
+                     }
+              
 main = do
   args <- getArgs
-  let fn = args !! 0
-  lbstr <- LB.readFile fn
-  let m = messageGet lbstr :: Either String (Sample_message,LB.ByteString)
-  print m
+  let n = length args
+  if n /= 1
+    then (putStrLn "Usage: encode FILE")
+    else do
+      let fn = args !! 0
+          encoded = messagePut grynffindor
+      LB.writeFile fn encoded
 
  

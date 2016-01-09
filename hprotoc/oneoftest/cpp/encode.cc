@@ -37,7 +37,7 @@ int main(int argc, char* argv[])
   member_student *s;
   s = m->mutable_prop_student();
   s->set_grade(5);
-  s->set_specialty("defense of dart arts");
+  s->set_specialty("defense of dark arts");
 
   //string str;   
   //google::protobuf::TextFormat::PrintToString( d , &str);

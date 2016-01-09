@@ -348,9 +348,23 @@ Here are examples.
 hs >   ./encode serialized.dat
 hs >   cd ../cpp
 cpp>   ./decode ../hs/serialized.dat
-
-
-
+name: "Gryffindor"
+members {
+  id: 1
+  name: "Albus Dumbledore"
+  prop_faculty {
+    subject: "allmighty"
+    title: "headmaster"
+  }
+}
+members {
+  id: 2
+  name: "Harry Potter"
+  prop_student {
+    grade: 5
+    specialty: "defense of dark arts"
+  }
+}                                
 ```
 
 ```
@@ -358,5 +372,5 @@ cpp>   ./encode serialized.dat
 cpp>   cd ../hs
 hs >   ./decode ../cpp/serialized.dat
 
-
+Right (Dormitory {name = "Gryffindor", members = fromList [Member {id = 1, name = "Albus Dumbledore", property = Just (Prop_faculty {prop_faculty = Faculty {subject = "allmighty", title = Just "headmaster", duty = fromList []}})},Member {id = 2, name = "Harry Potter", property = Just (Prop_student {prop_student = Student {grade = 5, specialty = Just "defense of dark arts"}})}]},"")
 ```
