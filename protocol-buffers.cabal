@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        2.1.12
+version:        2.2.0
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
