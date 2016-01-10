@@ -38,6 +38,8 @@ import qualified Text.DescriptorProtos.MethodDescriptorProto          as D(Metho
 import qualified Text.DescriptorProtos.MethodDescriptorProto          as D.MethodDescriptorProto(MethodDescriptorProto(..))
 -- import qualified Text.DescriptorProtos.MethodOptions                  as D(MethodOptions)
 import qualified Text.DescriptorProtos.MethodOptions                  as D.MethodOptions(MethodOptions(..))
+import qualified Text.DescriptorProtos.OneofDescriptorProto           as D(OneofDescriptorProto)
+import qualified Text.DescriptorProtos.OneofDescriptorProto           as D.OneofDescriptorProto(OneofDescriptorProto(..))
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D(ServiceDescriptorProto)
 import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D.ServiceDescriptorProto(ServiceDescriptorProto(..))
 -- import qualified Text.DescriptorProtos.ServiceOptions                 as D(ServiceOptions)
@@ -62,8 +64,8 @@ import Data.Char(isUpper,toLower)
 import Data.Ix(inRange)
 import Data.Maybe(fromMaybe)
 import Data.Monoid(mconcat)
-import Data.Sequence((|>))
-import qualified Data.Sequence as Seq(fromList)
+import Data.Sequence((|>),(><))
+import qualified Data.Sequence as Seq(fromList,length,empty)
 import Data.Word(Word8)
 import Numeric(showOct)
 --import System.FilePath(takeFileName)
@@ -250,7 +252,9 @@ parser = proto >> getState
                                 , message upTopMsg
                                 , enum upTopEnum
                                 , extend upTopMsg upTopExt
-                                , service] >> proto)
+                                , service
+                                , syntax
+                                ] >> proto)
         upTopMsg msg = update' (\s -> s {D.FileDescriptorProto.message_type=D.FileDescriptorProto.message_type s |> msg})
         upTopEnum e  = update' (\s -> s {D.FileDescriptorProto.enum_type=D.FileDescriptorProto.enum_type s |> e})
         upTopExt f   = update' (\s -> s {D.FileDescriptorProto.extension=D.FileDescriptorProto.extension s |> f})
@@ -318,11 +322,47 @@ fileOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
       "java_outer_classname"  -> strLit  >>= \p -> return' (old {D.FileOptions.java_outer_classname=Just p})
       "java_multiple_files"   -> boolLit >>= \p -> return' (old {D.FileOptions.java_multiple_files =Just p})
       "java_generate_equals_and_hash" -> boolLit >>= \p -> return' (old {D.FileOptions.java_generate_equals_and_hash =Just p})
+      "java_string_check_utf8"-> boolLit >>= \p -> return' (old {D.FileOptions.java_string_check_utf8 = Just p})
       "optimize_for"          -> enumLit >>= \p -> return' (old {D.FileOptions.optimize_for        =Just p})
+      "go_package"            -> strLit  >>= \p -> return' (old {D.FileOptions.go_package          =Just p})
       "cc_generic_services"   -> boolLit >>= \p -> return' (old {D.FileOptions.cc_generic_services =Just p})
       "java_generic_services" -> boolLit >>= \p -> return' (old {D.FileOptions.java_generic_services =Just p})
       "py_generic_services"   -> boolLit >>= \p -> return' (old {D.FileOptions.py_generic_services =Just p})
+      "deprecated"            -> boolLit >>= \p -> return' (old {D.FileOptions.deprecated          =Just p})
+      "cc_enable_arenas"      -> boolLit >>= \p -> return' (old {D.FileOptions.cc_enable_arenas      =Just p})
+      "objc_class_prefix"     -> strLit  >>= \p -> return' (old {D.FileOptions.objc_class_prefix   =Just p})
+      "csharp_namespace"      -> strLit  >>= \p -> return' (old {D.FileOptions.csharp_namespace    =Just p})
+      "javanano_use_deprecated_package" -> boolLit >>= \p -> return' (old {D.FileOptions.javanano_use_deprecated_package =Just p})
       _ -> unexpected $ "FileOptions has no option named " ++ optName
+
+oneof :: (D.OneofDescriptorProto -> Seq D.FieldDescriptorProto -> P s ()) -> P s ()
+oneof up = pName (U.fromString "oneof") >> do
+  self <- ident1
+  (o,fs) <- subParser (pChar '{' >> subOneof) (defaultValue {D.OneofDescriptorProto.name=Just self}, Seq.empty)
+  up o fs
+
+subOneof :: P (D.OneofDescriptorProto,Seq D.FieldDescriptorProto) ()
+subOneof = pChar '}' <|> (choice [ eof
+                                 , fieldOneof >>= upMsgField] >> subOneof)
+  where upMsgField f = update' (\(o,fs) -> (o,fs |> f))                    
+
+
+fieldOneof :: P s D.FieldDescriptorProto
+fieldOneof = do
+  sType <- ident
+  -- parseType may return Nothing, this is fixed up in Text.ProtocolBuffers.ProtoCompile.Resolve.fqField
+  let (maybeTypeCode,maybeTypeName) = case parseType (uToString sType) of
+                                        Just t -> (Just t,Nothing)
+                                        Nothing -> (Nothing, Just sType)
+  name <- ident1
+  number <- pChar '=' >> fieldInt
+  let v1 = defaultValue { D.FieldDescriptorProto.name = Just name
+                        , D.FieldDescriptorProto.number = Just number
+                        , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
+                        , D.FieldDescriptorProto.type' = maybeTypeCode
+                        , D.FieldDescriptorProto.type_name = maybeTypeName
+                        }
+  eol >> return v1
 
 message :: (D.DescriptorProto -> P s ()) -> P s ()
 message up = pName (U.fromString "message") >> do
@@ -335,12 +375,21 @@ subMessage = (pChar '}') <|> (choice [ eol
                                      , field upNestedMsg Nothing >>= upMsgField
                                      , message upNestedMsg
                                      , enum upNestedEnum
+                                     , oneof upMsgOneof
                                      , extensions
                                      , extend upNestedMsg upExtField
-                                     , messageOption] >> subMessage)
+                                     , messageOption] >> subMessage
+                                     )
   where upNestedMsg msg = update' (\s -> s {D.DescriptorProto.nested_type=D.DescriptorProto.nested_type s |> msg})
         upNestedEnum e  = update' (\s -> s {D.DescriptorProto.enum_type=D.DescriptorProto.enum_type s |> e})
         upMsgField f    = update' (\s -> s {D.DescriptorProto.field=D.DescriptorProto.field s |> f})
+        upMsgOneof o xs  = update' $ \s ->
+          let n = Seq.length (D.DescriptorProto.oneof_decl s)
+              xs' = fmap (\s -> s { D.FieldDescriptorProto.oneof_index = Just (fromIntegral n) }) xs
+          in s {D.DescriptorProto.oneof_decl=D.DescriptorProto.oneof_decl s |> o
+               ,D.DescriptorProto.field=D.DescriptorProto.field s >< xs'
+               }
+           
         upExtField f    = update' (\s -> s {D.DescriptorProto.extension=D.DescriptorProto.extension s |> f})
 
 messageOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
@@ -365,7 +414,7 @@ field :: (D.DescriptorProto -> P s ()) -> Maybe Utf8 -> P s D.FieldDescriptorPro
 field upGroup maybeExtendee = do
   let allowedLabels = case maybeExtendee of
                         Nothing -> ["optional","repeated","required"]
-                        Just {} -> ["optional","repeated"] -- cannot declare a required extension
+                        Just {} -> ["optional","repeated"] -- cannot declare a required extension and an oneof extension. 
   sLabel <- choice . map (pName . U.fromString) $ allowedLabels
   theLabel <- maybe (fail ("not a valid Label :"++show sLabel)) return (parseLabel (uToString sLabel))
   sType <- ident
@@ -464,9 +513,9 @@ fieldOption label mt = liftM2 (,) pOptionE getOld >>= setOption >>= setNew where
       "ctype" | (Just TYPE_STRING) == mt -> do
         enumLit >>= \p -> return' (old {D.FieldOptions.ctype=Just p})
               | otherwise -> unexpected $ "field option cyte is only defined for string fields"
-      "experimental_map_key" | Nothing == mt -> do
-        strLit >>= \p -> return' (old {D.FieldOptions.experimental_map_key=Just p})
-                             | otherwise -> unexpected $ "field option experimental_map_key is only defined for messages"
+      -- "experimental_map_key" | Nothing == mt -> do
+       -- strLit >>= \p -> return' (old {D.FieldOptions.experimental_map_key=Just p})
+       --                      | otherwise -> unexpected $ "field option experimental_map_key is only defined for messages"
       "packed" | isValidPacked label mt -> do
         boolLit >>= \p -> return' (old {D.FieldOptions.packed=Just p})
                | otherwise -> unexpected $ "field option packed is not defined for this kind of field"
@@ -539,6 +588,11 @@ service = pName (U.fromString "service") >> do
   update' (\s -> s {D.FileDescriptorProto.service=D.FileDescriptorProto.service s |> f})
 
  where subService = pChar '}' <|> (choice [ eol, rpc, serviceOption ] >> subService)
+
+syntax = pName (U.fromString "syntax") >> do
+  pChar '=' 
+  p <- strLit
+  update' (\s -> s {D.FileDescriptorProto.syntax=Just p})
 
 serviceOption,rpc :: P D.ServiceDescriptorProto ()
 serviceOption = pOptionWith getOld >>= setOption >>= setNew >> eol where

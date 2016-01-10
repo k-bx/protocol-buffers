@@ -288,3 +288,90 @@ with the file system (aside from import loading in Resolve).
 Everything that is needed is collected into the Options data type
 which is passed to "run". The output style can be tweaked by changing
 "style" and "myMode".
+
+New oneof implementation
+------------------------
+
+Since `protocol-buffers` version 2.6, the upstream `protocol-buffers`
+supports [oneof](https://developers.google.com/protocol-buffers/docs/proto?hl=en#oneof)
+keyword, which is a union of different data types.
+It is very natural to combine the oneof specification into Haskell
+ADT, so we implement the feature.
+
+In `hprotoc/oneoftest`, we have an example for this. `school.proto` defines
+a collection of members in a school, which is organized into dormitories. 
+Each member should have common attributes like `id` and `name`, but there are
+attributes only specific to students, faculties or administrators.
+
+Therefore, we define property as a oneof field which is one of student, faculty
+and admin type. How it is defined should be easily understood from `school.proto`.
+
+Once `protocol-buffers` is installed, using `hprotoc`, we can generate Haskell
+source codes. Assuming we run `hprotoc` on the `oneoftest` directory and generate
+source code in `hs` directory: 
+
+```
+oneoftest> hprotoc --proto_path=. --haskell_out=hs school.proto
+```
+
+We will have `School.Member` module which defines `Member` by
+(I omit qualifier and strictness annotation here.)
+```
+data Member = Member { id :: Int32
+                     , name :: Utf8
+                     , property :: Maybe Property
+                     }
+```
+and `School.Member.Property` module defines `Property` (as `oneof`) by
+```
+data Property = Prop_student {prop_student :: Student }
+              | Prop_faculty {prop_faculty :: Faculty }
+              | Prop_admin   {prop_admin   :: Admin   }
+```                            
+where `Student`, `Faculty` and `Admin` are defined as ordinary nested message
+data types in separate modules, respectively. Therefore, the `oneof` feature
+is smoothly matched with Haskell sum types. Note that `Maybe` will be always
+present for a `oneof` field in the owner data type definition (Here, `Maybe Property`
+in the definition of `Member`). This is because of compatibility with other language
+implementationn that treats `oneof` as a collection of `optional` fields. 
+
+In the `oneoftest` directory, we provides a Haskell example in `hprotoc/oneoftest/hs`
+and a C++ example in `hprotoc/oneoftest/cpp` to demonstrate how to use. Each example
+has `encode` and `decode`.With `encode`, we start from data in memory and generate
+a serialized binary file in wire format. Then,`decode` takes the file and present
+some information to prove it successfully decoded the binary. One can encode from
+Haskell side and decode on C++ side, or vice versa. For building, simply run
+`build.sh` in each directory. For C++, one must previously install C++ `protobuf`
+library and `pkg-config`. We assume that `hprotoc` was already executed as shown above. 
+
+Here are examples.
+```
+hs >   ./encode serialized.dat
+hs >   cd ../cpp
+cpp>   ./decode ../hs/serialized.dat
+name: "Gryffindor"
+members {
+  id: 1
+  name: "Albus Dumbledore"
+  prop_faculty {
+    subject: "allmighty"
+    title: "headmaster"
+  }
+}
+members {
+  id: 2
+  name: "Harry Potter"
+  prop_student {
+    grade: 5
+    specialty: "defense of dark arts"
+  }
+}                                
+```
+
+```
+cpp>   ./encode serialized.dat
+cpp>   cd ../hs
+hs >   ./decode ../cpp/serialized.dat
+
+Right (Dormitory {name = "Gryffindor", members = fromList [Member {id = 1, name = "Albus Dumbledore", property = Just (Prop_faculty {prop_faculty = Faculty {subject = "allmighty", title = Just "headmaster", duty = fromList []}})},Member {id = 2, name = "Harry Potter", property = Just (Prop_student {prop_student = Student {grade = 5, specialty = Just "defense of dark arts"}})}]},"")
+```

@@ -8,7 +8,8 @@ import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 import qualified Text.DescriptorProtos.UninterpretedOption as DescriptorProtos (UninterpretedOption)
  
-data EnumOptions = EnumOptions{uninterpreted_option :: !(P'.Seq DescriptorProtos.UninterpretedOption), ext'field :: !(P'.ExtField),
+data EnumOptions = EnumOptions{allow_alias :: !(P'.Maybe P'.Bool), deprecated :: !(P'.Maybe P'.Bool),
+                               uninterpreted_option :: !(P'.Seq DescriptorProtos.UninterpretedOption), ext'field :: !(P'.ExtField),
                                unknown'field :: !(P'.UnknownField)}
                  deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
  
@@ -22,21 +23,24 @@ instance P'.UnknownMessage EnumOptions where
   putUnknownField u'f msg = msg{unknown'field = u'f}
  
 instance P'.Mergeable EnumOptions where
-  mergeAppend (EnumOptions x'1 x'2 x'3) (EnumOptions y'1 y'2 y'3)
-   = EnumOptions (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3)
+  mergeAppend (EnumOptions x'1 x'2 x'3 x'4 x'5) (EnumOptions y'1 y'2 y'3 y'4 y'5)
+   = EnumOptions (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
+      (P'.mergeAppend x'5 y'5)
  
 instance P'.Default EnumOptions where
-  defaultValue = EnumOptions P'.defaultValue P'.defaultValue P'.defaultValue
+  defaultValue = EnumOptions P'.defaultValue (Prelude'.Just Prelude'.False) P'.defaultValue P'.defaultValue P'.defaultValue
  
 instance P'.Wire EnumOptions where
-  wireSize ft' self'@(EnumOptions x'1 x'2 x'3)
+  wireSize ft' self'@(EnumOptions x'1 x'2 x'3 x'4 x'5)
    = case ft' of
        10 -> calc'Size
        11 -> P'.prependMessageSize calc'Size
        _ -> P'.wireSizeErr ft' self'
     where
-        calc'Size = (P'.wireSizeRep 2 11 x'1 + P'.wireSizeExtField x'2 + P'.wireSizeUnknownField x'3)
-  wirePut ft' self'@(EnumOptions x'1 x'2 x'3)
+        calc'Size
+         = (P'.wireSizeOpt 1 8 x'1 + P'.wireSizeOpt 1 8 x'2 + P'.wireSizeRep 2 11 x'3 + P'.wireSizeExtField x'4 +
+             P'.wireSizeUnknownField x'5)
+  wirePut ft' self'@(EnumOptions x'1 x'2 x'3 x'4 x'5)
    = case ft' of
        10 -> put'Fields
        11 -> do
@@ -46,9 +50,11 @@ instance P'.Wire EnumOptions where
     where
         put'Fields
          = do
-             P'.wirePutRep 7994 11 x'1
-             P'.wirePutExtField x'2
-             P'.wirePutUnknownField x'3
+             P'.wirePutOpt 16 8 x'1
+             P'.wirePutOpt 24 8 x'2
+             P'.wirePutRep 7994 11 x'3
+             P'.wirePutExtField x'4
+             P'.wirePutUnknownField x'5
   wireGet ft'
    = case ft' of
        10 -> P'.getBareMessageWith (P'.catch'Unknown update'Self)
@@ -57,6 +63,8 @@ instance P'.Wire EnumOptions where
     where
         update'Self wire'Tag old'Self
          = case wire'Tag of
+             16 -> Prelude'.fmap (\ !new'Field -> old'Self{allow_alias = Prelude'.Just new'Field}) (P'.wireGet 8)
+             24 -> Prelude'.fmap (\ !new'Field -> old'Self{deprecated = Prelude'.Just new'Field}) (P'.wireGet 8)
              7994 -> Prelude'.fmap
                       (\ !new'Field -> old'Self{uninterpreted_option = P'.append (uninterpreted_option old'Self) new'Field})
                       (P'.wireGet 11)
@@ -70,10 +78,10 @@ instance P'.MessageAPI msg' (msg' -> EnumOptions) EnumOptions where
 instance P'.GPB EnumOptions
  
 instance P'.ReflectDescriptor EnumOptions where
-  getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [7994])
+  getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [16, 24, 7994])
   reflectDescriptorInfo _
    = Prelude'.read
-      "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.EnumOptions\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"EnumOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"EnumOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.EnumOptions.uninterpreted_option\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"EnumOptions\"], baseName' = FName \"uninterpreted_option\"}, fieldNumber = FieldId {getFieldId = 999}, wireTag = WireTag {getWireTag = 7994}, packedTag = Nothing, wireTagLength = 2, isPacked = False, isRequired = False, canRepeat = True, mightPack = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.UninterpretedOption\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"UninterpretedOption\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [(FieldId {getFieldId = 1000},FieldId {getFieldId = 18999}),(FieldId {getFieldId = 20000},FieldId {getFieldId = 536870911})], knownKeys = fromList [], storeUnknown = True, lazyFields = False}"
+      "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.EnumOptions\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"EnumOptions\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"EnumOptions.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.EnumOptions.allow_alias\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"EnumOptions\"], baseName' = FName \"allow_alias\", baseNamePrefix' = \"\"}, fieldNumber = FieldId {getFieldId = 2}, wireTag = WireTag {getWireTag = 16}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Nothing, hsDefault = Nothing},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.EnumOptions.deprecated\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"EnumOptions\"], baseName' = FName \"deprecated\", baseNamePrefix' = \"\"}, fieldNumber = FieldId {getFieldId = 3}, wireTag = WireTag {getWireTag = 24}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = False, mightPack = False, typeCode = FieldType {getFieldType = 8}, typeName = Nothing, hsRawDefault = Just \"false\", hsDefault = Just (HsDef'Bool False)},FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.EnumOptions.uninterpreted_option\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"EnumOptions\"], baseName' = FName \"uninterpreted_option\", baseNamePrefix' = \"\"}, fieldNumber = FieldId {getFieldId = 999}, wireTag = WireTag {getWireTag = 7994}, packedTag = Nothing, wireTagLength = 2, isPacked = False, isRequired = False, canRepeat = True, mightPack = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.UninterpretedOption\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"UninterpretedOption\"}), hsRawDefault = Nothing, hsDefault = Nothing}], keys = fromList [], extRanges = [(FieldId {getFieldId = 1000},FieldId {getFieldId = 18999}),(FieldId {getFieldId = 20000},FieldId {getFieldId = 536870911})], knownKeys = fromList [], storeUnknown = True, lazyFields = False, makeLenses = False}"
  
 instance P'.TextType EnumOptions where
   tellT = P'.tellSubMessage
@@ -82,12 +90,24 @@ instance P'.TextType EnumOptions where
 instance P'.TextMsg EnumOptions where
   textPut msg
    = do
+       P'.tellT "allow_alias" (allow_alias msg)
+       P'.tellT "deprecated" (deprecated msg)
        P'.tellT "uninterpreted_option" (uninterpreted_option msg)
   textGet
    = do
-       mods <- P'.sepEndBy (P'.choice [parse'uninterpreted_option]) P'.spaces
+       mods <- P'.sepEndBy (P'.choice [parse'allow_alias, parse'deprecated, parse'uninterpreted_option]) P'.spaces
        Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
     where
+        parse'allow_alias
+         = P'.try
+            (do
+               v <- P'.getT "allow_alias"
+               Prelude'.return (\ o -> o{allow_alias = v}))
+        parse'deprecated
+         = P'.try
+            (do
+               v <- P'.getT "deprecated"
+               Prelude'.return (\ o -> o{deprecated = v}))
         parse'uninterpreted_option
          = P'.try
             (do

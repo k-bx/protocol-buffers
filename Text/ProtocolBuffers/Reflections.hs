@@ -15,6 +15,7 @@ module Text.ProtocolBuffers.Reflections
   ( ProtoName(..),ProtoFName(..),ProtoInfo(..),DescriptorInfo(..),FieldInfo(..),KeyInfo
   , HsDefault(..),SomeRealFloat(..),EnumInfo(..),EnumInfoApp
   , ReflectDescriptor(..),ReflectEnum(..),GetMessageInfo(..)
+  , OneofInfo(..)
   , makePNF, toRF, fromRF
   ) where
 
@@ -65,6 +66,7 @@ data ProtoInfo = ProtoInfo { protoMod :: ProtoName        -- ^ blank protobufNam
                            , extensionKeys :: Seq KeyInfo -- ^ top level keys
                            , messages :: [DescriptorInfo] -- ^ all messages and groups
                            , enums :: [EnumInfo]          -- ^ all enums
+                           , oneofs :: [OneofInfo]
                            , knownKeyMap :: Map ProtoName (Seq FieldInfo) -- all keys in namespace
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
@@ -72,7 +74,8 @@ data ProtoInfo = ProtoInfo { protoMod :: ProtoName        -- ^ blank protobufNam
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , descFilePath :: [FilePath]
                                      , isGroup :: Bool
-                                     , fields :: Seq FieldInfo 
+                                     , fields :: Seq FieldInfo
+                                     , descOneofs :: Seq OneofInfo 
                                      , keys :: Seq KeyInfo
                                      , extRanges :: [(FieldId,FieldId)]
                                      , knownKeys :: Seq FieldInfo
@@ -81,6 +84,7 @@ data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , makeLenses :: Bool
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
+
 
 -- | 'GetMessageInfo' is used in getting messages from the wire.  It
 -- supplies the 'Set' of precomposed wire tags that must be found in
@@ -145,6 +149,14 @@ fromRF x | isNaN x = SRF'nan
          | isInfinite x = if 0 < x then SRF'inf else SRF'ninf
          | otherwise = SRF'Rational (toRational x)
 
+data OneofInfo = OneofInfo { oneofName :: ProtoName
+                           , oneofFName :: ProtoFName  
+                           , oneofFilePath :: [FilePath]
+                           , oneofFields :: Seq (ProtoName,FieldInfo)
+                           , oneofMakeLenses :: Bool
+                           }
+  deriving (Show,Read,Eq,Ord,Data,Typeable)
+
 data EnumInfo = EnumInfo { enumName :: ProtoName
                          , enumFilePath :: [FilePath]
                          , enumValues :: [(EnumCode,String)] -- ^ The String is the Haskell name to write into the generated source files
@@ -152,6 +164,7 @@ data EnumInfo = EnumInfo { enumName :: ProtoName
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
 type EnumInfoApp e = [(EnumCode,String,e)]
+
 
 class ReflectEnum e where
   reflectEnum :: EnumInfoApp e

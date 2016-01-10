@@ -14,11 +14,11 @@
 -- The names are also assumed to have become fully-qualified, and all
 -- the optional type codes have been set.
 --
-module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,prettyPrint) where
+module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,oneofModule,prettyPrint) where
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
-import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),DescriptorInfo(..),ProtoInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..))
+import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),DescriptorInfo(..),ProtoInfo(..),OneofInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..))
 
 import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(Result(..),VertexKind(..),pKey,pfKey,getKind,Part(..))
 
@@ -34,11 +34,10 @@ import Language.Haskell.Exts.Syntax as Hse
 import Data.Char(isLower,isUpper)
 import qualified Data.Map as M
 import Data.Maybe(mapMaybe)
-import qualified Data.Sequence as Seq(null,length)
+import           Data.Sequence (ViewL(..),(><))
+import qualified Data.Sequence as Seq(null,length,empty,viewl)
 import qualified Data.Set as S
 import System.FilePath(joinPath)
-
---import Debug.Trace(trace)
 
 ecart :: String -> a -> a
 ecart _ x = x
@@ -60,6 +59,15 @@ noWhere = Nothing
 noWhere :: Binds
 noWhere = BDecls []
 #endif
+
+#if MIN_VERSION_haskell_src_exts(1, 17, 0)
+whereBinds :: Binds -> Maybe Binds
+whereBinds = Just
+#else
+whereBinds :: Binds -> Binds
+whereBinds = id
+#endif
+
 
 ($$) :: Exp -> Exp -> Exp
 ($$) = App
@@ -220,6 +228,32 @@ importPFN r m@(ModuleName self) pfn =
                 ,("ans",show ans)]) $
      ans
 
+
+importO :: Result -> ModuleName -> Part -> OneofInfo -> Maybe [ImportDecl]
+importO r selfMod@(ModuleName self) part oi =
+  let pn = oneofName oi
+      o = pKey pn
+      m1 = ModuleName (joinMod (haskellPrefix pn ++ parentModule pn ++ [baseName pn]))
+      m2 = ModuleName (joinMod (parentModule pn))
+      m3 = ModuleName (joinMod (parentModule pn ++ [baseName pn]))      
+      fromSource = S.member (FMName self,part,o) (rIBoot r)
+#if MIN_VERSION_haskell_src_exts(1, 17, 0)
+      iabs1 = IAbs NoNamespace (Ident (mName (baseName pn)))
+      iabsget = map (IAbs NoNamespace . Ident . fst . oneofGet) . F.toList .  oneofFields $ oi
+#else
+      iabs1 = IAbs (Ident (mName (baseName pn)))
+      iabsget = map (IAbs . Ident . fst . oneofGet) . F.toList . oneofFields $ oi
+#endif
+      ithall = IThingAll (Ident (mName (baseName pn)))
+              
+      ans1 =  ImportDecl src m1 True fromSource False Nothing (Just m2)
+                (Just (False,[iabs1]))
+      ans2 =  ImportDecl src m1 True fromSource False Nothing (Just m3)
+                (Just (False,ithall:iabsget))
+  in  if m1 == selfMod && part /= KeyFile
+        then Nothing
+        else Just [ans1,ans2]
+
 -- Several items might be taken from the same module, combine these statements
 mergeImports :: [ImportDecl] -> [ImportDecl]
 mergeImports importsIn =
@@ -266,6 +300,31 @@ mayQualName (ProtoName _ c'prefix c'parents c'base) name@(ProtoFName _ prefix pa
     then UnQual (baseIdent' name) -- name is local, make UnQual
     else qualFName name           -- name is imported, make Qual
 
+
+--------------------------------------------
+-- utility for OneofInfo
+--------------------------------------------
+
+oneofCon :: (ProtoName,FieldInfo) -> Exp
+oneofCon (name,_) = Con (qualName name)
+
+oneofPat :: (ProtoName,FieldInfo) -> (Pat,Pat)
+oneofPat (name,fi) =
+  let fName@(Ident fname) = baseIdent' (fieldName fi)
+  in (PApp (qualName name) [PVar fName],PApp (unqualName name) [PVar fName]) 
+
+oneofRec :: (ProtoName,FieldInfo) -> (Exp,Exp)
+oneofRec (_,fi) =
+  let fName@(Ident fname) = baseIdent' (fieldName fi)
+  in (litStr fname,lvar fname)
+
+oneofGet :: (ProtoName,FieldInfo) -> (String,ProtoName)
+oneofGet (p,fi) =
+  let Ident fname = baseIdent' (fieldName fi)
+      unqual = "get'" ++ fname
+      p' = p { baseName = MName unqual }
+  in (unqual,p')
+
 --------------------------------------------
 -- Define LANGUAGE options as [ModulePramga]
 --------------------------------------------
@@ -276,6 +335,70 @@ modulePragmas templateHaskell =
   ]
   where thPragma | templateHaskell = ["TemplateHaskell"]
                  | otherwise       = []
+
+--------------------------------------------
+-- OneofDescriptorProto module creation
+--------------------------------------------
+oneofModule :: Result -> OneofInfo -> Module
+oneofModule result oi
+  = Module src (ModuleName (fqMod protoName)) (modulePragmas False) Nothing
+         Nothing imports (oneofDecls oi)
+  where protoName = oneofName oi
+        typs = mapMaybe typeName . F.toList . fmap snd . oneofFields $ oi
+        imports = (standardImports False False (oneofMakeLenses oi))
+                  ++ (mergeImports (mapMaybe (importPN result (ModuleName (fqMod protoName)) Normal) typs))
+
+
+oneofDecls :: OneofInfo -> [Decl]
+oneofDecls oi = (oneofX oi : oneofFuncs oi) ++
+                  [ instanceDefaultOneof oi
+                  , instanceMergeableOneof oi
+                  ]
+
+oneofX :: OneofInfo -> Decl
+oneofX oi = DataDecl src DataType [] (baseIdent (oneofName oi)) []
+              (map oneofValueX (F.toList (oneofFields oi) ))
+              derives
+  where oneofValueX (pname,fi) = QualConDecl src [] [] con 
+          where con = RecDecl (baseIdent pname) [fieldX]
+                fieldX = ([baseIdent' . fieldName $ fi], TyParen (TyCon typed ))
+                typed = case useType (getFieldType (typeCode fi)) of
+                          Just s -> private s
+                          Nothing -> case typeName fi of
+                                       Just s -> qualName s
+                                       Nothing -> imp $ "No Name for Field!\n" ++ show fi
+
+oneofFuncs :: OneofInfo -> [Decl]
+oneofFuncs oi = map mkfuns (F.toList (oneofFields oi))
+  where mkfuns f = defun (fst (oneofGet f)) [patvar "x"] $
+                     Case (lvar "x")
+                       [ Alt src (snd (oneofPat f))
+                         (UnGuardedRhs (preludecon "Just" $$ snd (oneofRec f))) noWhere
+                       , Alt src PWildCard
+                         (UnGuardedRhs (preludecon "Nothing")) noWhere
+                       ] 
+
+
+
+{- oneof field does not have to have a default value, but for convenience
+   (to make all messages an instance of Default and Mergeable), we make
+   the first case as default like enum. -}
+
+instanceDefaultOneof :: OneofInfo -> Decl
+instanceDefaultOneof oi
+    =  InstDecl src Nothing [] [] (private "Default") [TyCon (unqualName (oneofName oi))]
+      [ inst "defaultValue" [] firstValue ]
+  where firstValue :: Exp
+        firstValue = case Seq.viewl (oneofFields oi) of
+                       EmptyL -> imp ("instanceDefaultOneof: empty in " ++ show oi)
+                       (n,_) :< _ -> case (baseIdent n) of
+                                       Ident str -> App (lcon str) (pvar "defaultValue")
+                                       Symbol _ -> imp ("instanceDefaultOneof: " ++ show n)
+
+instanceMergeableOneof :: OneofInfo -> Decl
+instanceMergeableOneof oi 
+  = InstDecl src Nothing [] [] (private "Mergeable") [TyCon (unqualName (oneofName oi))] []
+
 
 --------------------------------------------
 -- EnumDescriptorProto module creation
@@ -490,7 +613,10 @@ descriptorBootModule di
   = let protoName = descName di
         un = unqualName protoName
         classes = [prelude "Show",prelude "Eq",prelude "Ord",prelude "Typeable",prelude "Data"
-                  ,private "Mergeable",private "Default",private "Wire",private "GPB",private "ReflectDescriptor", private "TextType", private "TextMsg"]
+                  ,private "Mergeable",private "Default"
+                  ,private "Wire",private "GPB",private "ReflectDescriptor"
+                  , private "TextType", private "TextMsg"
+                  ]
                   ++ if hasExt di then [private "ExtendMessage"] else []
                   ++ if storeUnknown di then [private "UnknownMessage"] else []
         instMesAPI = InstDecl src Nothing [] [] (private "MessageAPI")
@@ -557,6 +683,7 @@ descriptorNormalModule result di
         imports = (standardImports False (hasExt di) (makeLenses di) ++) . mergeImports . concat $
                     [ mapMaybe (importPN result m Normal) $
                         extendees' ++ mapMaybe typeName (myKeys' ++ (F.toList (fields di)))
+                    , concat . mapMaybe (importO result m Normal) $ F.toList (descOneofs di)
                     , mapMaybe (importPFN result m) (map fieldName (myKeys ++ F.toList (knownKeys di))) ]
         mkLenses = Var (Qual (ModuleName "Control.Lens.TH") (Ident "makeLenses"))
         lenses | makeLenses di = [SpliceDecl src (mkLenses $$ TypQuote (unqualName protoName))]
@@ -662,7 +789,10 @@ descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] de
         con = RecDecl name eFields
                 where eFields = F.foldr ((:) . fieldX) end (fields di)
                       end = (if hasExt di then (extfield:) else id) 
-                          $ (if storeUnknown di then [unknownField] else [])
+                            . (if storeUnknown di then (unknownField:) else id)
+                            $ eOneof
+                      eOneof = F.foldr ((:) . fieldOneofX) [] (descOneofs di)
+                      
         bangType = if lazyFields di then TyParen {- UnBangedTy -} else TyBang BangedTy . TyParen
         -- extfield :: ([Name],BangType)
         extfield = ([fieldIdent di "ext'field"], bangType (TyCon (private "ExtField")))
@@ -680,6 +810,9 @@ descriptorX di = DataDecl src DataType [] name [] [QualConDecl src [] [] con] de
                                        Just s | self /= s -> qualName s
                                               | otherwise -> unqualName s
                                        Nothing -> error $  "No Name for Field!\n" ++ show fi
+        fieldOneofX :: OneofInfo -> ([Name],Type)
+        fieldOneofX oi = ([baseIdent' . oneofFName $ oi], typeApp "Maybe" (TyParen (TyCon typed)))
+          where typed = qualName (oneofName oi)
 
 instancesDescriptor :: DescriptorInfo -> [Decl]
 instancesDescriptor di = map ($ di) $
@@ -723,32 +856,32 @@ instanceTextType di
 instanceTextMsg :: DescriptorInfo -> Decl
 instanceTextMsg di 
   = InstDecl src Nothing [] [] (private "TextMsg") [TyCon (unqualName (descName di))] [
-        inst "textPut" [patvar msgVar] genPrintFields
+        inst "textPut" [patvar msgVar] genPrint
       , InsDecl $ FunBind [Match src (Ident "textGet") [] Nothing (UnGuardedRhs parser) bdecls]
       ]
   where
 #if MIN_VERSION_haskell_src_exts(1, 17, 0)
-        bdecls = Just (BDecls subparsers)
+        bdecls = Just (BDecls (subparsers ++ subparsersO))
 #else
-        bdecls = BDecls subparsers
+        bdecls = BDecls (subparsers ++ subparsersO)
 #endif
         flds = F.toList (fields di)
+        os = F.toList (descOneofs di)
         msgVar = distinctVar "msg"
         distinctVar var = if var `elem` reservedVars then distinctVar (var ++ "'") else var
         reservedVars = map toPrintName flds
-        toPrintName fi = let IName uname = last $ splitFI $ protobufName' (fieldName fi) in uToString uname
-        printField fi = let Ident funcname = baseIdent' (fieldName fi)
-                            printname = toPrintName fi
-                         in Qualifier $ pvar "tellT" $$ litStr printname $$ Paren (lvar funcname $$ lvar msgVar)
-        genPrintFields = if null flds
-                           then preludevar "return" $$ Hse.Tuple Boxed []
-                           else Do $ map printField flds
+        genPrintFields = map (Qualifier . printField msgVar) flds
+        genPrintOneofs = map (Qualifier . printOneof msgVar) os
+        genPrint = if null flds && null os
+                   then preludevar "return" $$ Hse.Tuple Boxed []
+                   else Do $ genPrintFields ++ genPrintOneofs
+                   
         parser
-            | Seq.null (fields di) = preludevar "return" $$ pvar "defaultValue"
+            | null flds && null os = preludevar "return" $$ pvar "defaultValue"
             | otherwise = Do [
                 Generator src (patvar "mods") 
                     $ pvar "sepEndBy" 
-                        $$ Paren (pvar "choice" $$ List (map (lvar . parserName) flds)) 
+                        $$ Paren (pvar "choice" $$ List (map (lvar . parserName) flds ++ map (lvar . parserNameO) os))
                         $$ pvar "spaces",
                 Qualifier $ (preludevar "return")
                     $$ Paren (preludevar "foldl"
@@ -757,6 +890,7 @@ instanceTextMsg di
                         $$ lvar "mods")
              ]
         parserName f = let Ident fname = baseIdent' (fieldName f) in "parse'" ++ fname
+        parserNameO o = let Ident oname = baseIdent' (oneofFName o) in "parse'" ++ oname
         subparsers = map (\f -> defun (parserName f) [] (getField f)) flds
         getField fi = let printname = toPrintName fi
                           Ident funcname = baseIdent' (fieldName fi)
@@ -767,6 +901,52 @@ instanceTextMsg di
                     $$ Paren (Lambda src [patvar "o"]
                         (RecUpdate (lvar "o") [ FieldUpdate (local funcname) update]))
             ]
+                     
+        subparsersO = map funbind os
+        funbind o = FunBind [Match src (Ident (parserNameO o)) [] Nothing (UnGuardedRhs (getOneof)) whereParse]
+          where getOneof = pvar "try" $$
+                             (pvar "choice" $$ List (map (Var . UnQual . Ident) parsefs))
+                oflds = F.toList (oneofFields o)
+                flds = map snd oflds
+                parsefs = map parserName flds
+                whereParse = whereBinds $ BDecls (map decl oflds)
+                  where decl (n,f) = defun (parserName f) [] (getOneofField (n,f))
+                        getOneofField p@(n,f) =
+                          let Ident oname = baseIdent' (oneofFName o)
+                              printname = toPrintName f
+                              update = preludecon "Just" $$ Paren (oneofCon p $$ lvar "v")
+                          in pvar "try" $$ Do [
+                               Generator src (patvar "v") $ pvar "getT" $$ litStr printname,
+                               Qualifier $ (preludevar "return")
+                               $$ Paren (Lambda src [patvar "s"]
+                                (RecUpdate (lvar "s") [ FieldUpdate (local oname) update]))
+                               ]
+
+
+printField :: String -> FieldInfo -> Exp
+printField msgVar fi
+  = let Ident funcname = baseIdent' (fieldName fi)
+        printname = toPrintName fi
+    in pvar "tellT" $$ litStr printname $$ Paren (lvar funcname $$ lvar msgVar)
+
+toPrintName :: FieldInfo -> String
+toPrintName fi = let IName uname = last $ splitFI $ protobufName' (fieldName fi) in uToString uname
+
+printOneof :: String -> OneofInfo -> Exp
+printOneof msgVar oi
+    = Case (Paren (lvar funcname $$ lvar msgVar)) (map caseAlt flds ++ [caseAltNothing])
+  where Ident funcname = baseIdent' (oneofFName oi)
+        IName uname = last $ splitFI $ protobufName' (oneofFName oi)
+        printname = uToString uname
+        flds = F.toList (oneofFields oi)
+        caseAlt :: (ProtoName,FieldInfo) -> Alt
+        caseAlt f = Alt src patt  (UnGuardedRhs rhs) noWhere
+          where patt = PApp (prelude "Just") [fst (oneofPat f)]
+                (rstr,rvar) = oneofRec f
+                rhs = pvar "tellT" $$ rstr $$ rvar -- litStr fname $$ (lvar fname)
+        caseAltNothing :: Alt
+        caseAltNothing = Alt src (PApp (prelude "Nothing") []) (UnGuardedRhs rhs) noWhere
+          where rhs = preludevar "return" $$ unit_con
 
 instanceMergeable :: DescriptorInfo -> Decl
 instanceMergeable di
@@ -778,7 +958,7 @@ instanceMergeable di
   where un = unqualName (descName di)
         len = (if hasExt di then succ else id)
             $ (if storeUnknown di then succ else id)
-            $ Seq.length (fields di)
+            $ Seq.length (fields di) + Seq.length (descOneofs di)
         patternVars1,patternVars2 :: [Pat]
         patternVars1 = take len inf
             where inf = map (\ n -> patvar ("x'" ++ show n)) [(1::Int)..]
@@ -798,7 +978,8 @@ instanceDefault di
   where un = unqualName (descName di)
         deflistExt = F.foldr ((:) . defX) end (fields di)
         end = (if hasExt di then (pvar "defaultValue":) else id) 
-            $ (if storeUnknown di then [pvar "defaultValue"] else [])
+            . (if storeUnknown di then (pvar "defaultValue":) else id)
+            $ F.foldr ((:) . defOneof) [] (descOneofs di)  
 
         defX :: FieldInfo -> Exp
         defX fi | isRequired fi = dv1
@@ -809,6 +990,9 @@ instanceDefault di
                 dv2 = case hsDefault fi of
                         Nothing -> pvar "defaultValue"
                         Just hsdef -> Paren $ preludecon "Just" $$ defToSyntax (typeCode fi) hsdef
+        defOneof :: OneofInfo -> Exp
+        defOneof oi= pvar "defaultValue"
+
 
 instanceMessageAPI :: ProtoName -> Decl
 instanceMessageAPI protoName
@@ -820,13 +1004,14 @@ instanceMessageAPI protoName
 instanceWireDescriptor :: DescriptorInfo -> Decl
 instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                           , fields = fieldInfos
+                                          , descOneofs = oneofInfos
                                           , extRanges = allowedExts
                                           , knownKeys = fieldExts })
   = let me = unqualName protoName
         extensible = not (null allowedExts)
         len = (if extensible then succ else id) 
             $ (if storeUnknown di then succ else id)
-            $ Seq.length fieldInfos
+            $ Seq.length fieldInfos + Seq.length oneofInfos
         mine = PApp me . take len . map (\ n -> patvar ("x'" ++ show n)) $ [(1::Int)..]
         vars = take len . map (\ n -> lvar ("x'" ++ show n)) $ [(1::Int)..]
         mExt | extensible = Just (vars !! Seq.length fieldInfos)
@@ -857,14 +1042,24 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                           | otherwise = sizesListExt
                 sizesListExt | Just v <- mExt = sizesListFields ++ [ pvar "wireSizeExtField" $$ v ] 
                              | otherwise = sizesListFields
-                sizesListFields =  zipWith toSize vars . F.toList $ fieldInfos
-        toSize var fi = let f = if isPacked fi then "wireSizePacked"
-                                  else if isRequired fi then "wireSizeReq"
-                                         else if canRepeat fi then "wireSizeRep"
-                                                else "wireSizeOpt"
-                        in foldl' App (pvar f) [ litInt (wireTagLength fi)
-                                                 , litInt (getFieldType (typeCode fi))
-                                                 , var]
+                sizesListFields =  concat . zipWith toSize vars . F.toList $
+                                     fmap Left fieldInfos >< fmap Right oneofInfos
+        toSize var (Left fi)
+          = let f = if isPacked fi then "wireSizePacked"
+                    else if isRequired fi then "wireSizeReq"
+                         else if canRepeat fi then "wireSizeRep"
+                              else "wireSizeOpt"
+            in [foldl' App (pvar f) [ litInt (wireTagLength fi)
+                                    , litInt (getFieldType (typeCode fi))
+                                    , var]]
+        toSize var (Right oi) = map (toSize' var) . F.toList . oneofFields $ oi
+          where toSize' var r@(n,fi)
+                  = let f = "wireSizeOpt"
+                        var' = mkOp "Prelude'.=<<" (Var (qualName (snd (oneofGet r)))) var
+                    in foldl' App (pvar f) [ litInt (wireTagLength fi)
+                                           , litInt (getFieldType (typeCode fi))
+                                           , var']
+
 
 -- wirePut generation
         putCases = UnGuardedRhs $ cases
@@ -887,17 +1082,31 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                 | otherwise = sortedPutStmtsList
                 sortedPutStmtsList = map snd                                          -- remove number
                                      . sortBy (compare `on` fst)                      -- sort by number
-                                     . zip (map fieldNumber . F.toList $ fieldInfos)  -- add number as fst
                                      $ putStmtsList
-                putStmtsList = zipWith toPut vars . F.toList $ fieldInfos
-        toPut var fi = let f = if isPacked fi then "wirePutPacked"
-                                 else if isRequired fi then "wirePutReq"
-                                        else if canRepeat fi then "wirePutRep"
-                                               else "wirePutOpt"
-                       in Qualifier $
+                putStmtsList = concat . zipWith toPut vars . F.toList $
+                                 fmap Left fieldInfos >< fmap Right oneofInfos
+        toPut var (Left fi)
+          = let f = if isPacked fi then "wirePutPacked"
+                    else if isRequired fi then "wirePutReq"
+                         else if canRepeat fi then "wirePutRep"
+                              else "wirePutOpt"
+            in [(fieldNumber fi,
+                 Qualifier $
+                   foldl' App (pvar f) [ litInt (getWireTag (wireTag fi))
+                                       , litInt (getFieldType (typeCode fi))
+                                       , var]
+                 )]
+        toPut var (Right oi) = map (toPut' var) . F.toList . oneofFields $ oi
+          where toPut' var r@(n,fi)
+                  = let f = "wirePutOpt"
+                        var' = mkOp "Prelude'.=<<" (Var (qualName (snd (oneofGet r)))) var
+                    in (fieldNumber fi
+                       ,Qualifier $
                           foldl' App (pvar f) [ litInt (getWireTag (wireTag fi))
-                                                , litInt (getFieldType (typeCode fi))
-                                                , var]
+                                              , litInt (getFieldType (typeCode fi))
+                                              , var']
+                       )
+
 -- wireGet generation
 -- new for 1.5.7, rewriting this a great deal!
         getCases = let param = if storeUnknown di
@@ -915,6 +1124,10 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                 (Case (lvar "wire'Tag") updateAlts)
         -- update cases are all normal fields then all known extensions then wildcard
         updateAlts = concatMap toUpdate (F.toList fieldInfos)
+                     ++ (do -- in list monad
+                          o <- F.toList oneofInfos
+                          f <- F.toList (oneofFields o)
+                          toUpdateO o f)
                      ++ (if extensible then concatMap toUpdateExt (F.toList fieldExts) else [])
                      ++ [Alt src PWildCard (UnGuardedRhs wildcardAlt) noWhere]
         -- the wildcard alternative handles new extensions and 
@@ -960,6 +1173,9 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
 -- wireGet without extensions
         toUpdate fi | Just (wt1,wt2) <- packedTag fi = [toUpdateUnpacked wt1 fi, toUpdatePacked wt2 fi]
                     | otherwise                      = [toUpdateUnpacked (wireTag fi) fi]
+
+
+
         toUpdateUnpacked wt1 fi =
           Alt src (litIntP . getWireTag $ wt1) (UnGuardedRhs $ 
             preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
@@ -992,6 +1208,42 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         -- knowledge that only TYPE_MESSAGE and TYPE_GROUP have merges
         -- that are not right-biased replacements.  The "mergeAppend" uses
         -- knowledge of how all repeated fields get merged.
+
+
+        -- for fields in OneofInfo
+        toUpdateO oi f@(_n,fi)
+          | Just (wt1,wt2) <- packedTag fi = [toUpdateUnpackedO oi wt1 f, toUpdatePackedO oi wt2 f] 
+          | otherwise                      = [toUpdateUnpackedO oi (wireTag fi) f]
+
+        toUpdateUnpackedO oi wt1 f@(_,fi) =
+          Alt src (litIntP . getWireTag $ wt1) (UnGuardedRhs $ 
+            preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
+                              RecUpdate (lvar "old'Self")
+                                        [FieldUpdate (unqualFName . oneofFName $ oi)
+                                                     (labelUpdateUnpackedO oi f)])
+                        $$ (Paren (pvar "wireGet" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
+        labelUpdateUnpackedO oi f@(_,fi) = qMerge (preludecon "Just" $$
+                                               (oneofCon f $$ lvar "new'Field")
+                                            )
+            where qMerge x | fromIntegral (getFieldType (typeCode fi)) `elem` [10,(11::Int)] =
+                               pvar "mergeAppend" $$ Paren ( (Var . unqualFName . oneofFName $ oi)
+                                                               $$ lvar "old'Self" )
+                                                  $$ Paren x
+                           | otherwise = x
+        toUpdatePackedO oi wt2 f@(_,fi) =
+          Alt src (litIntP . getWireTag $ wt2) (UnGuardedRhs $ 
+            preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
+                              RecUpdate (lvar "old'Self")
+                                        [FieldUpdate (unqualFName . oneofFName $ oi)
+                                                     (labelUpdatePackedO oi f)])
+                        $$ (Paren (pvar "wireGetPacked" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
+        labelUpdatePackedO oi f@(_,fi) = pvar "mergeAppend" $$ Paren ((Var . unqualFName . oneofFName $ oi)
+                                                                 $$ lvar "old'Self")
+                                                  $$ Paren (preludecon "Just" $$
+                                                              (oneofCon f $$ lvar "new'Field"))
+ 
+
+
 
     in InstDecl src Nothing [] [] (private "Wire") [TyCon me] . map InsDecl $
         [ FunBind [Match src (Ident "wireSize") [patvar "ft'",PAsPat (Ident "self'") (PParen mine)] Nothing sizeCases whereCalcSize]
