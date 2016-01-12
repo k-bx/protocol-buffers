@@ -51,7 +51,7 @@ serviceName _ = name
 packageName :: forall name req resp. KnownSymbol name => Method name req resp -> String
 packageName _ = name
   where fqn = symbolVal (Proxy :: Proxy name)
-        name =  intercalate "." (drop 1 (init (init (split ('.' ==) fqn))))
+        name =  intercalate "." (init (init (split ('.' ==) fqn)))
 
 -- | A reified method attached with a function to execute the method.
 data MethodHandler m = forall name req resp. MethodCxt name req resp =>
