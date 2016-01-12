@@ -542,11 +542,12 @@ hasExt di = not (null (extRanges di))
 serviceModule :: Result -> ServiceInfo -> Module
 serviceModule result si =
   Module src (ModuleName (fqMod name)) (modulePragmas False) Nothing
-  (Just ([ EAbs NoNamespace (UnQual (serviceTypeName si))
-         , EVar (UnQual (serviceProxyName si))
+  (Just (
+         [ mkAbs (UnQual (serviceTypeName si))
+         , mkEvar (UnQual (serviceProxyName si))
          ]
-         ++ fmap (\mi -> EAbs NoNamespace (UnQual (methodTypeName mi))) (serviceMethods si)
-         ++ fmap (\mi -> EVar (UnQual (methodProxyName mi))) (serviceMethods si)
+         ++ fmap (\mi -> mkAbs (UnQual (methodTypeName mi))) (serviceMethods si)
+         ++ fmap (\mi -> mkEvar (UnQual (methodProxyName mi))) (serviceMethods si)
         )
   )
   ( standardImports True False False ++
@@ -557,6 +558,15 @@ serviceModule result si =
   where
     name = serviceName si
     moduleName = ModuleName (fqMod (serviceName si))
+
+#if MIN_VERSION_haskell_src_exts(1, 17, 0)
+    mkAbs = EAbs NoNamespace
+    mkEvar = EVar
+#else
+    mkAbs = EAbs
+    mkEvar = EVar NoNamespace
+#endif
+
 
 serviceTypeName :: ServiceInfo -> Name
 serviceTypeName si = baseIdent (serviceName si)
@@ -582,13 +592,22 @@ serviceDecls si' =
   where
     serviceDecl si =
       TypeDecl src (serviceTypeName si) [] (TyApp (TyCon (private "Service")) (
-        TyPromoted (PromotedList True (fmap (\mx -> TyPromoted (PromotedCon False (UnQual (methodTypeName mx))))  (serviceMethods si))
+        TyPromoted (
+#if MIN_VERSION_haskell_src_exts(1, 17, 0)
+            PromotedList True (fmap (\mx -> TyPromoted (PromotedCon False (UnQual (methodTypeName mx)))) (serviceMethods si))
+#else
+            PromotedList True (fmap (\mx -> PromotedCon False (UnQual (methodTypeName mx))) (serviceMethods si))
+#endif
                    )
         ))
 
     serviceProxy si =
       [ TypeSig src [serviceProxyName si] (TyCon (UnQual (serviceTypeName si)))
-      , PatBind src (PVar (serviceProxyName si)) (UnGuardedRhs (Con (private "Service"))) Nothing --(BDecls [])
+#if MIN_VERSION_haskell_src_exts(1, 17, 0)
+      , PatBind src (PVar (serviceProxyName si)) (UnGuardedRhs (Con (private "Service"))) Nothing
+#else
+      , PatBind src (PVar (serviceProxyName si)) (UnGuardedRhs (Con (private "Service"))) (BDecls [])
+#endif
       ]
 
     methodDecl _si mi =
@@ -603,7 +622,11 @@ serviceDecls si' =
 
     methodProxy _si mi =
       [ TypeSig src [methodProxyName mi] (TyCon (UnQual (methodTypeName mi)))
+#if MIN_VERSION_haskell_src_exts(1, 17, 0)
       , PatBind src (PVar (methodProxyName mi)) (UnGuardedRhs (Con (private "Method"))) Nothing -- (BDecls [])
+#else
+      , PatBind src (PVar (methodProxyName mi)) (UnGuardedRhs (Con (private "Method"))) (BDecls [])
+#endif
       ]
 
 --------------------------------------------
