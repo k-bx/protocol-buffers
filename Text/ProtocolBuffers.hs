@@ -62,7 +62,7 @@ import Text.ProtocolBuffers.Reflections
   ( ReflectDescriptor(..),ReflectEnum(..),ProtoName(..),HsDefault(..),EnumInfoApp
   , KeyInfo,FieldInfo(..),DescriptorInfo(..),EnumInfo(..),ProtoInfo(..),makePNF )
 import Text.ProtocolBuffers.Services
-  (MethodCxt, MethodHandler(..), methodName, reifyMethods)
+  (MethodCxt, MethodHandler(..), methodName, serviceName, packageName, reifyMethods)
 import Text.ProtocolBuffers.TextMessage
   ( messagePutText, messageGetText )
 import Text.ProtocolBuffers.WireMessage
