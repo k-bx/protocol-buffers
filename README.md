@@ -35,9 +35,9 @@ How well does this Haskell package duplicate Google's project?
 - These messages support unknown fields if hprotoc is passed the
   proper flag (-u or --unknown_fields).
 
-- This does not generate anything for Services/Methods.
+- ~~This does not generate anything for Services/Methods.~~
 
-- Adding support for services has not been considered.
+- ~~Adding support for services has not been considered.~~
 
 I think that Google's code checks for some policy violations that are
 not well documented enough for me to reverse engineer. Some (all?) of
@@ -299,7 +299,7 @@ It is very natural to combine the oneof specification into Haskell
 ADT, so we implement the feature.
 
 In `hprotoc/oneoftest`, we have an example for this. `school.proto` defines
-a collection of members in a school, which is organized into dormitories. 
+a collection of members in a school, which is organized into dormitories.
 Each member should have common attributes like `id` and `name`, but there are
 attributes only specific to students, faculties or administrators.
 
@@ -308,7 +308,7 @@ and admin type. How it is defined should be easily understood from `school.proto
 
 Once `protocol-buffers` is installed, using `hprotoc`, we can generate Haskell
 source codes. Assuming we run `hprotoc` on the `oneoftest` directory and generate
-source code in `hs` directory: 
+source code in `hs` directory:
 
 ```
 oneoftest> hprotoc --proto_path=. --haskell_out=hs school.proto
@@ -327,13 +327,13 @@ and `School.Member.Property` module defines `Property` (as `oneof`) by
 data Property = Prop_student {prop_student :: Student }
               | Prop_faculty {prop_faculty :: Faculty }
               | Prop_admin   {prop_admin   :: Admin   }
-```                            
+```
 where `Student`, `Faculty` and `Admin` are defined as ordinary nested message
 data types in separate modules, respectively. Therefore, the `oneof` feature
 is smoothly matched with Haskell sum types. Note that `Maybe` will be always
 present for a `oneof` field in the owner data type definition (Here, `Maybe Property`
 in the definition of `Member`). This is because of compatibility with other language
-implementationn that treats `oneof` as a collection of `optional` fields. 
+implementationn that treats `oneof` as a collection of `optional` fields.
 
 In the `oneoftest` directory, we provides a Haskell example in `hprotoc/oneoftest/hs`
 and a C++ example in `hprotoc/oneoftest/cpp` to demonstrate how to use. Each example
@@ -342,7 +342,7 @@ a serialized binary file in wire format. Then,`decode` takes the file and presen
 some information to prove it successfully decoded the binary. One can encode from
 Haskell side and decode on C++ side, or vice versa. For building, simply run
 `build.sh` in each directory. For C++, one must previously install C++ `protobuf`
-library and `pkg-config`. We assume that `hprotoc` was already executed as shown above. 
+library and `pkg-config`. We assume that `hprotoc` was already executed as shown above.
 
 Here are examples.
 ```
@@ -365,7 +365,7 @@ members {
     grade: 5
     specialty: "defense of dark arts"
   }
-}                                
+}
 ```
 
 ```
@@ -375,3 +375,168 @@ hs >   ./decode ../cpp/serialized.dat
 
 Right (Dormitory {name = "Gryffindor", members = fromList [Member {id = 1, name = "Albus Dumbledore", property = Just (Prop_faculty {prop_faculty = Faculty {subject = "allmighty", title = Just "headmaster", duty = fromList []}})},Member {id = 2, name = "Harry Potter", property = Just (Prop_student {prop_student = Student {grade = 5, specialty = Just "defense of dark arts"}})}]},"")
 ```
+
+New code generation for services
+--------------------------------
+
+`protocol-buffers` support the definition and generation of RPC services. Though
+without specifying a specific transport mechanism. Meaning only stubs are generated.
+True to this motto `hprotoc` generates transport agnostic interfaces for services.
+
+Consider a `Search.proto` definition like the following:
+
+````protobuf
+message SearchRequest {
+    required string query = 1;
+    optional int32 page_number = 2;
+    optional int32 result_per_page = 3;
+}
+
+message SearchResponse {
+    repeated string results = 1;
+}
+
+message AutocompleteRequest {
+    required string query = 1;
+    optional int32 max_results = 2;
+}
+
+message AutocompleteResponse {
+    repeated string results = 1;
+}
+
+service SearchService {
+    rpc Search (SearchRequest) returns (SearchResponse);
+    rpc Autocomplete(AutocompleteRequest) returns (AutocompleteResponse);
+}
+````
+
+We define two request-response pairs `SearchRequest`, `SearchResponse` and
+`AutocompleteRequest`, `AutocompleteResponse`  and a service definition
+`SearchService`. The service has two methods `Search` and `Autocomplete`.
+Each taking one of the request-response pair as parameter respectively as
+output.
+
+For `SearchService` it generates a module roughly looking like this:
+(omitting imports, exports and code for other messages):
+
+````haskell
+type SearchService = P'.Service '[Search, Autocomplete]
+
+searchService :: SearchService
+searchService = P'.Service
+
+type Search = P'.Method ".Search.SearchService.Search" SearchRequest SearchResponse
+
+type Autocomplete = P'.Method ".Search.SearchService.Autocomplete" AutocompleteRequest AutocompleteResponse
+
+search :: Search
+search = P'.Method
+
+autocomplete :: Autocomplete
+autocomplete = P'.Method
+````
+
+A translated service consists of a type-level list itself consisting of `Method` types.
+Each `Method` is parameterized with its method name as type-level string (via `DataKinds` extension),
+its input parameter type and its output parameter type.
+
+For every RPC method there will be one type alias for some parameterized `Method` type. For convenience `hprotoc`
+will generate proxy functions (`searchService`, `search` and `autocomplete`) so
+users won't have to tinker with proxying their types manually.
+
+As the `protocol-buffer` does not specify any transport mechanism for services implementors
+have to build the transports on their own. The following example illustrates how to write
+a protocol-buffer service client for some transport.
+
+````haskell
+-- | Do the real work. We have got rpc method name and input parameter.
+-- Serialize them and send them to the server. Retrieve the response and
+-- deserialize it.
+invokeRaw :: (HasConnection m, MonadIO m, Wire req, Wire resp,
+    ReflectDescriptor req, ReflectDescriptor resp) => ByteString -> req -> m resp
+invokeRaw methodName request = ...
+
+-- | High level method for calling rpc methods.
+invoke :: forall m name req resp. (HasConnection m, MonadIO m, MethodCxt name req resp)
+       => Method name req resp -> req -> m resp
+invoke method = \req -> invokeRaw name req
+  where name = ByteString.pack (methodName method)
+
+main = do
+    ...
+    SearchResponse rx <- invoke search (SearchRequest { query = Utf8 "hello world"
+                                                      , page_number = Nothing
+                                                      , result_per_page = Nothing
+                                                      })
+    ...
+````
+
+The `invoke` function deconstructs the passed `Method` type and delegates the real work
+to the `invokeRaw` function. Note the `MethodCxt` constraint in `invoke`s context. It
+makes sure we can reify the method name to a string and that `req` and `resp` are
+both protocol-buffer messages. (`MethodCxt` and `methodName` live in `Text.ProtocolBuffers.Services`.)
+
+One can spot the usage of the proxy functions mentioned earlier in call to `invoke` in
+the abbreviated `main` function.
+
+Serving RPC services is another use-case. As for the client, the definitions are transport agnostic.
+An implentor has to choose a transport mechanism for his service.
+
+
+````haskell
+doSearch :: SearchRequest -> SearchM SearchResponse
+doSearch req = do ...
+
+doAutocomplete :: AutocompleteRequest -> SearchM AutocompleteResponse
+doAutocomplete req = do ...
+
+handlers :: [MethodHandler SearchM]
+handlers = reifyMethods searchService []
+                     doSearch
+                     doAutocomplete
+````
+
+An implementor starts by defining the handler functions `doSearch` and `doAutocomplete`.
+By using the `reifyMethods` function on the `searchService` proxy and the corresponding
+handlers for `Search` (`doSearch`) and Autocomplete (`doAutocomplete`) the handlers will
+be reified to `MethodHandler`s. A `MethodHandler` is basically a `Method` type paired up
+with a function corresponding to the interface given by the `Method` type living in some context `m`.
+
+````haskell
+-- | A reified method attached with a function to execute the method.
+data MethodHandler m = forall name req resp. MethodCxt name req resp =>
+                       MethodHandler (Method name req resp) (req -> m resp)
+````
+
+With the `MethodHandler`s at hand an implementor can use any transport mechanism.
+It follows a more elaborated example using `Text.ProtocolBuffers.Get` facilities:
+
+````haskell
+data SomeHeader = SomeHeader { hdMethod    :: !ByteString
+                             , hdPayloadSz :: !Word32
+                             }
+
+-- This turns bytestrings into actions which handle the incoming service calls,
+-- which in turn respond with a put to put it back on the wire/file.
+-- Again, we are free to handle the methods as we want, no constraints given through
+-- the encoding of methods.
+handle :: Functor m => [MethodHandler m] -> Lazy.ByteString -> Result (m Put.Put)
+handle methods =
+  runGet (do mSz <- fromIntegral <$> getWord8
+             SomeHeader{..} <- SomeHeader <$> getByteString mSz <*> getWord32be
+             case Map.lookup hdMethod methods' of
+               Just (MethodHandler _ f) -> do
+                 req <- messageGetM
+                 return (messagePutM <$> f req)
+               Nothing -> fail "invalid method")
+  where
+    -- An efficient mapping from method names to their handlers
+    methods' = Map.fromList [ (m, mh) | mh@(MethodHandler method _) <- methods
+                                      , let m = ByteString.pack (methodName method) ]
+````
+
+`handle` takes a list of `MethodHandler`s and a lazy `ByteString` to decode a call to the service.
+A service call consists of `SomeHeader`, a method name followed by the input parameter to that
+method each prefixed with their length in bytes. `handle` turns a list of `MethodHandler`s into
+actions returning the response as `Put` to directly send it back to the issuer.
