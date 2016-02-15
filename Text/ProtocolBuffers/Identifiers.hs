@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses,TypeSynonymInstances,FlexibleInstances,DeriveDataTypeable #-}
+{-# LANGUAGE MultiParamTypeClasses,TypeSynonymInstances,FlexibleInstances,DeriveDataTypeable,CPP #-}
 -- | This modules colelct utility routines related to the different
 -- incarnations of identifiers in the code.  The basic identifier is
 -- always ASCII, but because of the self generated DescriptorProto
@@ -30,8 +30,12 @@ module Text.ProtocolBuffers.Identifiers
 import qualified Data.ByteString.Lazy.Char8 as LC
 import qualified Data.ByteString.Lazy.UTF8 as U
 import Data.Char
-import Data.List hiding (uncons)
+#if __GLASGOW_HASKELL__ < 710
+import Data.List
 import Data.Monoid
+#else
+import Data.List hiding (uncons)
+#endif
 import Data.Generics(Data)
 import Data.Typeable(Typeable)
 import Data.Set(Set)
@@ -104,7 +108,7 @@ class (Monoid a) => Dotted a where
   cons :: Char -> a -> a
   dot :: a -> a -> a
   validI :: a -> Maybe (IName a)
-  -- | 'validDI' ensures the DIName is 
+  -- | 'validDI' ensures the DIName is
   validDI :: a -> Maybe (DIName a)
   -- | 'split' returns a list of non-empty 'a' with all '.' characters removed
   split :: a -> [a]
@@ -137,10 +141,10 @@ splitFI = map IName . split . fiName
 splitFM :: Dotted a => FMName a -> [MName a]
 splitFM = map MName . split . fmName
 
-promoteDI :: Dotted a => IName a -> DIName a 
+promoteDI :: Dotted a => IName a -> DIName a
 promoteDI = DIName . iName
 
-promoteFI :: Dotted a => IName a -> FIName a 
+promoteFI :: Dotted a => IName a -> FIName a
 promoteFI = FIName . cons '.' . iName
 
 promoteFM :: Dotted a => MName a -> FMName a
@@ -190,7 +194,7 @@ checkDIUtf8 s@(Utf8 xs) =
                          (True,_)    -> Left $ "Invalid identifier because is contains two periods in a row: "++show (toString s)
                          (_,True)    -> Right (f [IName (Utf8 a)])
                          _           -> parts (f . (IName (Utf8 a):)) (U.span ('.'/=) (U.drop 1 b))
- 
+
 -- | The 'mangle' transformation has instances for several combiantions
 -- of input and output.  These allow one to construct the Haskell types
 -- of MName/FMName/PMName and FName/FFName/PFName out of the protobuf
