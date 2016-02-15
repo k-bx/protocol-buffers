@@ -35,11 +35,13 @@ import qualified Data.Foldable as F
 import Data.Map(Map)
 import qualified Data.Map as M
 import Data.Maybe(fromMaybe,isJust)
+#if __GLASGOW_HASKELL__ < 710
 import Data.Monoid(mappend,mconcat)
+#endif
 import Data.Sequence((|>),(><),viewl,ViewL(..))
 import qualified Data.Sequence as Seq(singleton,null,empty)
 import Data.Typeable(Typeable,typeOf,cast)
-import Data.Data(Data(gfoldl,gunfold,toConstr),Constr,DataType,Fixity(Prefix),mkDataType,mkConstr,constrIndex,dataTypeOf)
+import Data.Data(Data(gfoldl,gunfold,toConstr),Constr,DataType,Fixity(Prefix),mkDataType,mkConstr,dataTypeOf)
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.WireMessage
@@ -69,7 +71,7 @@ err msg = error $ "Text.ProtocolBuffers.Extensions error\n"++msg
 -- in the deserialization from the wire.  Unknown extension fields are
 -- read as a collection of raw byte sequences.  If a key is then
 -- presented it will be used to parse the bytes.
--- 
+--
 -- There is no guarantee for what happens if two Keys disagree about
 -- the type of a field; in particular there may be undefined values
 -- and runtime errors.  The data constructor for 'Key' has to be
@@ -178,7 +180,7 @@ con_ExtField = mkConstr ty_ExtField "ExtField" [] Prefix
 
 instance Data ExtField where
   gfoldl f z m = z dataFromList `f` dataToList m
-  gunfold k z c = k (z dataFromList)
+  gunfold k z _ = k (z dataFromList)
   toConstr (ExtField _) = con_ExtField
   dataTypeOf _ = ty_ExtField
 
@@ -329,7 +331,7 @@ class ExtKey c where
   --  (which is not exported to user API).
   --
   --  * The wrong optional-key versus repeated-key type is a failure
-  -- 
+  --
   --  * The wrong type of the value might be found in the map and
   --  * cause a failure
   --
@@ -346,7 +348,7 @@ class ExtKey c where
 
 -- | The 'Key' and 'GPWitness' GADTs use 'GPB' as a shorthand for many
 -- classes.
-class (Mergeable a,Default a,Wire a,Show a,Typeable a,Eq a,Ord a) => GPB a 
+class (Mergeable a,Default a,Wire a,Show a,Typeable a,Eq a,Ord a) => GPB a
 
 instance GPB Bool
 instance GPB ByteString
@@ -485,12 +487,12 @@ parseWireExtMaybe :: Key Maybe msg v -> WireType -> Seq EP -> Either String (Fie
 parseWireExtMaybe k@(Key fi ft mv)  wt raw | wt /= toWireType ft =
   Left $ "parseWireExt Maybe: Key's FieldType does not match ExtField's wire type: "++show (k,toWireType ft,wt)
                                            | otherwise = do
-  let mkWitType :: Maybe a -> FieldType -> EP -> Either String (Seq a) 
+  let mkWitType :: Maybe a -> FieldType -> EP -> Either String (Seq a)
       mkWitType = undefined
       chooseGet' = chooseGet `asTypeOf` (mkWitType mv)
   let parsed = map (chooseGet' ft) . F.toList $ raw
       errs = [ m | Left m <- parsed ]
-  if null errs 
+  if null errs
     then case viewl (mconcat [ a | Right a <- parsed ]) of
            EmptyL -> Left "Text.ProtocolBuffers.Extensions.parseWireExtMaybe: impossible empty parsed list"
            x :< xs -> Right (fi,(ExtOptional ft (GPDyn (F.foldl' mergeAppend x xs))))
@@ -548,7 +550,7 @@ instance ExtKey Seq where
              Nothing -> Left $ "getExt Seq: Key's Seq value cast failed: "++show (k,typeOf s)
              Just s' -> Right s'
          getExt' (ExtFromWire {}) = err $ "Impossible? getExt.getExt' Seq should not have ExtFromWire case (after parseWireExtSeq)!"
-             
+
   -- This is more complicated than the Maybe instance because the old
   -- Seq needs to be retrieved and perhaps parsed and then appended
   -- to.  All sanity checks are included below.  TODO: do enough
@@ -587,7 +589,7 @@ parseWireExtSeq :: Key Seq msg v -> WireType -> Seq EP -> Either String (FieldId
 parseWireExtSeq k@(Key i t mv)  wt raw | wt /= toWireType t =
   Left $ "parseWireExtSeq: Key mismatch! Key's FieldType does not match ExtField's wire type: "++show (k,toWireType t,wt)
                                        | otherwise = do
-  let mkWitType :: Maybe a -> FieldType -> EP -> Either String (Seq a) 
+  let mkWitType :: Maybe a -> FieldType -> EP -> Either String (Seq a)
       mkWitType = undefined
       chooseGet' = chooseGet `asTypeOf` (mkWitType mv)
   let parsed = map (chooseGet' t) . F.toList $ raw
@@ -602,7 +604,7 @@ instance ExtKey PackedSeq where
           v' = ExtPacked t (GPDynSeq s)
           ef' = M.insert i v' ef
       in seq v' $ seq ef' (putExtField (ExtField ef') msg)
-    
+
   clearExt (Key i _ _) msg =
     let (ExtField ef) = getExtField msg
         ef' = M.delete i ef
@@ -659,7 +661,7 @@ parseWireExtPackedSeq :: Key PackedSeq msg v -> WireType -> Seq EP -> Either Str
 parseWireExtPackedSeq k@(Key i t mv) wt raw | wt /= 2 {- packed wire type is 2, length delimited -} =
   Left $ "parseWireExtPackedSeq: Key mismatch! Key's FieldType does not match ExtField's wire type: "++show (k,toWireType t,wt)
                                             | otherwise = do
-  let mkWitType :: Maybe a -> FieldType -> EP -> Either String (Seq a) 
+  let mkWitType :: Maybe a -> FieldType -> EP -> Either String (Seq a)
       mkWitType = undefined
       chooseGet' = chooseGet `asTypeOf` (mkWitType mv)
   let parsed = map (chooseGet' t) . F.toList $ raw
@@ -723,7 +725,7 @@ loadExtension fieldId wireType msg = do
           ef' = M.insert fieldId v' ef
       seq v' $ seq ef' $ return (putExtField (ExtField ef') msg)
 -- handle wireType of "2" when toWireType ft is not "2" but ft could be packed by using wireGetPacked ft
-    Just (ExtRepeated ft (GPDynSeq s)) | toWireType ft /= wireType -> if (wireType==2) && (isValidPacked ft) 
+    Just (ExtRepeated ft (GPDynSeq s)) | toWireType ft /= wireType -> if (wireType==2) && (isValidPacked ft)
                                                                         then do
                                                                           aa <- wireGetPacked ft
                                                                           let v' = ExtRepeated ft (GPDynSeq (s >< aa))

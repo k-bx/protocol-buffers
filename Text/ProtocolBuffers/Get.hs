@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP,MagicHash,ScopedTypeVariables,FlexibleInstances,RankNTypes,TypeSynonymInstances,MultiParamTypeClasses,BangPatterns #-}
+{-# LANGUAGE CPP,MagicHash,ScopedTypeVariables,FlexibleInstances,RankNTypes,TypeSynonymInstances,MultiParamTypeClasses,BangPatterns,CPP #-}
+{-# OPTIONS_GHC -fno-warn-warnings-deprecations #-}
 -- | By Chris Kuklewicz, drawing heavily from binary and binary-strict,
 -- but all the bugs are my own.
 --
@@ -64,7 +65,11 @@ module Text.ProtocolBuffers.Get
 -- The Get monad is an instance of binary-strict's BinaryParser:
 -- import qualified Data.Binary.Strict.Class as P(BinaryParser(..))
 -- The Get monad is an instance of all of these library classes:
+#if __GLASGOW_HASKELL__ < 710
 import Control.Applicative(Applicative(pure,(<*>)),Alternative(empty,(<|>)))
+#else
+import Control.Applicative(Alternative(empty,(<|>)))
+#endif
 import Control.Monad(MonadPlus(mzero,mplus),when)
 import Control.Monad.Error.Class(MonadError(throwError,catchError),Error(strMsg))
 -- It can be a MonadCont, but the semantics are too broken without a ton of work.
@@ -82,9 +87,13 @@ import qualified Data.ByteString.Lazy as L(take,drop,length,span,toChunks,fromCh
 import qualified Data.ByteString.Lazy.Internal as L(ByteString(..),chunk)
 import qualified Data.Foldable as F(foldr,foldr1)    -- used with Seq
 import Data.Int(Int32,Int64)                         -- index type for L.ByteString
+#if __GLASGOW_HASKELL__ < 710
 import Data.Monoid(Monoid(mempty,mappend))           -- Writer has a Monoid contraint
-import Data.Sequence(Seq,null,(|>))                  -- used for future queue in handler state
 import Data.Word(Word,Word8,Word16,Word32,Word64)
+#else
+import Data.Word(Word8,Word16,Word32,Word64)
+#endif
+import Data.Sequence(Seq,null,(|>))                  -- used for future queue in handler state
 import Foreign.ForeignPtr(withForeignPtr)
 import Foreign.Ptr(Ptr,castPtr,plusPtr,minusPtr,nullPtr)
 import Foreign.Storable(Storable(peek,sizeOf))
@@ -127,7 +136,7 @@ decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc -> trace ("dec
   if S.null ss
     then trace ("decode7unrolled: S.null ss") $ unGet decode7 sc sIn pc -- decode7 will try suspend then will fail if still bad
     else
-      let (TU'OK x i) = 
+      let (TU'OK x i) =
             unsafePerformIO $ withForeignPtr fp $ \ptr0 -> do
                 if ptr0 == nullPtr || len < 1 then error "Get.decode7unrolled: ByteString invariant failed" else do
                 let ok :: s -> Int -> IO (TU s)
@@ -173,25 +182,25 @@ decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc -> trace ("dec
                 let !val'5 = (val'4 .|. (fromIntegral (b'5 .&. 0x7F) `shiftL` 28))
                     !ptr6 = ptr5 `plusPtr` 1
                 if ptr6 >= end then more else do
-                   
+
                 b'6 <- peek ptr6
                 if b'6 < 128 then ok (val'5 .|. (fromIntegral b'6 `shiftL` 35)) 6 else do
                 let !val'6 = (val'5 .|. (fromIntegral (b'6 .&. 0x7F) `shiftL` 35))
                     !ptr7 = ptr6 `plusPtr` 1
                 if ptr7 >= end then more else do
-                   
+
                 b'7 <- peek ptr7
                 if b'7 < 128 then ok (val'6 .|. (fromIntegral b'7 `shiftL` 42)) 7 else do
                 let !val'7 = (val'6 .|. (fromIntegral (b'7 .&. 0x7F) `shiftL` 42))
                     !ptr8 = ptr7 `plusPtr` 1
                 if ptr8 >= end then more else do
-                   
+
                 b'8 <- peek ptr8
                 if b'8 < 128 then ok (val'7 .|. (fromIntegral b'8 `shiftL` 49)) 8 else do
                 let !val'8 = (val'7 .|. (fromIntegral (b'8 .&. 0x7F) `shiftL` 49))
                     !ptr9 = ptr8 `plusPtr` 1
                 if ptr9 >= end then more else do
-                   
+
                 b'9 <- peek ptr9
                 if b'9 < 128 then ok (val'8 .|. (fromIntegral b'9 `shiftL` 56)) 9 else do
                 let !val'9 = (val'8 .|. (fromIntegral (b'9 .&. 0x7F) `shiftL` 56))
@@ -380,7 +389,7 @@ lookAhead todo = do
   useCheckpoint
   return a
 
--- | 'lookAheadM' runs the @todo@ action. If the action returns 'Nothing' then the 
+-- | 'lookAheadM' runs the @todo@ action. If the action returns 'Nothing' then the
 -- BinaryParser state is rewound (as in 'lookAhead').  If the action return 'Just' then
 -- the BinaryParser is not rewound, and lookAheadM acts as an identity.
 --
@@ -393,7 +402,7 @@ lookAheadM todo = do
   maybe useCheckpoint (const clearCheckpoint) a
   return a
 
--- | 'lookAheadE' runs the @todo@ action. If the action returns 'Left' then the 
+-- | 'lookAheadE' runs the @todo@ action. If the action returns 'Left' then the
 -- BinaryParser state is rewound (as in 'lookAhead').  If the action return 'Right' then
 -- the BinaryParser is not rewound, and lookAheadE acts as an identity.
 --
@@ -416,9 +425,9 @@ collect s@(S ss bs n) future | Data.Sequence.null future = make_safe $ s
 instance (Show a) => Show (Result a) where
   showsPrec _ (Failed n msg) = ("(Failed "++) . shows n . (' ':) . shows msg . (")"++)
   showsPrec _ (Finished bs n a) =
-    ("(CFinished ("++) 
+    ("(CFinished ("++)
     . shows bs . (") ("++)
-    . shows n . (") ("++) 
+    . shows n . (") ("++)
     . shows a . ("))"++)
   showsPrec _ (Partial {}) = ("(Partial <Maybe Data.ByteString.Lazy.ByteString-> Result a)"++)
 
@@ -465,7 +474,7 @@ putAvailable !bsNew = Get $ \ sc (S _ss _bs n) pc ->
                    | otherwise = make_state (mappend whole bsNew) n1
       rebuild x@(ErrorFrame {}) = x
   in sc () s' (rebuild pc)
-         
+
 -- Internal access to full internal state, as helper functions
 getFull :: Get S
 getFull = Get $ \ sc s pc -> sc s s pc
@@ -774,7 +783,7 @@ getWord64host = getStorable
 {-# INLINE getWord64host #-}
 
 -- Below here are the class instances
-    
+
 instance Functor Get where
   fmap f m = Get (\sc -> unGet m (sc . f))
   {-# INLINE fmap #-}

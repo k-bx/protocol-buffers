@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable,GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable,GeneralizedNewtypeDeriving,CPP #-}
 -- | "Text.ProtocolBuffers.Basic" defines or re-exports most of the
 -- basic field types; 'Maybe','Bool', 'Double', and 'Float' come from
 -- the Prelude instead. This module also defines the 'Mergeable' and
@@ -19,7 +19,9 @@ import Data.Foldable as F(Foldable(foldl))
 import Data.Generics(Data(..))
 import Data.Int(Int32,Int64)
 import Data.Ix(Ix)
+#if __GLASGOW_HASKELL__ < 710
 import Data.Monoid(Monoid(..))
+#endif
 import Data.Sequence(Seq,(><))
 import Data.Typeable(Typeable)
 import Data.Word(Word8,Word32,Word64)
@@ -257,4 +259,3 @@ instance Default (Maybe a) where defaultValue = Nothing
 instance Default (Seq a) where defaultValue = mempty
 instance Default ByteString where defaultValue = mempty
 instance Default Utf8 where defaultValue = mempty
-
