@@ -606,13 +606,13 @@ mapField = do
         }
     let field = defaultValue {
           D.FieldDescriptorProto.name      = Just self,
-          D.FieldDescriptorProto.number    = Just 1,
+          D.FieldDescriptorProto.number    = Just number,
           D.FieldDescriptorProto.label     = Just LABEL_REPEATED,
           D.FieldDescriptorProto.type_name = Just entryName
         }
     update' $ \s -> s
-        { D.DescriptorProto.nested_type=Seq.fromList [mapFieldEntry]
-        , D.DescriptorProto.field=Seq.fromList [field]
+        { D.DescriptorProto.nested_type = D.DescriptorProto.nested_type s |> mapFieldEntry
+        , D.DescriptorProto.field       = D.DescriptorProto.field s       |> field
         }
 
 enum :: (D.EnumDescriptorProto -> P s ()) -> P s ()
