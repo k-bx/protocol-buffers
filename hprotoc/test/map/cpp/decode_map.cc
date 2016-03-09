@@ -14,39 +14,36 @@ int main()
 {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-  char filename[] = "mymap.output";
-
   WithMap msg;
 
-  fstream input(filename, ios::in | ios::binary);
-  msg.ParseFromIstream(&input);
+  msg.ParseFromIstream(&std::cin);
 
   string str;
   google::protobuf::TextFormat::PrintToString(msg, &str);
   cout << str << endl;
 
-  cout << "map_field_size: "
+  cout << "map_field_size(): "
        << msg.map_field_size()
        << endl;
 
   for(auto& kv: msg.map_field())
       cout << "key="
            << kv.first
-           << "\t"
+           << ", "
            << "value="
            << kv.second.content()
            << endl;
 
   cout << endl;
 
-  cout << "another_map_field_size: "
+  cout << "another_map_field_size(): "
        << msg.another_map_field_size()
        << endl;
 
   for(auto& kv: msg.another_map_field())
       cout << "key="
            << kv.first
-           << "\t"
+           << ", "
            << "value="
            << kv.second
            << endl;

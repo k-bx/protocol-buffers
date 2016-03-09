@@ -1,10 +1,20 @@
-encode_map: Mymap
-	stack exec ghc -- --make -O1 encode_map.hs
+GHC=stack exec ghc --
+
+HPROTOC=stack exec hprotoc --
+
+test: encode_map decode_map
+	./encode_map | ./decode_map
+
+decode_map: Mymap decode_map.hs
+	${GHC} --make -O1 decode_map.hs
+
+encode_map: Mymap encode_map.hs
+	${GHC} --make -O1 encode_map.hs
 
 Mymap:
-	stack exec hprotoc -- --proto_path=.. mymap.proto
+	${HPROTOC} --proto_path=.. mymap.proto
 
 clean:
-	rm -rf encode_map Mymap Mymap.hs *.{hi,o}
+	rm -rf decode_map encode_map Mymap Mymap.hs *.{hi,o}
 
-.PHONY: clean
+.PHONY: clean test

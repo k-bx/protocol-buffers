@@ -1,3 +1,12 @@
+test: encode_map decode_map
+	./encode_map | ./decode_map
+
+encode_map: mymap.pb.o encode_map.o
+	g++ -std=c++11 -o encode_map encode_map.o mymap.pb.o `pkg-config --libs protobuf`
+
+encode_map.o: encode_map.cc
+	g++ -std=c++11 -c encode_map.cc `pkg-config --cflags protobuf`
+
 decode_map: mymap.pb.o decode_map.o
 	g++ -std=c++11 -o decode_map decode_map.o mymap.pb.o `pkg-config --libs protobuf`
 
@@ -11,6 +20,6 @@ mymap.pb.o: mymap.pb.cc
 	g++ -std=c++11 -c mymap.pb.cc `pkg-config --cflags protobuf`
 
 clean:
-	rm decode_map decode_map.o mymap.pb.{cc,h,o}
+	rm -rf decode_map decode_map.o encode_map encode_map.o mymap.pb.{cc,h,o}
 
 .PHONY: clean
