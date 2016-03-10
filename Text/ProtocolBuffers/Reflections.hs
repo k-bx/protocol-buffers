@@ -82,6 +82,7 @@ data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , storeUnknown :: Bool
                                      , lazyFields :: Bool
                                      , makeLenses :: Bool
+                                     , mapEntry   :: Bool
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
@@ -113,6 +114,8 @@ data FieldInfo = FieldInfo { fieldName     :: ProtoFName
                            , typeName      :: Maybe ProtoName  -- ^ Set for Messages,Groups,and Enums
                            , hsRawDefault  :: Maybe ByteString -- ^ crappy, but not escaped, thing
                            , hsDefault     :: Maybe HsDefault  -- ^ nice parsed thing
+                           , isMapField    :: Bool             -- ^ whether the field is map field
+                           , mapKeyVal     :: Maybe ((FieldType, Maybe ProtoName), (FieldType, Maybe ProtoName)) -- ^ types of key and value fields
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 

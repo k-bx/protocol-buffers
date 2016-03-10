@@ -237,12 +237,12 @@ wireSizeOpt tagSize i (Just v) = wireSizeReq tagSize i v
 
 {-# INLINE wireSizeRep #-}
 -- | Used in generated code.
-wireSizeRep :: Wire v => Int64 -> FieldType -> Seq v -> Int64
+wireSizeRep :: (Foldable f, Wire v) => Int64 -> FieldType -> f v -> Int64
 wireSizeRep tagSize i vs = F.foldl' (\n v -> n + wireSizeReq tagSize i v) 0 vs
 
 {-# INLINE wireSizePacked #-}
 -- | Used in generated code.
-wireSizePacked :: Wire v => Int64 -> FieldType -> Seq v -> Int64
+wireSizePacked :: (Foldable f, Wire v) => Int64 -> FieldType -> f v -> Int64
 wireSizePacked tagSize i vs = tagSize + prependMessageSize (F.foldl' (\n v -> n + wireSize i v) 0 vs)
 
 {-# INLINE putSize #-}

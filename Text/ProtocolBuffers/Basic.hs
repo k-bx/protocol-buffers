@@ -5,7 +5,7 @@
 -- 'Default' classes. The 'Wire' class is not defined here to avoid orphans.
 module Text.ProtocolBuffers.Basic
   ( -- * Basic types for protocol buffer fields in Haskell
-    Double,Float,Bool,Maybe,Seq,Utf8(Utf8),ByteString,Int32,Int64,Word32,Word64
+    Double,Float,Bool,Maybe,Seq,Map.Map,Utf8(Utf8),ByteString,Int32,Int64,Word32,Word64
     -- * Haskell types that act in the place of DescritorProto values
   , WireTag(..),FieldId(..),WireType(..),FieldType(..),EnumCode(..),WireSize
     -- * Some of the type classes implemented messages and fields
@@ -28,6 +28,8 @@ import Data.Word(Word8,Word32,Word64)
 
 import qualified Data.ByteString.Lazy as L(unpack)
 import Data.ByteString.Lazy.UTF8 as U (toString,fromString)
+
+import qualified Data.Map as Map
 
 -- Num instances are derived below for the purpose of getting fromInteger for case matching
 
@@ -237,6 +239,9 @@ instance Mergeable (Seq a) where
 --    mergeEmpty = empty
     mergeAppend = (><)
 
+instance Ord k => Mergeable (Map.Map k v) where
+    mergeAppend = Map.union
+
 -- These all have errors as mergeEmpty and use the second paramater for mergeAppend
 instance Mergeable Bool
 instance Mergeable Utf8
@@ -257,5 +262,6 @@ instance Default Double where defaultValue = 0
 instance Default Bool where defaultValue = False
 instance Default (Maybe a) where defaultValue = Nothing
 instance Default (Seq a) where defaultValue = mempty
+instance Ord k => Default (Map.Map k v) where defaultValue = mempty
 instance Default ByteString where defaultValue = mempty
 instance Default Utf8 where defaultValue = mempty
