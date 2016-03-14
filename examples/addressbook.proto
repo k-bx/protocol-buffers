@@ -22,6 +22,8 @@ message Person {
   }
 
   repeated PhoneNumber phone = 4;
+
+  map<string, string> test_dict = 5;
 }
 
 // Our address book file is just one of these.

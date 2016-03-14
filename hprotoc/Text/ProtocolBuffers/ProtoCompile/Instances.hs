@@ -1,4 +1,4 @@
-module Text.ProtocolBuffers.ProtoCompile.Instances(showsType,parseType,showsLabel,parseLabel) where
+module Text.ProtocolBuffers.ProtoCompile.Instances(showsType,parseType,showsLabel,parseLabel,isKeyType) where
 
 import Text.ParserCombinators.ReadP
 import Text.DescriptorProtos.FieldDescriptorProto.Type(Type(..))
@@ -80,6 +80,21 @@ readType = choice [ return TYPE_DOUBLE << string "double"
 --                , return TYPE_MESSAGE << string "..."
 --                , return TYPE_ENUM << string "..."
 
+isKeyType :: Type -> Bool
+isKeyType ty =
+  ty `elem` [ TYPE_INT32
+            , TYPE_INT64
+            , TYPE_UINT32
+            , TYPE_UINT64
+            , TYPE_SINT32
+            , TYPE_SINT64
+            , TYPE_FIXED32
+            , TYPE_FIXED64
+            , TYPE_SFIXED32
+            , TYPE_SFIXED64
+            , TYPE_BOOL
+            , TYPE_STRING
+            ]
+
 (<<) :: Monad m => m a -> m b -> m a
 (<<) = flip (>>)
-

@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, RankNTypes, ScopedTypeVariables, CPP #-}
+{-# LANGUAGE BangPatterns, OverloadedStrings, RankNTypes, ScopedTypeVariables, CPP #-}
 -- | This "Parser" module takes a filename and its contents as a
 -- bytestring, and uses Lexer.hs to make a stream of tokens that it
 -- parses. No IO is performed and the error function is not used.
@@ -53,14 +53,14 @@ import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Header(ReflectEnum(reflectEnumInfo),enumName)
 import Text.ProtocolBuffers.ProtoCompile.Lexer(Lexed(..),alexScanTokens,getLinePos)
-import Text.ProtocolBuffers.ProtoCompile.Instances(parseLabel,parseType)
+import Text.ProtocolBuffers.ProtoCompile.Instances(isKeyType,parseLabel,parseType)
 -- import Text.ProtocolBuffers.Reflections()
 
-import Control.Monad(when,liftM2,liftM3)
+import Control.Monad(unless,when,liftM2,liftM3)
 import qualified Data.ByteString.Lazy as L(unpack)
 import qualified Data.ByteString.Lazy.Char8 as LC(notElem,head)
 import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
-import Data.Char(isUpper,toLower)
+import Data.Char(isAlpha,isUpper,toUpper,toLower)
 import Data.Ix(inRange)
 import Data.Maybe(fromMaybe)
 import Data.Monoid(mconcat)
@@ -344,7 +344,7 @@ oneof up = pName (U.fromString "oneof") >> do
 subOneof :: P (D.OneofDescriptorProto,Seq D.FieldDescriptorProto) ()
 subOneof = pChar '}' <|> (choice [ eof
                                  , fieldOneof >>= upMsgField] >> subOneof)
-  where upMsgField f = update' (\(o,fs) -> (o,fs |> f))                    
+  where upMsgField f = update' (\(o,fs) -> (o,fs |> f))
 
 
 fieldOneof :: P s D.FieldDescriptorProto
@@ -373,6 +373,7 @@ message up = pName (U.fromString "message") >> do
 subMessage,messageOption,extensions :: P D.DescriptorProto.DescriptorProto ()
 subMessage = (pChar '}') <|> (choice [ eol
                                      , field upNestedMsg Nothing >>= upMsgField
+                                     , mapField upNestedMsg >>= upMsgField
                                      , message upNestedMsg
                                      , enum upNestedEnum
                                      , oneof upMsgOneof
@@ -389,7 +390,7 @@ subMessage = (pChar '}') <|> (choice [ eol
           in s {D.DescriptorProto.oneof_decl=D.DescriptorProto.oneof_decl s |> o
                ,D.DescriptorProto.field=D.DescriptorProto.field s >< xs'
                }
-           
+
         upExtField f    = update' (\s -> s {D.DescriptorProto.extension=D.DescriptorProto.extension s |> f})
 
 messageOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
@@ -414,7 +415,7 @@ field :: (D.DescriptorProto -> P s ()) -> Maybe Utf8 -> P s D.FieldDescriptorPro
 field upGroup maybeExtendee = do
   let allowedLabels = case maybeExtendee of
                         Nothing -> ["optional","repeated","required"]
-                        Just {} -> ["optional","repeated"] -- cannot declare a required extension and an oneof extension. 
+                        Just {} -> ["optional","repeated"] -- cannot declare a required extension and an oneof extension.
   sLabel <- choice . map (pName . U.fromString) $ allowedLabels
   theLabel <- maybe (fail ("not a valid Label :"++show sLabel)) return (parseLabel (uToString sLabel))
   sType <- ident
@@ -440,6 +441,71 @@ field upGroup maybeExtendee = do
                        , D.FieldDescriptorProto.type_name = Just name }
             return v
     else (eol >> return v1) <|> (subParser (pChar '[' >> subField theLabel maybeTypeCode) v1)
+
+mapField :: (D.DescriptorProto -> P s ()) -> P s D.FieldDescriptorProto
+mapField addNestedDescriptorProto = do
+
+  let
+    parseMapType = do s <- ident1
+                      return $ case parseType (uToString s) of
+                        Just ty -> (Just ty, Nothing)
+                        Nothing -> (Nothing, Just s)
+
+  _ <- pName (U.fromString "map")
+  _ <- pChar '<'
+  (keyTypeCode, keyTypeName) <- parseMapType
+  _ <- pChar ','
+  (valueTypeCode, valueTypeName) <- parseMapType
+  _ <- pChar '>'
+
+  name <- ident1
+  number <- pChar '=' >> fieldInt
+
+  unless (maybe False isKeyType keyTypeCode) $
+    fail "Invalid key type for map field"
+
+  let
+    -- FIXME: This probably belongs elsewhere
+    toCamelCase :: String -> String
+    toCamelCase = go True
+      where
+        go _ [] = []
+        go _ ('_':sx) = go True sx
+        go True (s:sx) | isAlpha s = toUpper s : go False sx
+                       | otherwise = s : go False sx
+        go False (s:sx) = s : go False sx
+
+    toMapEntryName :: Utf8 -> Utf8
+    toMapEntryName = fromString . (++ "Entry") . toCamelCase . toString
+
+    entryDesc :: D.DescriptorProto
+    entryDesc = defaultValue { D.DescriptorProto.name = Just (toMapEntryName name)
+                             , D.DescriptorProto.options = Just defaultValue { D.MessageOptions.map_entry = Just True }
+                             , D.DescriptorProto.field = Seq.fromList [
+                                     defaultValue { D.FieldDescriptorProto.name = Just (Utf8 "key")
+                                                  , D.FieldDescriptorProto.number = Just 1
+                                                  , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
+                                                  , D.FieldDescriptorProto.type' = keyTypeCode
+                                                  , D.FieldDescriptorProto.type_name = keyTypeName
+                                                  }
+                                   , defaultValue { D.FieldDescriptorProto.name = Just (Utf8 "value")
+                                                  , D.FieldDescriptorProto.number = Just 2
+                                                  , D.FieldDescriptorProto.label = Just LABEL_OPTIONAL
+                                                  , D.FieldDescriptorProto.type' = valueTypeCode
+                                                  , D.FieldDescriptorProto.type_name = valueTypeName
+                                                  }
+                                   ]
+                            }
+
+    fieldDesc :: D.FieldDescriptorProto
+    fieldDesc = defaultValue { D.FieldDescriptorProto.name = Just name
+                             , D.FieldDescriptorProto.number = Just number
+                             , D.FieldDescriptorProto.label = Just LABEL_REPEATED
+                             , D.FieldDescriptorProto.type_name = Just (toMapEntryName name)
+                             }
+
+  addNestedDescriptorProto entryDesc
+  (eol >> return fieldDesc) <|> (subParser (pChar '[' >> subField LABEL_REPEATED Nothing ) fieldDesc)
 
 subField,defaultConstant :: Label -> Maybe Type -> P D.FieldDescriptorProto ()
 subField label mt = do
@@ -590,7 +656,7 @@ service = pName (U.fromString "service") >> do
  where subService = pChar '}' <|> (choice [ eol, rpc, serviceOption ] >> subService)
 
 syntax = pName (U.fromString "syntax") >> do
-  pChar '=' 
+  pChar '='
   p <- strLit
   update' (\s -> s {D.FileDescriptorProto.syntax=Just p})
 

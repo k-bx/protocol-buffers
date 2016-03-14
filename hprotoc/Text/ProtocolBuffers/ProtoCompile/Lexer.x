@@ -33,7 +33,7 @@ $d = [0-9]
 @inStr = @hexEscape | @octEscape | @charEscape | [^'\"\n] | [\0]
 @strLit = ['] (@inStr | [\"])* ['] | [\"] (@inStr | ['])* [\"]
 
-$special    = [=\(\)\,\;\[\]\{\}\.\:]
+$special    = [\<\>=\(\)\,\;\[\]\{\}\.\:]
 
 @ninf = [\-][i][n][f]
 
