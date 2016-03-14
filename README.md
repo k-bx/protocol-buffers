@@ -335,14 +335,21 @@ present for a `oneof` field in the owner data type definition (Here, `Maybe Prop
 in the definition of `Member`). This is because of compatibility with other language
 implementations that treat `oneof` as a collection of `optional` fields. 
 
-In the `oneoftest` directory, we provides a Haskell example in `hprotoc/oneoftest/hs`
+In the `oneoftest` directory, we provides a Haskell example in `hprotoc/oneoftest/hs`,
+modification of the previous example using lenses in `hprotoc/oneoftest/hs-lens`
 and a C++ example in `hprotoc/oneoftest/cpp` to demonstrate how to use. Each example
-has `encode` and `decode`.With `encode`, we start from data in memory and generate
+has `encode` and `decode`. With `encode`, we start from data in memory and generate
 a serialized binary file in wire format. Then,`decode` takes the file and present
 some information to prove it successfully decoded the binary. One can encode from
 Haskell side and decode on C++ side, or vice versa. For building, simply run
-`build.sh` in each directory. For C++, one must previously install C++ `protobuf`
-library and `pkg-config`. We assume that `hprotoc` was already executed as shown above. 
+`build.sh` in each of `hs` or `cpp` directories. Example with lenses has a `stack.yml`
+in it so it could be easily built with `stack build`. For C++, one must previously
+install C++ `protobuf` library and `pkg-config`. We assume that `hprotoc` was already
+executed as shown above. The version with lenses requires slightly different command:
+
+```
+oneoftest> hprotoc --proto_path=. --haskell_out=hs-lens/src school.proto
+```
 
 Here are examples.
 ```
