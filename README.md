@@ -333,7 +333,7 @@ data types in separate modules, respectively. Therefore, the `oneof` feature
 is smoothly matched with Haskell sum types. Note that `Maybe` will be always
 present for a `oneof` field in the owner data type definition (Here, `Maybe Property`
 in the definition of `Member`). This is because of compatibility with other language
-implementationn that treats `oneof` as a collection of `optional` fields. 
+implementations that treat `oneof` as a collection of `optional` fields. 
 
 In the `oneoftest` directory, we provides a Haskell example in `hprotoc/oneoftest/hs`
 and a C++ example in `hprotoc/oneoftest/cpp` to demonstrate how to use. Each example

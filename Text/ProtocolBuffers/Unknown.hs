@@ -10,7 +10,9 @@ module Text.ProtocolBuffers.Unknown
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Foldable as F
 import Data.Generics
+#if __GLASGOW_HASKELL__ < 710
 import Data.Monoid(mempty,mappend)
+#endif
 import Data.Sequence((|>))
 import Data.Typeable()
 import Control.Monad.Error.Class(catchError)
@@ -54,7 +56,7 @@ wirePutUnknownField (UnknownField m) = F.mapM_ aPut m where
 {-# INLINE catch'Unknown #-}
 -- | This is used by the generated code
 catch'Unknown :: (Typeable a, UnknownMessage a) => (WireTag -> a -> Get a) -> (WireTag -> a -> Get a)
-catch'Unknown update'Self = \wire'Tag old'Self -> catchError (update'Self wire'Tag old'Self) (\_ -> loadUnknown wire'Tag old'Self) 
+catch'Unknown update'Self = \wire'Tag old'Self -> catchError (update'Self wire'Tag old'Self) (\_ -> loadUnknown wire'Tag old'Self)
   where loadUnknown :: (Typeable a, UnknownMessage a) => WireTag -> a -> Get a
         loadUnknown tag msg = do
           let (fieldId,wireType) = splitWireTag tag
@@ -63,4 +65,3 @@ catch'Unknown update'Self = \wire'Tag old'Self -> catchError (update'Self wire'T
           let v' = seq bs $ UFV tag bs
               uf' = seq v' $ uf |> v'
           seq uf' $ return $ putUnknownField (UnknownField uf') msg
-  
