@@ -1267,8 +1267,8 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
             in [foldl' (App ()) (pvar f) [ litInt (wireTagLength fi)
                                     , litInt (getFieldType (typeCode fi))
                                     , var]]
-        toSize var (Right oi) = map (toSize' var) . F.toList . oneofFields $ oi
-          where toSize' var r@(n,fi)
+        toSize var_ (Right oi) = map (toSize' var_) . F.toList . oneofFields $ oi
+          where toSize' var r@(_,fi)
                   = let f = "wireSizeOpt"
                         var' = mkOp "Prelude'.=<<" (Var () (qualName (snd (oneofGet r)))) var
                     in foldl' (App ()) (pvar f) [ litInt (wireTagLength fi)
@@ -1390,7 +1390,6 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
 -- wireGet without extensions
         toUpdate fi | Just (wt1,wt2) <- packedTag fi = [toUpdateUnpacked wt1 fi, toUpdatePacked wt2 fi]
                     | otherwise                      = [toUpdateUnpacked (wireTag fi) fi]
-
 
 
         toUpdateUnpacked wt1 fi =

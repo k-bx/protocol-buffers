@@ -28,7 +28,6 @@ import Data.Set(Set)
 import qualified Data.Set as Set(fromDistinctAscList)
 import Data.Generics(Data)
 import Data.Typeable(Typeable)
-import Data.Map(Map)
 
 -- | 'makePNF' is used by the generated code to create a ProtoName with less newtype noise.
 makePNF :: ByteString -> [String] -> [String] -> String -> ProtoName
