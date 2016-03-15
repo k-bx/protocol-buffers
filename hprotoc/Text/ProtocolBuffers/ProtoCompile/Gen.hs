@@ -740,10 +740,18 @@ declMapHelpers di
                 (mapFieldHelperName (descName di) "ToPair") {-name-}
                 [PApp ()                         {-patterns-}
                     (unqualName (descName di))
+<<<<<<< HEAD
                     [PVar () (Ident () "k"), PVar () (Ident () "v")]]
                 (Hse.UnGuardedRhs () $           {-rhs-}
                     Hse.Tuple () Hse.Boxed [lvar "k", lvar "v"])
                 Nothing                       {-binds-}
+=======
+                    [PVar (Ident "k"), PVar (Ident "v")]]
+                Nothing                       {-type-}
+                (Hse.UnGuardedRhs $           {-rhs-}
+                    Hse.Tuple Hse.Boxed [lvar "k", lvar "v"])
+                noWhere                       {-binds-}
+>>>>>>> 5b64cba (Fix haskell-src-exts compatibility issues)
             ]
         -- toSeq :: Map.Map KEY VAL -> Seq MOD
         -- toSeq x = Seq.fromList (Prelude'.map (Prelude'.uncurry Map_field_Entry) (Map.toList x))
@@ -761,7 +769,7 @@ declMapHelpers di
                                     (Con () (unqualName (descName di)))))
                             (App () (mapMod "toList") (lvar "x")))
                 )
-                Nothing
+                noWhere
             ]
         mapMod t = Var () (Qual () (ModuleName () "Map") (Ident () t))
         seqMod t = Var () (Qual () (ModuleName () "Seq") (Ident () t))
