@@ -48,10 +48,11 @@ import Text.ProtocolBuffers.ProtoCompile.Resolve(ReMap,NameMap(..),getPackageID)
 
 -- import Text.ProtocolBuffers.Reflections
 
-import qualified Data.Foldable as F(foldr,toList)
+import qualified Data.Foldable as F(foldr,toList,notElem)
 import           Data.Sequence ((<|),(><))
 import qualified Data.Sequence as Seq
 import Numeric(readHex,readOct,readDec)
+import Data.Monoid(mconcat,mappend)
 import qualified Data.Map as M(fromListWith,lookup,keys)
 import Data.Maybe(fromMaybe,catMaybes,fromJust,isJust)
 import System.FilePath
@@ -197,7 +198,7 @@ makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyField
             -- and not oneof
             Seq.filter (\x -> D.FieldDescriptorProto.oneof_index x == Nothing) $
             -- not map
-            Seq.filter (`List.notElem` mapFields) rawFields
+            Seq.filter (`F.notElem` mapFields) rawFields
 
         fieldInfos =
             fmap (toFieldInfo' reMap (protobufName protoName) lenses Nothing) rawFieldsNotOneof
@@ -252,12 +253,12 @@ makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyField
             -> Maybe ((FieldType, Maybe ProtoName), (FieldType, Maybe ProtoName))
         findFieldKV fdp =
             let getType (Utf8 x) = Utf8 $ last (BL8.split '.' x) in
-            kvTypes <$>
+            fmap kvTypes $
                 List.find
                     (\dp_ ->
                         D.DescriptorProto.name dp_
                         ==
-                        (getType <$> D.FieldDescriptorProto.type_name fdp)
+                        (getType `fmap` D.FieldDescriptorProto.type_name fdp)
                     )
                     mapEntries
 
@@ -289,7 +290,7 @@ makeDescriptorInfo' reMap parent getKnownKeys msgIsGroup (unknownField,lazyField
                     let tn = D.FieldDescriptorProto.type_name fld in
                     let xs =
                             List.filter
-                                (\y -> D.DescriptorProto.name y == (getType <$> tn))
+                                (\y -> D.DescriptorProto.name y == (getType `fmap` tn))
                                 mapEntries
                     in
                     not (List.null xs)
