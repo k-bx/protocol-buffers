@@ -696,9 +696,15 @@ descriptorNormalModule result di
         -- Sequence
         map_field_exports =
             if mapEntry di then
+#if MIN_VERSION_haskell_src_exts(1, 17, 0)
                 [ EVar $ mapFieldHelperFn (descName di) "ToPair" False
                 , EVar $ mapFieldHelperFn (descName di) "ToSeq" False
                 ]
+#else
+                [ EVar NoNamespace $ mapFieldHelperFn (descName di) "ToPair" False
+                , EVar NoNamespace $ mapFieldHelperFn (descName di) "ToSeq" False
+                ]
+#endif
             else
                 []
         imports = (standardImports False (hasExt di) (makeLenses di) (mapEntry di) ++) . mergeImports . concat $
@@ -761,7 +767,7 @@ declMapHelpers di
                 Nothing                       {-type-}
                 (Hse.UnGuardedRhs $           {-rhs-}
                     Hse.Tuple Hse.Boxed [lvar "k", lvar "v"])
-                Nothing                       {-binds-}
+                noWhere                       {-binds-}
             ]
         -- toSeq :: Map.Map KEY VAL -> Seq MOD
         -- toSeq x = Seq.fromList (Prelude'.map (Prelude'.uncurry Map_field_Entry) (Map.toList x))
@@ -780,7 +786,7 @@ declMapHelpers di
                                     (Con (unqualName (descName di)))))
                             (App (mapMod "toList") (lvar "x")))
                 )
-                Nothing
+                noWhere
             ]
         mapMod t = Var (Qual (ModuleName "Map") (Ident t))
         seqMod t = Var (Qual (ModuleName "Seq") (Ident t))
