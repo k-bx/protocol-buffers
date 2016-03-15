@@ -1044,7 +1044,7 @@ instanceTextMsg di
                 parsefs = map parserName flds
                 whereParse = whereBinds $ BDecls (map decl oflds)
                   where decl (n,f) = defun (parserName f) [] (getOneofField (n,f))
-                        getOneofField p@(n,f) =
+                        getOneofField p@(_,f) =
                           let Ident oname = baseIdent' (oneofFName o)
                               printname = toPrintName f
                               update = preludecon "Just" $$ Paren (oneofCon p $$ lvar "v")
@@ -1073,8 +1073,6 @@ printOneof :: String -> OneofInfo -> Exp
 printOneof msgVar oi
     = Case (Paren (lvar funcname $$ lvar msgVar)) (map caseAlt flds ++ [caseAltNothing])
   where Ident funcname = baseIdent' (oneofFName oi)
-        IName uname = last $ splitFI $ protobufName' (oneofFName oi)
-        printname = uToString uname
         flds = F.toList (oneofFields oi)
         caseAlt :: (ProtoName,FieldInfo) -> Alt
         caseAlt f = Alt src patt  (UnGuardedRhs rhs) noWhere
@@ -1128,7 +1126,7 @@ instanceDefault di
                         Nothing -> pvar "defaultValue"
                         Just hsdef -> Paren $ preludecon "Just" $$ defToSyntax (typeCode fi) hsdef
         defOneof :: OneofInfo -> Exp
-        defOneof oi= pvar "defaultValue"
+        defOneof _ = pvar "defaultValue"
 
 
 instanceMessageAPI :: ProtoName -> Decl
@@ -1189,8 +1187,8 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
             in [foldl' App (pvar f) [ litInt (wireTagLength fi)
                                     , litInt (getFieldType (typeCode fi))
                                     , var]]
-        toSize var (Right oi) = map (toSize' var) . F.toList . oneofFields $ oi
-          where toSize' var r@(n,fi)
+        toSize var_ (Right oi) = map (toSize' var_) . F.toList . oneofFields $ oi
+          where toSize' var r@(_,fi)
                   = let f = "wireSizeOpt"
                         var' = mkOp "Prelude'.=<<" (Var (qualName (snd (oneofGet r)))) var
                     in foldl' App (pvar f) [ litInt (wireTagLength fi)
@@ -1242,8 +1240,8 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                        , litInt (getFieldType (typeCode fi))
                                        , var1 ]
              )]
-        toPut var (Right oi) = map (toPut' var) . F.toList . oneofFields $ oi
-          where toPut' var r@(n,fi)
+        toPut var0 (Right oi) = map (toPut' var0) . F.toList . oneofFields $ oi
+          where toPut' var r@(_,fi)
                   = let f = "wirePutOpt"
                         var' = mkOp "Prelude'.=<<" (Var (qualName (snd (oneofGet r)))) var
                     in (fieldNumber fi
@@ -1321,7 +1319,6 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                     | otherwise                      = [toUpdateUnpacked (wireTag fi) fi]
 
 
-
         toUpdateUnpacked wt1 fi =
           Alt src (litIntP . getWireTag $ wt1) (UnGuardedRhs $ 
             preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
@@ -1391,7 +1388,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                         [FieldUpdate (unqualFName . oneofFName $ oi)
                                                      (labelUpdatePackedO oi f)])
                         $$ (Paren (pvar "wireGetPacked" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
-        labelUpdatePackedO oi f@(_,fi) = pvar "mergeAppend" $$ Paren ((Var . unqualFName . oneofFName $ oi)
+        labelUpdatePackedO oi f@(_,_) = pvar "mergeAppend" $$ Paren ((Var . unqualFName . oneofFName $ oi)
                                                                  $$ lvar "old'Self")
                                                   $$ Paren (preludecon "Just" $$
                                                               (oneofCon f $$ lvar "new'Field"))

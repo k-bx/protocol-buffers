@@ -52,7 +52,6 @@ import qualified Data.Foldable as F(foldr,toList)
 import           Data.Sequence ((<|),(><))
 import qualified Data.Sequence as Seq
 import Numeric(readHex,readOct,readDec)
-import Data.Monoid(mconcat,mappend)
 import qualified Data.Map as M(fromListWith,lookup,keys)
 import Data.Maybe(fromMaybe,catMaybes,fromJust,isJust)
 import System.FilePath
@@ -137,8 +136,8 @@ makeOneofInfo' :: ReMap -> FIName Utf8
                -> Bool -- ^ makeLenses
                -> D.DescriptorProto -> (Int32,D.OneofDescriptorProto) -> OneofInfo
 makeOneofInfo' reMap parent lenses parentProto
-              (n, e@(D.OneofDescriptorProto.OneofDescriptorProto
-                  { D.OneofDescriptorProto.name = Just rawName }))
+              (n, D.OneofDescriptorProto.OneofDescriptorProto
+                  { D.OneofDescriptorProto.name = Just rawName })
     = OneofInfo protoName protoFName (pnPath protoName) fieldInfos lenses
   where protoName@(ProtoName x a b c) = toHaskell reMap $ fqAppend parent [IName rawName]
         protoFName = ProtoFName x a b (mangle c) (if lenses then "_" else "")
@@ -149,7 +148,7 @@ makeOneofInfo' reMap parent lenses parentProto
               Just name -> toHaskell reMap $ fqAppend (protobufName protoName) [IName name]
               Nothing -> imp $ "getFieldProtoName: missing info in " ++ show fdp
         getFieldInfo = toFieldInfo' reMap (protobufName protoName) lenses Nothing
-        fieldInfos = fmap (\x->(getFieldProtoName x,getFieldInfo x)) rawFieldsOneof
+        fieldInfos = fmap (\f -> (getFieldProtoName f, getFieldInfo f)) rawFieldsOneof
 makeOneofInfo' _ _ _ _ _ = imp "makeOneofInfo: missing name"
 
 
