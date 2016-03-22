@@ -341,7 +341,7 @@ modulePragmas templateHaskell =
 --------------------------------------------
 oneofModule :: Result -> OneofInfo -> Module
 oneofModule result oi
-  = Module src (ModuleName (fqMod protoName)) (modulePragmas False) Nothing
+  = Module src (ModuleName (fqMod protoName)) (modulePragmas $ oneofMakeLenses oi) Nothing
          Nothing imports (oneofDecls oi)
   where protoName = oneofName oi
         typs = mapMaybe typeName . F.toList . fmap snd . oneofFields $ oi
@@ -350,10 +350,15 @@ oneofModule result oi
 
 
 oneofDecls :: OneofInfo -> [Decl]
-oneofDecls oi = (oneofX oi : oneofFuncs oi) ++
-                  [ instanceDefaultOneof oi
-                  , instanceMergeableOneof oi
-                  ]
+oneofDecls oi = (oneofX oi : oneofFuncs oi) ++ lenses ++ instances
+  where
+    mkPrisms = Var (Qual (ModuleName "Control.Lens.TH") (Ident "makePrisms"))
+    lenses | oneofMakeLenses oi = [SpliceDecl src (mkFun $$ TypQuote (unqualName (oneofName oi))) |
+                                   mkFun <- [mkLenses, mkPrisms]]
+           | otherwise = []
+    instances = [ instanceDefaultOneof oi
+                , instanceMergeableOneof oi
+                ]
 
 oneofX :: OneofInfo -> Decl
 oneofX oi = DataDecl src DataType [] (baseIdent (oneofName oi)) []
@@ -685,7 +690,6 @@ descriptorNormalModule result di
                         extendees' ++ mapMaybe typeName (myKeys' ++ (F.toList (fields di)))
                     , concat . mapMaybe (importO result m Normal) $ F.toList (descOneofs di)
                     , mapMaybe (importPFN result m) (map fieldName (myKeys ++ F.toList (knownKeys di))) ]
-        mkLenses = Var (Qual (ModuleName "Control.Lens.TH") (Ident "makeLenses"))
         lenses | makeLenses di = [SpliceDecl src (mkLenses $$ TypQuote (unqualName protoName))]
                | otherwise = []
         declKeys | sepKey = []
@@ -693,17 +697,22 @@ descriptorNormalModule result di
     in Module src m (modulePragmas $ makeLenses di) Nothing (Just (EThingAll un : exportLenses di ++ exportKeys)) imports
          (descriptorX di : lenses ++ declKeys ++ instancesDescriptor di)
 
+mkLenses :: Exp
+mkLenses = Var (Qual (ModuleName "Control.Lens.TH") (Ident "makeLenses"))
+
 exportLenses :: DescriptorInfo -> [ExportSpec]
 exportLenses di =
   if makeLenses di
     then
 #if MIN_VERSION_haskell_src_exts(1, 17, 0)
-      map (EVar . unqualFName . stripPrefix . fieldName) (F.toList (fields di))
+      map (EVar . unqualFName . stripPrefix) (lensFieldNames di)
 #else
-      map (EVar NoNamespace . unqualFName . stripPrefix . fieldName) (F.toList (fields di))
+      map (EVar NoNamespace . unqualFName . stripPrefix) (lensFieldNames di)
 #endif
     else []
   where stripPrefix pfn = pfn { baseNamePrefix' = "" }
+        lensFieldNames di = map fieldName (F.toList (fields di))
+                            ++ map oneofFName (F.toList (descOneofs di))
 
 minimalImports :: [ImportDecl]
 minimalImports =
