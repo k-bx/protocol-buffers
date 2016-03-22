@@ -1,5 +1,5 @@
 name:           hprotoc
-version:        2.2.0
+version:        2.3.0
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -20,8 +20,8 @@ source-repository head
   location: git://github.com/k-bx/protocol-buffers.git
 
 Executable hprotoc
-  build-depends:   protocol-buffers == 2.2.0,
-                   protocol-buffers-descriptor == 2.2.0
+  build-depends:   protocol-buffers == 2.3.0,
+                   protocol-buffers-descriptor == 2.3.0
   Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell
@@ -69,8 +69,8 @@ Executable hprotoc
                    TypeSynonymInstances
 
 Library
-  build-depends:   protocol-buffers == 2.2.0,
-                   protocol-buffers-descriptor == 2.2.0
+  build-depends:   protocol-buffers == 2.3.0,
+                   protocol-buffers-descriptor == 2.3.0
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell
   build-tools:     alex

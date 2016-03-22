@@ -1,5 +1,9 @@
 Newest at the top.
 
+2016-03-22 2.3.0
+  * Dump to text as decimal instead of octal (PR #34)
+  * Oneof lenses
+
 2008-09 : version 0.3.1 released.  This is the second release
   * Change Parser.hs to allow negative enum values to match actual behavior of protoc.
   * Use runST & castSTUArray for both Float and Double conversion to Word32 and Word64.
