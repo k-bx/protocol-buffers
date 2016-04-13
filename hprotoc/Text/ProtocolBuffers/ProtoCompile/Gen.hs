@@ -235,7 +235,7 @@ importO r selfMod@(ModuleName self) part oi =
       o = pKey pn
       m1 = ModuleName (joinMod (haskellPrefix pn ++ parentModule pn ++ [baseName pn]))
       m2 = ModuleName (joinMod (parentModule pn))
-      m3 = ModuleName (joinMod (parentModule pn ++ [baseName pn]))      
+      m3 = ModuleName (joinMod (parentModule pn ++ [baseName pn]))
       fromSource = S.member (FMName self,part,o) (rIBoot r)
 #if MIN_VERSION_haskell_src_exts(1, 17, 0)
       iabs1 = IAbs NoNamespace (Ident (mName (baseName pn)))
@@ -245,7 +245,7 @@ importO r selfMod@(ModuleName self) part oi =
       iabsget = map (IAbs . Ident . fst . oneofGet) . F.toList . oneofFields $ oi
 #endif
       ithall = IThingAll (Ident (mName (baseName pn)))
-              
+
       ans1 =  ImportDecl src m1 True fromSource False Nothing (Just m2)
                 (Just (False,[iabs1]))
       ans2 =  ImportDecl src m1 True fromSource False Nothing (Just m3)
@@ -311,7 +311,7 @@ oneofCon (name,_) = Con (qualName name)
 oneofPat :: (ProtoName,FieldInfo) -> (Pat,Pat)
 oneofPat (name,fi) =
   let fName@(Ident fname) = baseIdent' (fieldName fi)
-  in (PApp (qualName name) [PVar fName],PApp (unqualName name) [PVar fName]) 
+  in (PApp (qualName name) [PVar fName],PApp (unqualName name) [PVar fName])
 
 oneofRec :: (ProtoName,FieldInfo) -> (Exp,Exp)
 oneofRec (_,fi) =
@@ -330,7 +330,9 @@ oneofGet (p,fi) =
 --------------------------------------------
 modulePragmas :: Bool -> [ModulePragma]
 modulePragmas templateHaskell =
-  [ LanguagePragma src (map Ident $ thPragma ++ ["BangPatterns","DeriveDataTypeable","FlexibleInstances","MultiParamTypeClasses"])
+  [ LanguagePragma src (map Ident $
+      thPragma ++ ["BangPatterns","DeriveDataTypeable","DeriveGeneric","FlexibleInstances","MultiParamTypeClasses"]
+    )
   , OptionsPragma src (Just GHC) " -fno-warn-unused-imports "
   ]
   where thPragma | templateHaskell = ["TemplateHaskell"]
@@ -364,7 +366,7 @@ oneofX :: OneofInfo -> Decl
 oneofX oi = DataDecl src DataType [] (baseIdent (oneofName oi)) []
               (map oneofValueX (F.toList (oneofFields oi) ))
               derives
-  where oneofValueX (pname,fi) = QualConDecl src [] [] con 
+  where oneofValueX (pname,fi) = QualConDecl src [] [] con
           where con = RecDecl (baseIdent pname) [fieldX]
                 fieldX = ([baseIdent' . fieldName $ fi], TyParen (TyCon typed ))
                 typed = case useType (getFieldType (typeCode fi)) of
@@ -381,7 +383,7 @@ oneofFuncs oi = map mkfuns (F.toList (oneofFields oi))
                          (UnGuardedRhs (preludecon "Just" $$ snd (oneofRec f))) noWhere
                        , Alt src PWildCard
                          (UnGuardedRhs (preludecon "Nothing")) noWhere
-                       ] 
+                       ]
 
 
 
@@ -401,7 +403,7 @@ instanceDefaultOneof oi
                                        Symbol _ -> imp ("instanceDefaultOneof: " ++ show n)
 
 instanceMergeableOneof :: OneofInfo -> Decl
-instanceMergeableOneof oi 
+instanceMergeableOneof oi
   = InstDecl src Nothing [] [] (private "Mergeable") [TyCon (unqualName (oneofName oi))] []
 
 
@@ -435,19 +437,19 @@ enumX ei = DataDecl src DataType [] (baseIdent (enumName ei)) [] (map enumValueX
   where enumValueX (_,name) = QualConDecl src [] [] (ConDecl (Ident name) [])
 
 instanceTextTypeEnum :: EnumInfo -> Decl
-instanceTextTypeEnum ei 
+instanceTextTypeEnum ei
   = InstDecl src Nothing [] [] (private "TextType") [TyCon (unqualName (enumName ei))] [
         inst "tellT" [] (pvar "tellShow")
       , inst "getT" [] (pvar "getRead")
       ]
 
 instanceMergeableEnum :: EnumInfo -> Decl
-instanceMergeableEnum ei 
+instanceMergeableEnum ei
   = InstDecl src Nothing [] [] (private "Mergeable") [TyCon (unqualName (enumName ei))] []
 
 instanceBounded :: EnumInfo -> Decl
 instanceBounded ei
-    = InstDecl src Nothing [] [] (prelude "Bounded") [TyCon (unqualName (enumName ei))] 
+    = InstDecl src Nothing [] [] (prelude "Bounded") [TyCon (unqualName (enumName ei))]
          [set "minBound" (head values),set "maxBound" (last values)] -- values cannot be null in a well formed enum
   where values = enumValues ei
         set f (_,n) = inst f [] (lcon n)
@@ -486,13 +488,13 @@ instanceEnum ei
         fromEnum' = map fromEnum'one values
         fromEnum'one (v,n) = match "fromEnum" [PApp (local n) []] (litInt (getEnumCode v))
         toEnum' = [ match "toEnum" [] (compose mayErr (lvar "toMaybe'Enum")) ]
-        mayErr = pvar "fromMaybe" $$ (Paren (preludevar "error" $$  (litStr $ 
+        mayErr = pvar "fromMaybe" $$ (Paren (preludevar "error" $$  (litStr $
                    "hprotoc generated code: toEnum failure for type "++ fqMod (enumName ei))))
         succ' = zipWith (equate "succ") values (tail values) ++
-                [ match "succ" [PWildCard] (preludevar "error" $$  (litStr $ 
+                [ match "succ" [PWildCard] (preludevar "error" $$  (litStr $
                    "hprotoc generated code: succ failure for type "++ fqMod (enumName ei))) ]
         pred' = zipWith (equate "pred") (tail values) values ++
-                [ match "pred" [PWildCard] (preludevar "error" $$  (litStr $ 
+                [ match "pred" [PWildCard] (preludevar "error" $$  (litStr $
                    "hprotoc generated code: pred failure for type "++ fqMod (enumName ei))) ]
         equate f (_,n1) (_,n2) = match f [PApp (local n1) []] (lcon n2)
 
@@ -592,7 +594,7 @@ embed'fdpBS bs = [ myType, myValue ]
   where myType = TypeSig src [ Ident "fileDescriptorProto" ] (TyCon (local "FileDescriptorProto"))
         myValue = PatBind src (PApp (local "fileDescriptorProto") []) (UnGuardedRhs $
                     pvar "getFromBS" $$
-                      Paren (pvar "wireGet" $$ litInt' 11) $$ 
+                      Paren (pvar "wireGet" $$ litInt' 11) $$
                       Paren (pvar "pack" $$ litStr (LC.unpack bs))) noWhere
 
 --------------------------------------------
@@ -617,7 +619,7 @@ descriptorBootModule :: DescriptorInfo -> Module
 descriptorBootModule di
   = let protoName = descName di
         un = unqualName protoName
-        classes = [prelude "Show",prelude "Eq",prelude "Ord",prelude "Typeable",prelude "Data"
+        classes = [prelude "Show",prelude "Eq",prelude "Ord",prelude "Typeable",prelude "Data", prelude "Generic"
                   ,private "Mergeable",private "Default"
                   ,private "Wire",private "GPB",private "ReflectDescriptor"
                   , private "TextType", private "TextMsg"
@@ -813,6 +815,7 @@ minimalImports =
   [ ImportDecl src (ModuleName "Prelude") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Data.Typeable") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Data.Data") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
+  , ImportDecl src (ModuleName "GHC.Generics") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False False Nothing (Just (ModuleName "P'")) Nothing ]
 
 standardImports :: Bool -> Bool -> Bool -> Bool -> [ImportDecl]
@@ -820,6 +823,7 @@ standardImports isEnumMod ext lenses isMapEntry =
   [ ImportDecl src (ModuleName "Prelude") False False False Nothing Nothing (Just (False,ops))
   , ImportDecl src (ModuleName "Prelude") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Data.Typeable") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
+  , ImportDecl src (ModuleName "GHC.Generics") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Data.Data") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False False Nothing (Just (ModuleName "P'")) Nothing ] ++ lensTH ++ mapModule
  where
@@ -954,7 +958,7 @@ instancesDescriptor di = map ($ di) $
    , instanceDefault
    , instanceWireDescriptor
    , instanceMessageAPI . descName
-   , instanceGPB . descName                 
+   , instanceGPB . descName
    , instanceReflectDescriptor
    , instanceTextType
    , instanceTextMsg
@@ -978,7 +982,7 @@ instanceUnknownMessage di
   where putunknownfield = RecUpdate (lvar "msg") [ FieldUpdate (localField di "unknown'field") (lvar "u'f") ]
 
 instanceTextType :: DescriptorInfo -> Decl
-instanceTextType di 
+instanceTextType di
   = InstDecl src Nothing [] [] (private "TextType") [TyCon (unqualName (descName di))] [
         inst "tellT" [] (pvar "tellSubMessage")
       , inst "getT" [] (pvar "getSubMessage")
@@ -986,7 +990,7 @@ instanceTextType di
 
 
 instanceTextMsg :: DescriptorInfo -> Decl
-instanceTextMsg di 
+instanceTextMsg di
   = InstDecl src Nothing [] [] (private "TextMsg") [TyCon (unqualName (descName di))] [
         inst "textPut" [patvar msgVar] genPrint
       , InsDecl $ FunBind [Match src (Ident "textGet") [] Nothing (UnGuardedRhs parser) bdecls]
@@ -1007,18 +1011,18 @@ instanceTextMsg di
         genPrint = if null flds && null os
                    then preludevar "return" $$ Hse.Tuple Boxed []
                    else Do $ genPrintFields ++ genPrintOneofs
-                   
+
         parser
             | null flds && null os = preludevar "return" $$ pvar "defaultValue"
             | otherwise = Do [
-                Generator src (patvar "mods") 
-                    $ pvar "sepEndBy" 
+                Generator src (patvar "mods")
+                    $ pvar "sepEndBy"
                         $$ Paren (pvar "choice" $$ List (map (lvar . parserName) flds ++ map (lvar . parserNameO) os))
                         $$ pvar "spaces",
                 Qualifier $ (preludevar "return")
                     $$ Paren (preludevar "foldl"
-                        $$ Lambda src [patvar "v", patvar "f"] (lvar "f" $$ lvar "v") 
-                        $$ pvar "defaultValue" 
+                        $$ Lambda src [patvar "v", patvar "f"] (lvar "f" $$ lvar "v")
+                        $$ pvar "defaultValue"
                         $$ lvar "mods")
              ]
         parserName f = let Ident fname = baseIdent' (fieldName f) in "parse'" ++ fname
@@ -1040,7 +1044,7 @@ instanceTextMsg di
                     $$ Paren (Lambda src [patvar "o"]
                         (RecUpdate (lvar "o") [ FieldUpdate (local funcname) update]))
             ]
-                     
+
         subparsersO = map funbind os
         funbind o = FunBind [Match src (Ident (parserNameO o)) [] Nothing (UnGuardedRhs (getOneof)) whereParse]
           where getOneof = pvar "try" $$
@@ -1118,9 +1122,9 @@ instanceDefault di
         [ inst "defaultValue" [] (foldl' App (Con un) deflistExt) ]
   where un = unqualName (descName di)
         deflistExt = F.foldr ((:) . defX) end (fields di)
-        end = (if hasExt di then (pvar "defaultValue":) else id) 
+        end = (if hasExt di then (pvar "defaultValue":) else id)
             . (if storeUnknown di then (pvar "defaultValue":) else id)
-            $ F.foldr ((:) . defOneof) [] (descOneofs di)  
+            $ F.foldr ((:) . defOneof) [] (descOneofs di)
 
         defX :: FieldInfo -> Exp
         defX fi | isRequired fi = dv1
@@ -1150,7 +1154,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                           , knownKeys = fieldExts })
   = let me = unqualName protoName
         extensible = not (null allowedExts)
-        len = (if extensible then succ else id) 
+        len = (if extensible then succ else id)
             $ (if storeUnknown di then succ else id)
             $ Seq.length fieldInfos + Seq.length oneofInfos
         mine = PApp me . take len . map (\ n -> patvar ("x'" ++ show n)) $ [(1::Int)..]
@@ -1168,7 +1172,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                         ]
 
 -- wireSize generation
-        sizeCases = UnGuardedRhs $ cases (lvar "calc'Size") 
+        sizeCases = UnGuardedRhs $ cases (lvar "calc'Size")
                                          (pvar "prependMessageSize" $$ lvar "calc'Size")
                                          (pvar "wireSizeErr" $$ lvar "ft'" $$ lvar "self'")
 #if MIN_VERSION_haskell_src_exts(1, 17, 0)
@@ -1181,7 +1185,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
           where (+!) = mkOp "+"
                 sizesList | Just v <- mUnknown = sizesListExt ++ [ pvar "wireSizeUnknownField" $$ v ]
                           | otherwise = sizesListExt
-                sizesListExt | Just v <- mExt = sizesListFields ++ [ pvar "wireSizeExtField" $$ v ] 
+                sizesListExt | Just v <- mExt = sizesListFields ++ [ pvar "wireSizeExtField" $$ v ]
                              | otherwise = sizesListFields
                 sizesListFields =  concat . zipWith toSize vars . F.toList $
                                      fmap Left fieldInfos >< fmap Right oneofInfos
@@ -1280,7 +1284,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                           toUpdateO o f)
                      ++ (if extensible then concatMap toUpdateExt (F.toList fieldExts) else [])
                      ++ [Alt src PWildCard (UnGuardedRhs wildcardAlt) noWhere]
-        -- the wildcard alternative handles new extensions and 
+        -- the wildcard alternative handles new extensions and
         wildcardAlt = letPair extBranch
           where letPair = Let (BDecls [PatBind src (PTuple Boxed [patvar "field'Number",patvar "wire'Type"])
                                          (UnGuardedRhs (pvar "splitWireTag" $$ lvar "wire'Tag")) bdecls])
@@ -1326,7 +1330,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
 
 
         toUpdateUnpacked wt1 fi =
-          Alt src (litIntP . getWireTag $ wt1) (UnGuardedRhs $ 
+          Alt src (litIntP . getWireTag $ wt1) (UnGuardedRhs $
             preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
                               RecUpdate (lvar "old'Self")
                                         [FieldUpdate (unqualFName . fieldName $ fi)
@@ -1351,7 +1355,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                   $$ Paren x
                            | otherwise = x
         toUpdatePacked wt2 fi =
-          Alt src (litIntP . getWireTag $ wt2) (UnGuardedRhs $ 
+          Alt src (litIntP . getWireTag $ wt2) (UnGuardedRhs $
             preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
                               RecUpdate (lvar "old'Self")
                                         [FieldUpdate (unqualFName . fieldName $ fi)
@@ -1369,11 +1373,11 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
 
         -- for fields in OneofInfo
         toUpdateO oi f@(_n,fi)
-          | Just (wt1,wt2) <- packedTag fi = [toUpdateUnpackedO oi wt1 f, toUpdatePackedO oi wt2 f] 
+          | Just (wt1,wt2) <- packedTag fi = [toUpdateUnpackedO oi wt1 f, toUpdatePackedO oi wt2 f]
           | otherwise                      = [toUpdateUnpackedO oi (wireTag fi) f]
 
         toUpdateUnpackedO oi wt1 f@(_,fi) =
-          Alt src (litIntP . getWireTag $ wt1) (UnGuardedRhs $ 
+          Alt src (litIntP . getWireTag $ wt1) (UnGuardedRhs $
             preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
                               RecUpdate (lvar "old'Self")
                                         [FieldUpdate (unqualFName . oneofFName $ oi)
@@ -1388,7 +1392,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                   $$ Paren x
                            | otherwise = x
         toUpdatePackedO oi wt2 f@(_,fi) =
-          Alt src (litIntP . getWireTag $ wt2) (UnGuardedRhs $ 
+          Alt src (litIntP . getWireTag $ wt2) (UnGuardedRhs $
             preludevar "fmap" $$ (Paren $ Lambda src [PBangPat (patvar "new'Field")] $
                               RecUpdate (lvar "old'Self")
                                         [FieldUpdate (unqualFName . oneofFName $ oi)
@@ -1398,7 +1402,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                                  $$ lvar "old'Self")
                                                   $$ Paren (preludecon "Just" $$
                                                               (oneofCon f $$ lvar "new'Field"))
- 
+
 
 
 
@@ -1429,8 +1433,8 @@ instanceReflectDescriptor di
 ------------------------------------------------------------------
 
 derives,derivesEnum :: [Deriving]
-derives = map (\ x -> (prelude x,[])) ["Show","Eq","Ord","Typeable","Data"]
-derivesEnum = map (\ x -> (prelude x,[])) ["Read","Show","Eq","Ord","Typeable","Data"]
+derives = map (\ x -> (prelude x,[])) ["Show","Eq","Ord","Typeable","Data","Generic"]
+derivesEnum = map (\ x -> (prelude x,[])) ["Read","Show","Eq","Ord","Typeable","Data","Generic"]
 
 -- All of these type names are also exported by Text.ProtocolBuffers.Header via Text.ProtocolBuffers.Basic
 useType :: Int -> Maybe String
