@@ -565,7 +565,7 @@ mapField = do
     pChar '<'
     keyType   <- ident1
     pChar ','
-    valueType <- ident1
+    valueType <- ident
     pChar '>'
     self      <- ident1
     number    <- pChar '=' >> enumInt
