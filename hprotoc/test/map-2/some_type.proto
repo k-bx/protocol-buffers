@@ -1,0 +1,8 @@
+syntax = "proto2";
+
+package some_type;
+
+message SomeType {
+    required string fieldOne = 1;
+    required string fieldTwo = 2;
+}

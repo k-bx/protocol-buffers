@@ -1,0 +1,7 @@
+syntax = "proto2";
+
+import "some_type.proto";
+
+message Result {
+    map<string, some_type.SomeType> values = 1;
+}
