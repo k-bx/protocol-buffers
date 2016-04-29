@@ -1,0 +1,7 @@
+syntax = "proto2";
+
+import "mapPackage.proto";
+
+message Result {
+    required mapPackage.WithMap fullOfMaps = 1;
+}
