@@ -45,7 +45,7 @@ import Data.Bits (Bits(..))
 --import qualified Data.ByteString as S(last)
 --import qualified Data.ByteString.Unsafe as S(unsafeIndex)
 import qualified Data.ByteString.Lazy as BS (length)
-import qualified Data.Foldable as F (Foldable, foldl', forM_)
+import qualified Data.Foldable as F (foldl', forM_)
 --import Data.List (genericLength)
 import Data.Maybe(fromMaybe)
 import Data.Sequence ((|>))
@@ -237,12 +237,12 @@ wireSizeOpt tagSize i (Just v) = wireSizeReq tagSize i v
 
 {-# INLINE wireSizeRep #-}
 -- | Used in generated code.
-wireSizeRep :: (F.Foldable f, Wire v) => Int64 -> FieldType -> f v -> Int64
+wireSizeRep :: Wire v => Int64 -> FieldType -> Seq v -> Int64
 wireSizeRep tagSize i vs = F.foldl' (\n v -> n + wireSizeReq tagSize i v) 0 vs
 
 {-# INLINE wireSizePacked #-}
 -- | Used in generated code.
-wireSizePacked :: (F.Foldable f, Wire v) => Int64 -> FieldType -> f v -> Int64
+wireSizePacked :: Wire v => Int64 -> FieldType -> Seq v -> Int64
 wireSizePacked tagSize i vs = tagSize + prependMessageSize (F.foldl' (\n v -> n + wireSize i v) 0 vs)
 
 {-# INLINE putSize #-}

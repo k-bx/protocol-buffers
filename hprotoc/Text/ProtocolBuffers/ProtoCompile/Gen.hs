@@ -1,4 +1,4 @@
-{-# LANGUAGE NamedFieldPuns, RecordWildCards, CPP #-}
+{-# LANGUAGE NamedFieldPuns, RecordWildCards, CPP, MultiWayIf #-}
 -- This module uses the Reflection data structures (ProtoInfo,EnumInfo,DescriptorInfo) to
 -- build an AST using Language.Haskell.Syntax.  This get quite verbose, so a large number
 -- of helper functions (and operators) are defined to aid in specifying the output code.
@@ -1189,14 +1189,19 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                              | otherwise = sizesListFields
                 sizesListFields =  concat . zipWith toSize vars . F.toList $
                                      fmap Left fieldInfos >< fmap Right oneofInfos
-        toSize var (Left fi)
-          = let f = if isPacked fi then "wireSizePacked"
-                    else if isRequired fi then "wireSizeReq"
-                         else if canRepeat fi then "wireSizeRep"
-                              else "wireSizeOpt"
-            in [foldl' App (pvar f) [ litInt (wireTagLength fi)
-                                    , litInt (getFieldType (typeCode fi))
-                                    , var]]
+        toSize var0 (Left fi)
+          = let f = if | isPacked   fi -> "wireSizePacked"
+                       | isRequired fi -> "wireSizeReq"
+                       | canRepeat  fi -> "wireSizeRep"
+                       | otherwise     -> "wireSizeOpt"
+            in
+            -- Map -> Seq
+            let fn  = mapFieldHelperFn (fromJust $ typeName fi) "ToSeq" True in
+            -- map fields are convereted to sequence first
+            let var = if isMapField fi then Var fn $$ var0 else var0 in
+            [foldl' App (pvar f) [ litInt (wireTagLength fi)
+                                 , litInt (getFieldType (typeCode fi))
+                                 , var]]
         toSize var_ (Right oi) = map (toSize' var_) . F.toList . oneofFields $ oi
           where toSize' var r@(_,fi)
                   = let f = "wireSizeOpt"
@@ -1231,19 +1236,15 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                 putStmtsList = concat . zipWith toPut vars . F.toList $
                                  fmap Left fieldInfos >< fmap Right oneofInfos
         toPut var0 (Left fi)
-          = let f = if isPacked fi then "wirePutPacked"
-                    else if isRequired fi then "wirePutReq"
-                         else if canRepeat fi then "wirePutRep"
-                              else "wirePutOpt"
+          = let f = if | isPacked   fi -> "wirePutPacked"
+                       | isRequired fi -> "wirePutReq"
+                       | canRepeat  fi -> "wirePutRep"
+                       | otherwise     -> "wirePutOpt"
             in
-            let var1 =
-                    -- map fields are convereted to sequence first
-                    if isMapField fi then
-                        let fn = mapFieldHelperFn (fromJust $ typeName fi) "ToSeq" True in
-                        Paren (App (Var fn) var0)
-                    else
-                        var0
-            in
+            -- Map -> Seq
+            let fn = mapFieldHelperFn (fromJust $ typeName fi) "ToSeq" True in
+            -- map fields are convereted to sequence first
+            let var1 = if isMapField fi then Var fn $$ var0 else var0 in
             [( fieldNumber fi
              , Qualifier $
                    foldl' App (pvar f) [ litInt (getWireTag (wireTag fi))
