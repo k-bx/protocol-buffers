@@ -165,49 +165,49 @@ decode7unrolled = Get $ \ sc sIn@(S ss@(S.PS fp off len) bs n) pc -> trace ("dec
                     !ptr3 = ptr2 `plusPtr` 1
                 if ptr3 >= end then more else do
 
-                b'3 <- peek ptr3
+                b'3::Word8 <- peek ptr3
                 if b'3 < 128 then ok (val'2 .|. (fromIntegral b'3 `shiftL` 14)) 3 else do
                 let !val'3 = (val'2 .|. (fromIntegral (b'3 .&. 0x7F) `shiftL` 14))
                     !ptr4 = ptr3 `plusPtr` 1
                 if ptr4 >= end then more else do
 
-                b'4 <- peek ptr4
+                b'4::Word8 <- peek ptr4
                 if b'4 < 128 then ok (val'3 .|. (fromIntegral b'4 `shiftL` 21)) 4 else do
                 let !val'4 = (val'3 .|. (fromIntegral (b'4 .&. 0x7F) `shiftL` 21))
                     !ptr5 = ptr4 `plusPtr` 1
                 if ptr5 >= end then more else do
 
-                b'5 <- peek ptr5
+                b'5::Word8 <- peek ptr5
                 if b'5 < 128 then ok (val'4 .|. (fromIntegral b'5 `shiftL` 28)) 5 else do
                 let !val'5 = (val'4 .|. (fromIntegral (b'5 .&. 0x7F) `shiftL` 28))
                     !ptr6 = ptr5 `plusPtr` 1
                 if ptr6 >= end then more else do
 
-                b'6 <- peek ptr6
+                b'6::Word8 <- peek ptr6
                 if b'6 < 128 then ok (val'5 .|. (fromIntegral b'6 `shiftL` 35)) 6 else do
                 let !val'6 = (val'5 .|. (fromIntegral (b'6 .&. 0x7F) `shiftL` 35))
                     !ptr7 = ptr6 `plusPtr` 1
                 if ptr7 >= end then more else do
 
-                b'7 <- peek ptr7
+                b'7::Word8 <- peek ptr7
                 if b'7 < 128 then ok (val'6 .|. (fromIntegral b'7 `shiftL` 42)) 7 else do
                 let !val'7 = (val'6 .|. (fromIntegral (b'7 .&. 0x7F) `shiftL` 42))
                     !ptr8 = ptr7 `plusPtr` 1
                 if ptr8 >= end then more else do
 
-                b'8 <- peek ptr8
+                b'8::Word8 <- peek ptr8
                 if b'8 < 128 then ok (val'7 .|. (fromIntegral b'8 `shiftL` 49)) 8 else do
                 let !val'8 = (val'7 .|. (fromIntegral (b'8 .&. 0x7F) `shiftL` 49))
                     !ptr9 = ptr8 `plusPtr` 1
                 if ptr9 >= end then more else do
 
-                b'9 <- peek ptr9
+                b'9::Word8 <- peek ptr9
                 if b'9 < 128 then ok (val'8 .|. (fromIntegral b'9 `shiftL` 56)) 9 else do
                 let !val'9 = (val'8 .|. (fromIntegral (b'9 .&. 0x7F) `shiftL` 56))
                     !ptrA = ptr9 `plusPtr` 1
                 if ptrA >= end then more else do
 
-                b'A <- peek ptrA
+                b'A::Word8 <- peek ptrA
                 if b'A < 128 then ok (val'9 .|. (fromIntegral b'A `shiftL` 63)) 10 else do
                 err
 
