@@ -6,6 +6,7 @@ before_install:
   - mkdir -p ~/.local/bin
   - export PATH=~/.local/bin:$PATH
   - curl -L https://github.com/commercialhaskell/stack/releases/download/v0.1.4.0/stack-0.1.4.0-x86_64-linux.tar.gz | tar xz -C ~/.local/bin
+  - stack --no-terminal --skip-ghc-check install happy alex
 
 matrix:
   include:
