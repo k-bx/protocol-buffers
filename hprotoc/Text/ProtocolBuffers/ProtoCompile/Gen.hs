@@ -30,6 +30,7 @@ import Data.List(sortBy,foldl',foldl1',group,sort,union)
 import Data.Function(on)
 import Language.Haskell.Exts.Pretty(prettyPrint)
 import Language.Haskell.Exts.Syntax hiding (Int,String)
+import Language.Haskell.Exts.SrcLoc
 import Language.Haskell.Exts.Syntax as Hse
 import Data.Char(isLower,isUpper)
 import qualified Data.Map as M
