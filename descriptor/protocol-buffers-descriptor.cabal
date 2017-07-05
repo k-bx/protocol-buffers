@@ -31,7 +31,7 @@ Library
   -- Options is from src-hand-writtern
   Hs-Source-Dirs:  src-auto-generated,src-hand-written
   ghc-options: -O2 -fspec-constr-count=10
-  ghc-prof-options: -auto-all -prof
+  -- ghc-prof-options: -auto-all -prof
   exposed-modules: Text.DescriptorProtos.Options
                    Text.DescriptorProtos
                    Text.DescriptorProtos.DescriptorProto
