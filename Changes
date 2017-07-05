@@ -1,5 +1,9 @@
 Newest at the top.
 
+2.4.2
+
+- fix version constraints
+
 2.4.1
 
 - issue #10, pr #47. Fixed not to lookup a entity defined in the parent package
