@@ -4,4 +4,4 @@ packages:
 - hprotoc/
 extra-deps:
 - haskell-src-exts-1.17.1
-resolver: lts-3.5
+resolver: lts-8.21
