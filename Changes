@@ -1,5 +1,9 @@
 Newest at the top.
 
+2.4.3
+
+- pr #50. restrict haskell-src-exts version constraint
+
 2.4.2
 
 - fix version constraints
