@@ -25,7 +25,7 @@ $d = [0-9]
 
 @ident1 = [A-Za-z_][A-Za-z0-9_]*
 @ident = [\.]?@ident1([\.]@ident1)*
-@notChar = [^A-Za-z0-9_]
+@notChar = [^A-Za-z0-9_] | \n
 
 @hexEscape = \\[Xx][A-Fa-f0-9]{1,2}
 @octEscape = \\0?[0-7]{1,3}
