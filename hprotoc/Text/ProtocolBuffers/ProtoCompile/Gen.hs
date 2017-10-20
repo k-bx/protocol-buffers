@@ -1,4 +1,4 @@
-{-# LANGUAGE NamedFieldPuns, RecordWildCards, CPP #-}
+{-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
 -- This module uses the Reflection data structures (ProtoInfo,EnumInfo,DescriptorInfo) to
 -- build an AST using Language.Haskell.Syntax.  This get quite verbose, so a large number
 -- of helper functions (and operators) are defined to aid in specifying the output code.
@@ -52,21 +52,11 @@ imp s = error ("Impossible? Text.ProtocolBuffers.ProtoCompile.Gen."++s)
 nubSort :: Ord a => [a] -> [a]
 nubSort = map head . group . sort
 
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
 noWhere :: Maybe Binds
 noWhere = Nothing
-#else
-noWhere :: Binds
-noWhere = BDecls []
-#endif
 
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
 whereBinds :: Binds -> Maybe Binds
 whereBinds = Just
-#else
-whereBinds :: Binds -> Binds
-whereBinds = id
-#endif
 
 
 ($$) :: Exp -> Exp -> Exp
@@ -178,11 +168,7 @@ importPN r selfMod@(ModuleName self) part pn =
       m1 = ModuleName (joinMod (haskellPrefix pn ++ parentModule pn ++ [baseName pn]))
       m2 = ModuleName (joinMod (parentModule pn))
       fromSource = S.member (FMName self,part,o) (rIBoot r)
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
       iabs = IAbs NoNamespace (Ident (mName (baseName pn)))
-#else
-      iabs = IAbs (Ident (mName (baseName pn)))
-#endif
       ans = if m1 == selfMod && part /= KeyFile then Nothing
               else Just $ ImportDecl src m1 True fromSource False Nothing (Just m2)
                             (Just (False,[iabs]))
@@ -202,11 +188,7 @@ importPFN r m@(ModuleName self) pfn =
   let o@(FMName _other) = pfKey pfn
       m1@(ModuleName m1') = ModuleName (joinMod (haskellPrefix' pfn ++ parentModule' pfn))
       m2 = ModuleName (joinMod (parentModule' pfn))
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
       spec = Just (False,[IVar (Ident (fName (baseName' pfn)))])
-#else
-      spec = Just (False,[IVar NoNamespace (Ident (fName (baseName' pfn)))])
-#endif
       kind = getKind r o
       fromAlt = S.member (FMName self,FMName m1') (rIKey r)
       m1key = if kind == SplitKeyTypeBoot && fromAlt
@@ -237,13 +219,8 @@ importO r selfMod@(ModuleName self) part oi =
       m2 = ModuleName (joinMod (parentModule pn))
       m3 = ModuleName (joinMod (parentModule pn ++ [baseName pn]))
       fromSource = S.member (FMName self,part,o) (rIBoot r)
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
       iabs1 = IAbs NoNamespace (Ident (mName (baseName pn)))
       iabsget = map (IAbs NoNamespace . Ident . fst . oneofGet) . F.toList .  oneofFields $ oi
-#else
-      iabs1 = IAbs (Ident (mName (baseName pn)))
-      iabsget = map (IAbs . Ident . fst . oneofGet) . F.toList . oneofFields $ oi
-#endif
       ithall = IThingAll (Ident (mName (baseName pn)))
 
       ans1 =  ImportDecl src m1 True fromSource False Nothing (Just m2)
@@ -550,13 +527,8 @@ protoModule result pri fdpBS
   = let protoName = protoMod pri
         (extendees,myKeys) = unzip $ F.toList (extensionKeys pri)
         m = ModuleName (fqMod protoName)
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
         exportKeys = map (EVar . unqualFName . fieldName) myKeys
         exportNames = map (EVar . UnQual . Ident) ["protoInfo","fileDescriptorProto"]
-#else
-        exportKeys = map (EVar NoNamespace . unqualFName . fieldName) myKeys
-        exportNames = map (EVar NoNamespace . UnQual . Ident) ["protoInfo","fileDescriptorProto"]
-#endif
         imports = (protoImports ++) . mergeImports $
                     mapMaybe (importPN result m Normal) $
                       extendees ++ mapMaybe typeName myKeys
@@ -564,23 +536,11 @@ protoModule result pri fdpBS
          (keysXTypeVal protoName (extensionKeys pri) ++ embed'ProtoInfo pri ++ embed'fdpBS fdpBS)
  where protoImports = standardImports False (not . Seq.null . extensionKeys $ pri) False ++
          [ ImportDecl src (ModuleName "Text.DescriptorProtos.FileDescriptorProto") False False False Nothing Nothing
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
                         (Just (False,[IAbs NoNamespace (Ident "FileDescriptorProto")]))
-#else
-                        (Just (False,[IAbs (Ident "FileDescriptorProto")]))
-#endif
          , ImportDecl src (ModuleName "Text.ProtocolBuffers.Reflections") False False False Nothing Nothing
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
                         (Just (False,[IAbs NoNamespace (Ident "ProtoInfo")]))
-#else
-                        (Just (False,[IAbs (Ident "ProtoInfo")]))
-#endif
          , ImportDecl src (ModuleName "Text.ProtocolBuffers.WireMessage") True False False Nothing (Just (ModuleName "P'"))
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
                         (Just (False,[IVar (Ident "wireGet,getFromBS")]))
-#else
-                        (Just (False,[IVar NoNamespace (Ident "wireGet,getFromBS")]))
-#endif
          ]
 
 embed'ProtoInfo :: ProtoInfo -> [Decl]
@@ -630,11 +590,7 @@ descriptorBootModule di
                        [TyVar (Ident "msg'"), TyFun (TyVar (Ident "msg'")) (TyCon un),  (TyCon un)] []
         dataDecl = DataDecl src DataType [] (baseIdent protoName) [] [] []
         mkInst s = InstDecl src Nothing [] [] s [TyCon un] []
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
         eabs = EAbs NoNamespace un
-#else
-        eabs = EAbs un
-#endif
     in Module src (ModuleName (fqMod protoName)) (modulePragmas $ makeLenses di) Nothing (Just [eabs]) minimalImports
          (dataDecl : instMesAPI : map mkInst classes)
 
@@ -644,11 +600,7 @@ descriptorKeyBootModule :: Result -> DescriptorInfo -> Module
 descriptorKeyBootModule result di
   = let Module p1 m@(ModuleName _self) p3 p4 (Just exports) imports decls = descriptorBootModule di
         (extendees,myKeys) = unzip $ F.toList (keys di)
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
         exportKeys = map (EVar . unqualFName . fieldName) myKeys
-#else
-        exportKeys = map (EVar NoNamespace . unqualFName . fieldName) myKeys
-#endif
         importTypes = mergeImports . mapMaybe (importPN result m Source) . nubSort $
                         extendees ++ mapMaybe typeName myKeys
         declKeys = keysXType (descName di) (keys di)
@@ -661,11 +613,7 @@ descriptorKeyfileModule result di
         (extendees,myKeys) = unzip $ F.toList (keys di)
         mBase = ModuleName (fqMod (descName di))
         m = ModuleName (fqMod protoName'Key)
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
         exportKeys = map (EVar . unqualFName . fieldName) myKeys
-#else
-        exportKeys = map (EVar NoNamespace . unqualFName . fieldName) myKeys
-#endif
         importTypes = mergeImports . mapMaybe (importPN result mBase KeyFile) . nubSort $
                         extendees ++ mapMaybe typeName myKeys
         declKeys = keysXTypeVal protoName'Key (keys di)
@@ -682,11 +630,7 @@ descriptorNormalModule result di
         extendees' = if sepKey then [] else extendees
         myKeys' = if sepKey then [] else myKeys
         m = ModuleName (fqMod protoName)
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
         exportKeys = map (EVar . unqualFName . fieldName) myKeys
-#else
-        exportKeys = map (EVar NoNamespace . unqualFName . fieldName) myKeys
-#endif
         imports = (standardImports False (hasExt di) (makeLenses di) ++) . mergeImports . concat $
                     [ mapMaybe (importPN result m Normal) $
                         extendees' ++ mapMaybe typeName (myKeys' ++ (F.toList (fields di)))
@@ -706,11 +650,7 @@ exportLenses :: DescriptorInfo -> [ExportSpec]
 exportLenses di =
   if makeLenses di
     then
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
       map (EVar . unqualFName . stripPrefix) (lensFieldNames di)
-#else
-      map (EVar NoNamespace . unqualFName . stripPrefix) (lensFieldNames di)
-#endif
     else []
   where stripPrefix pfn = pfn { baseNamePrefix' = "" }
         lensFieldNames di = map fieldName (F.toList (fields di))
@@ -733,13 +673,8 @@ standardImports isEnumMod ext lenses =
   , ImportDecl src (ModuleName "Data.Data") True False False Nothing (Just (ModuleName "Prelude'")) Nothing
   , ImportDecl src (ModuleName "Text.ProtocolBuffers.Header") True False False Nothing (Just (ModuleName "P'")) Nothing ] ++ lensTH
  where
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
        ops | ext = map (IVar . Symbol) $ base ++ ["==","<=","&&"]
            | otherwise = map (IVar . Symbol) base
-#else
-       ops | ext = map (IVar NoNamespace . Symbol) $ base ++ ["==","<=","&&"]
-           | otherwise = map (IVar NoNamespace . Symbol) base
-#endif
        base | isEnumMod = ["+","/","."]
             | otherwise = ["+","/"]
        lensTH | lenses = [ImportDecl src (ModuleName "Control.Lens.TH") True False False Nothing Nothing Nothing]
@@ -873,11 +808,7 @@ instanceTextMsg di
       , InsDecl $ FunBind [Match src (Ident "textGet") [] Nothing (UnGuardedRhs parser) bdecls]
       ]
   where
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
         bdecls = Just (BDecls (subparsers ++ subparsersO))
-#else
-        bdecls = BDecls (subparsers ++ subparsersO)
-#endif
         flds = F.toList (fields di)
         os = F.toList (descOneofs di)
         msgVar = distinctVar "msg"
@@ -1043,11 +974,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
         sizeCases = UnGuardedRhs $ cases (lvar "calc'Size")
                                          (pvar "prependMessageSize" $$ lvar "calc'Size")
                                          (pvar "wireSizeErr" $$ lvar "ft'" $$ lvar "self'")
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
         whereCalcSize = Just (BDecls [defun "calc'Size" [] sizes])
-#else
-        whereCalcSize = BDecls [defun "calc'Size" [] sizes]
-#endif
         sizes | null sizesList = Lit (Hse.Int 0)
               | otherwise = Paren (foldl1' (+!) sizesList)
           where (+!) = mkOp "+"
@@ -1081,11 +1008,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                     (Paren $ foldl' App (pvar "wireSize") [ litInt' 10 , lvar "self'" ])
                 , Qualifier $ lvar "put'Fields" ])
           (pvar "wirePutErr" $$ lvar "ft'" $$ lvar "self'")
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
         wherePutFields = Just (BDecls [defun "put'Fields" [] (Do putStmts)])
-#else
-        wherePutFields = BDecls [defun "put'Fields" [] (Do putStmts)]
-#endif
         putStmts = putStmtsContent
           where putStmtsContent | null putStmtsAll = [Qualifier $ preludevar "return" $$ Con (Special UnitCon)]
                                 | otherwise = putStmtsAll
@@ -1128,11 +1051,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                    in UnGuardedRhs $ cases (pvar "getBareMessageWith" $$ param)
                                            (pvar "getMessageWith" $$ param)
                                            (pvar "wireGetErr" $$ lvar "ft'")
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
         whereDecls = Just (BDecls [whereUpdateSelf])
-#else
-        whereDecls = BDecls [whereUpdateSelf]
-#endif
         whereUpdateSelf = defun "update'Self" [patvar "wire'Tag", patvar "old'Self"]
                                 (Case (lvar "wire'Tag") updateAlts)
         -- update cases are all normal fields then all known extensions then wildcard
@@ -1153,11 +1072,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                           | otherwise = unknownBranch
                 unknownBranch = argPair (pvar "unknown")
                 argPair x = x $$ lvar "field'Number" $$ lvar "wire'Type" $$ lvar "old'Self"
-#if MIN_VERSION_haskell_src_exts(1, 17, 0)
         bdecls = Nothing
-#else
-        bdecls = BDecls []
-#endif
         isAllowedExt x = preludevar "or" $$ List ranges where
           (<=!) = mkOp "<="; (&&!) = mkOp "&&"; (==!) = mkOp "=="; (FieldId maxHi) = maxBound
           ranges = map (\ (FieldId lo,FieldId hi) ->
@@ -1309,5 +1224,3 @@ useType 16 = Just "Int64"
 useType 17 = Just "Int32"
 useType 18 = Just "Int64"
 useType  x = imp $ "useType: Unknown type code (expected 1 to 18) of "++show x
-
-
