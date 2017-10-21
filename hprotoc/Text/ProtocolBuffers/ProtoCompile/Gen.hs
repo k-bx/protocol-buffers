@@ -586,7 +586,7 @@ descriptorBootModule di
                   ++ if hasExt di then [private "ExtendMessage"] else []
                   ++ if storeUnknown di then [private "UnknownMessage"] else []
         instMesAPI = InstDecl () Nothing (mkSimpleIRule (private "MessageAPI")
-                       [TyVar () (Ident () "msg'"), TyFun () (TyVar () (Ident () "msg'")) (TyCon () un), (TyCon () un)]) Nothing
+                       [TyVar () (Ident () "msg'"), TyParen () (TyFun () (TyVar () (Ident () "msg'")) (TyCon () un)), (TyCon () un)]) Nothing
         dataDecl = DataDecl () (DataType ()) Nothing (DHead () (baseIdent protoName)) [] Nothing
         mkInst s = InstDecl () Nothing (mkSimpleIRule s [TyCon () un]) Nothing
         eabs = EAbs () (NoNamespace ()) un
@@ -941,7 +941,7 @@ instanceDefault di
 instanceMessageAPI :: ProtoName -> Decl ()
 instanceMessageAPI protoName
     = InstDecl () Nothing (mkSimpleIRule (private "MessageAPI")
-        [TyVar () (Ident () "msg'"), TyFun () (TyVar () (Ident () "msg'")) (TyCon () un),  (TyCon () un)]) . Just $
+        [TyVar () (Ident () "msg'"), TyParen () (TyFun () (TyVar () (Ident () "msg'")) (TyCon () un)), (TyCon () un)]) . Just $
         [ inst "getVal" [patvar "m'",patvar "f'"] (App () (lvar "f'" ) (lvar "m'")) ]
   where un = unqualName protoName
 
