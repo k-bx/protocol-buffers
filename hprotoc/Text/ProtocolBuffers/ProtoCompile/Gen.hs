@@ -741,7 +741,7 @@ descriptorX di = DataDecl () (DataType ()) Nothing (DHead () name) [QualConDecl 
                             $ eOneof
                       eOneof = F.foldr ((:) . fieldOneofX) [] (descOneofs di)
 
-        bangType = if lazyFields di then TyParen () {- UnBangedTy -} else TyBang () (BangedTy ()) (NoUnpack ()) . TyParen ()
+        bangType = if lazyFields di then TyParen () {- UnBangedTy -} else TyBang () (BangedTy ()) (NoUnpackPragma ()) . TyParen ()
         -- extfield :: ([Name],BangType)
         extfield = ([fieldIdent di "ext'field"], bangType (TyCon () (private "ExtField")))
         -- unknownField :: ([Name],BangType)
