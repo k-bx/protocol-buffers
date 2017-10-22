@@ -17,3 +17,4 @@ extra-deps:
 - directory-1.2.6.3
 - transformers-0.5.2.0
 - unix-2.7.2.0
+- haskell-src-exts-1.18.1
