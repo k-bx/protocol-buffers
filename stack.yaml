@@ -2,6 +2,5 @@ packages:
 - '.'
 - descriptor/
 - hprotoc/
-extra-deps:
-- haskell-src-exts-1.17.1
-resolver: lts-8.21
+extra-deps: []
+resolver: lts-9.10
