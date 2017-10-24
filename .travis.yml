@@ -9,16 +9,16 @@ before_install:
   # stack
   - mkdir -p ~/.local/bin
   - export PATH=~/.local/bin:$PATH
-  - curl -L https://github.com/commercialhaskell/stack/releases/download/v0.1.4.0/stack-0.1.4.0-x86_64-linux.tar.gz | tar xz -C ~/.local/bin
+  - curl -L https://github.com/commercialhaskell/stack/releases/download/v1.5.1/stack-1.5.1-linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
 
 matrix:
   include:
-    - env: GHCVER=7.8.4 STACK_YAML=stack-7.8.yaml
-      addons: {apt: {packages: [ghc-7.8.4], sources: [hvr-ghc]}}
     - env: GHCVER=7.10.2 STACK_YAML=stack-7.10.yaml
       addons: {apt: {packages: [ghc-7.10.2],sources: [hvr-ghc]}}
-    - env: GHCVER=8.0.1 STACK_YAML=stack-8.0.1.yaml
-      addons: {apt: {packages: [ghc-8.0.1],sources: [hvr-ghc]}}
+    - env: GHCVER=8.0.2 STACK_YAML=stack-8.0.2.yaml
+      addons: {apt: {packages: [ghc-8.0.2],sources: [hvr-ghc]}}
+    - env: GHCVER=8.2.1 STACK_YAML=stack-8.2.1.yaml
+      addons: {apt: {packages: [ghc-8.2.1],sources: [hvr-ghc]}}
     - env: GHCVER=head STACK_YAML=stack-head.yaml
       addons: {apt: {packages: [cabal-install-head,ghc-head],  sources: [hvr-ghc]}}
 
