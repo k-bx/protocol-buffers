@@ -1,5 +1,9 @@
 Newest at the top.
 
+2.4.5
+
+- pr #54. Support haskell-src-exts 1.18
+
 2.4.4
 
 - pr #53. Allow decimal places at the end of line
