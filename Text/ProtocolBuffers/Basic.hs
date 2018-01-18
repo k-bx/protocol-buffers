@@ -19,6 +19,7 @@ import Data.Foldable as F(Foldable(foldl))
 import Data.Generics(Data(..))
 import Data.Int(Int32,Int64)
 import Data.Ix(Ix)
+import Data.Semigroup (Semigroup(..))
 #if __GLASGOW_HASKELL__ < 710
 import Data.Monoid(Monoid(..))
 #endif
@@ -51,9 +52,12 @@ instance Show Utf8 where
                               s = showsPrec
                           in s d (U.toString bs)
 
+instance Semigroup Utf8 where
+  (<>) (Utf8 x) (Utf8 y) = Utf8 (x <> y)
+
 instance Monoid Utf8 where
   mempty = Utf8 mempty
-  mappend (Utf8 x) (Utf8 y) = Utf8 (mappend x y)
+  mappend = (<>)
 
 -- | 'WireTag' is the 32 bit value with the upper 29 bits being the
 -- 'FieldId' and the lower 3 bits being the 'WireType'
