@@ -1,5 +1,9 @@
 Newest at the top.
 
+2.4.7
+
+- pr #57. Add GHC 8.4 support (add Semigroup instances)
+
 2.4.6
 
 - issue #55. Constraint haskell-src-exts to be < 1.20
