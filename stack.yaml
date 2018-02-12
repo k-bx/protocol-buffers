@@ -3,4 +3,4 @@ packages:
 - descriptor/
 - hprotoc/
 extra-deps: []
-resolver: lts-9.10
+resolver: lts-10.3
