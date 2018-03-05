@@ -1,4 +1,4 @@
-{-# LANGUAGE NamedFieldPuns, RecordWildCards, ViewPatterns #-}
+{-# LANGUAGE NamedFieldPuns, RecordWildCards, ViewPatterns, CPP #-}
 -- This module uses the Reflection data structures (ProtoInfo,EnumInfo,DescriptorInfo) to
 -- build an AST using Language.Haskell.Syntax.  This get quite verbose, so a large number
 -- of helper functions (and operators) are defined to aid in specifying the output code.
@@ -22,8 +22,7 @@ import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),
 
 import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(Result(..),VertexKind(..),pKey,pfKey,getKind,Part(..))
 
---import Paths_hprotoc(version)
---import Data.Version(showVersion)
+import Control.Monad(mzero)
 import qualified Data.ByteString.Lazy.Char8 as LC(unpack)
 import qualified Data.Foldable as F(foldr,toList)
 import Data.List(sortBy,foldl',foldl1',group,sort,union)
@@ -341,7 +340,7 @@ oneofDecls oi = (oneofX oi : oneofFuncs oi) ++ lenses ++ instances
 oneofX :: OneofInfo -> Decl ()
 oneofX oi = DataDecl () (DataType ()) Nothing (DHead () (baseIdent (oneofName oi)))
               (map oneofValueX (F.toList (oneofFields oi) ))
-              (Just derives)
+              (return derives)
   where oneofValueX (pname,fi) = QualConDecl () Nothing Nothing con
           where con = RecDecl () (baseIdent pname) [fieldX]
                 fieldX = FieldDecl () [baseIdent' . fieldName $ fi] (TyParen () (TyCon () typed ))
@@ -409,7 +408,7 @@ enumDecls ei =  map ($ ei) [ enumX
                            ]
 
 enumX :: EnumInfo -> Decl ()
-enumX ei = DataDecl () (DataType ()) Nothing (DHead () (baseIdent (enumName ei))) (map enumValueX (enumValues ei)) (Just derivesEnum)
+enumX ei = DataDecl () (DataType ()) Nothing (DHead () (baseIdent (enumName ei))) (map enumValueX (enumValues ei)) (return derivesEnum)
   where enumValueX (_,name) = QualConDecl () Nothing Nothing (ConDecl () (Ident () name) [])
 
 instanceTextTypeEnum :: EnumInfo -> Decl ()
@@ -587,7 +586,7 @@ descriptorBootModule di
                   ++ if storeUnknown di then [private "UnknownMessage"] else []
         instMesAPI = InstDecl () Nothing (mkSimpleIRule (private "MessageAPI")
                        [TyVar () (Ident () "msg'"), TyParen () (TyFun () (TyVar () (Ident () "msg'")) (TyCon () un)), (TyCon () un)]) Nothing
-        dataDecl = DataDecl () (DataType ()) Nothing (DHead () (baseIdent protoName)) [] Nothing
+        dataDecl = DataDecl () (DataType ()) Nothing (DHead () (baseIdent protoName)) [] mzero
         mkInst s = InstDecl () Nothing (mkSimpleIRule s [TyCon () un]) Nothing
         eabs = EAbs () (NoNamespace ()) un
     in Module () (Just (ModuleHead () (ModuleName () (fqMod protoName)) Nothing (Just (ExportSpecList () [eabs])))) (modulePragmas $ makeLenses di) minimalImports
@@ -731,7 +730,7 @@ defToSyntax tc x =
  where (/!) a b = Paren () (mkOp "/" a b)
 
 descriptorX :: DescriptorInfo -> Decl ()
-descriptorX di = DataDecl () (DataType ()) Nothing (DHead () name) [QualConDecl () Nothing Nothing con] (Just derives)
+descriptorX di = DataDecl () (DataType ()) Nothing (DHead () name) [QualConDecl () Nothing Nothing con] (return derives)
   where self = descName di
         name = baseIdent self
         con = RecDecl () name eFields
@@ -1202,7 +1201,11 @@ mkSimpleIRule con args =
     in IRule () Nothing Nothing instHead
 
 mkDeriving :: [QName ()] -> Deriving ()
+#if MIN_VERSION_haskell_src_exts(1, 20, 0)
+mkDeriving xs = Deriving () Nothing (map (\x -> mkSimpleIRule x []) xs)
+#else
 mkDeriving xs = Deriving () (map (\x -> mkSimpleIRule x []) xs)
+#endif
 
 derives,derivesEnum :: Deriving ()
 derives = mkDeriving $ map prelude ["Show","Eq","Ord","Typeable","Data","Generic"]
