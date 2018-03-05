@@ -8,6 +8,7 @@ cache:
 before_install:
   # stack
   - mkdir -p ~/.local/bin
+  - mkdir -p ~/tmp
   - export PATH=~/.local/bin:$PATH
   - curl -L https://github.com/commercialhaskell/stack/releases/download/v1.6.5/stack-1.6.5-linux-x86_64.tar.gz | tar xz -C ~/tmp
   - mv ~/tmp/stack-1.6.5-linux-x86_64/stack ~/.local/bin/
