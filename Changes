@@ -1,5 +1,9 @@
 Newest at the top.
 
+2.4.8
+
+- pr #58. Fix build for HSE-1.20
+
 2.4.7
 
 - pr #57. Add GHC 8.4 support (add Semigroup instances)
