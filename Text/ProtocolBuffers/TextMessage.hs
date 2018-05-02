@@ -158,7 +158,7 @@ integer :: (Integral a, Stream s Identity Char) => Parsec s () a
 integer = fromIntegral <$> T.integer lexer
 
 float :: Stream s Identity Char => Parsec s () Double
-float = T.float lexer
+float = either realToFrac id <$> T.naturalOrFloat lexer
 
 stringLiteral :: Stream s Identity Char => Parsec s () String
 stringLiteral = T.stringLiteral lexer
