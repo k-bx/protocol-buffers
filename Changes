@@ -1,5 +1,9 @@
 Newest at the top.
 
+2.4.10
+
+- pr #59. Add Semigroup instance
+
 2.4.9
 
 - pr #48. Make parser float support natural or float data format
