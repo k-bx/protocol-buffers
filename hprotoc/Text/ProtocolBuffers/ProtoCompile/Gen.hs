@@ -34,6 +34,7 @@ import Language.Haskell.Exts.Syntax as Hse
 import Data.Char(isLower,isUpper)
 import qualified Data.Map as M
 import Data.Maybe(mapMaybe)
+import Data.List (dropWhileEnd, intercalate)
 import           Data.Sequence (ViewL(..),(><))
 import qualified Data.Sequence as Seq(null,length,empty,viewl)
 import qualified Data.Set as S
@@ -102,7 +103,7 @@ localField di t = UnQual () (fieldIdent di t)
 
 -- pvar and preludevar and lvar are for lower-case identifiers
 isVar :: String -> Bool
-isVar (x:_) = isLower x || x == '_'
+isVar (x:_) = isLower x || x == '_' || x == '<' || x == '/'
 isVar _ = False
 
 isCon :: String -> Bool
@@ -307,7 +308,7 @@ oneofGet (p,fi) =
 modulePragmas :: Bool -> [ModulePragma ()]
 modulePragmas templateHaskell =
   [ LanguagePragma () (map (Ident ()) $
-      thPragma ++ ["BangPatterns","DeriveDataTypeable","DeriveGeneric","FlexibleInstances","MultiParamTypeClasses"]
+      thPragma ++ ["BangPatterns","DeriveDataTypeable","DeriveGeneric","FlexibleInstances","MultiParamTypeClasses","OverloadedStrings"]
     )
   , OptionsPragma () (Just GHC) " -fno-warn-unused-imports "
   ]
@@ -406,11 +407,28 @@ enumDecls ei =  map ($ ei) [ enumX
                            , instanceMessageAPI . enumName
                            , instanceReflectEnum
                            , instanceTextTypeEnum
+                           , instanceToJSONEnum
+                           , instanceFromJSONEnum
                            ]
 
 enumX :: EnumInfo -> Decl ()
 enumX ei = DataDecl () (DataType ()) Nothing (DHead () (baseIdent (enumName ei))) (map enumValueX (enumValues ei)) (return derivesEnum)
   where enumValueX (_,name) = QualConDecl () Nothing Nothing (ConDecl () (Ident () name) [])
+
+instanceToJSONEnum :: EnumInfo -> Decl ()
+instanceToJSONEnum ei
+  = InstDecl () Nothing (mkSimpleIRule (private "ToJSON") [TyCon () (unqualName (enumName ei))]) . Just $
+      [ inst "toJSON" [] (pvar "toJSONShow")
+      ]
+
+instanceFromJSONEnum :: EnumInfo -> Decl ()
+instanceFromJSONEnum ei
+  = InstDecl () Nothing (mkSimpleIRule (private "FromJSON") [TyCon () (unqualName name)]) . Just $
+      [ inst "parseJSON" [] (pvar "parseJSONEnum" $$ Lit () (String () name' (show name')))
+      ]
+      where
+        name = enumName $ ei
+        name' = joinMod (haskellPrefix name ++ parentModule name ++ [baseName name, baseName name])
 
 instanceTextTypeEnum :: EnumInfo -> Decl ()
 instanceTextTypeEnum ei
@@ -585,6 +603,7 @@ descriptorBootModule di
                   ,private "Mergeable",private "Default"
                   ,private "Wire",private "GPB",private "ReflectDescriptor"
                   , private "TextType", private "TextMsg"
+                  , private "FromJSON", private "ToJSON"
                   ]
                   ++ if hasExt di then [private "ExtendMessage"] else []
                   ++ if storeUnknown di then [private "UnknownMessage"] else []
@@ -785,6 +804,8 @@ instancesDescriptor di = map ($ di) $
    , instanceReflectDescriptor
    , instanceTextType
    , instanceTextMsg
+   , instanceToJSON
+   , instanceFromJSON
    ]
 
 instanceExtendMessage :: DescriptorInfo -> Decl ()
@@ -803,6 +824,96 @@ instanceUnknownMessage di
         , inst "putUnknownField" [patvar "u'f",patvar "msg"] putunknownfield
         ]
   where putunknownfield = RecUpdate () (lvar "msg") [ FieldUpdate () (localField di "unknown'field") (lvar "u'f") ]
+
+instanceToJSON :: DescriptorInfo -> Decl ()
+instanceToJSON di
+  = InstDecl () Nothing (mkSimpleIRule (private "ToJSON") [TyCon () (unqualName (descName di))]) . Just $
+      [ inst "toJSON" [patvar msgVar] serializeFun
+      ]
+  where
+        name = mName $ baseName $ descName di
+        flds = F.toList (fields di)
+        msgVar = distinctVar "msg"
+        reservedVars = map toPrintName flds
+        distinctVar var = if var `elem` reservedVars then distinctVar (var ++ "'") else var
+        getFname fld = fName $ baseName' $ fieldName fld
+        makePair fld =
+            let fldName = getFname fld
+                fldName' = dropWhileEnd (== '\'') fldName
+                toJSONFun = case typeCode fld of
+                    3 -> pvar "toJSONShowWithPayload"
+                    4 -> pvar "toJSONShowWithPayload"
+                    12 -> pvar "toJSONByteString"
+                    _ -> pvar "toJSON"
+                arg = Paren () (lvar fldName $$ lvar msgVar)
+                toJSONCall = case (isRequired fld, canRepeat fld) of
+                    (True, False) -> toJSONFun $$ arg
+                    (_, _) -> pvar "toJSON" $$ Paren () (preludevar "fmap" $$ toJSONFun $$ arg)
+            in Tuple () Boxed
+                  [ Lit () (String () fldName' (show fldName'))
+                  , toJSONCall
+                  ]
+        serializeFun =
+            pvar "objectNoEmpty" $$ List () (map makePair flds)
+
+instanceFromJSON :: DescriptorInfo -> Decl ()
+instanceFromJSON di
+  = InstDecl () Nothing (mkSimpleIRule (private "FromJSON") [TyCon () (unqualName (descName di))]) . Just $
+      [ inst "parseJSON" [] (pvar "withObject" $$ Lit () (String () name (show name)) $$ Paren () parseFun)
+      ]
+  where
+        name = mName $ baseName $ descName di
+        flds = F.toList (fields di)
+        msgVar = distinctVar "msg"
+        reservedVars = map toPrintName flds
+        distinctVar var = if var `elem` reservedVars then distinctVar (var ++ "'") else var
+        objVar = distinctVar "o"
+        getFname fld = fName $ baseName' $ fieldName fld
+        getFieldValue fld =
+            let fldName = getFname fld
+                fldName' = dropWhileEnd (== '\'') fldName
+                parseFieldFun = case (hsDefault fld, isRequired fld) of
+                  (Nothing, True) -> pvar "explicitParseField"
+                  _ -> pvar "explicitParseFieldMaybe"
+                parseJSONFun = case typeCode fld of
+                    3 -> pvar "parseJSONReadWithPayload" $$ Lit () (String () "int64" (show "int64"))
+                    4 -> pvar "parseJSONReadWithPayload" $$ Lit () (String () "uint64" (show "uint64"))
+                    8 -> pvar "parseJSONBool"
+                    12 -> pvar "parseJSONByteString"
+                    _ -> pvar "parseJSON"
+                parseJSONFun' = case canRepeat fld of
+                  False -> parseJSONFun
+                  True -> Paren () (preludevar "mapM" $$ parseJSONFun $$ pvar "<=<" $$ pvar "parseJSON")
+                parseFieldCall = parseFieldFun $$ parseJSONFun' $$ lvar objVar $$ Lit () (String () fldName' (show fldName'))
+                parseFieldCall' = case canRepeat fld of
+                  False -> parseFieldCall
+                  True -> preludevar "fmap" $$ Paren () (preludevar "maybe" $$ preludevar "mempty" $$ preludevar "id") $$ parseFieldCall
+                parseFieldCall'' = case (hsDefault fld, canRepeat fld) of
+                  (_ , True)  -> parseFieldCall'
+                  (Nothing, False)  -> parseFieldCall'
+                  (Just d, False) ->
+                    let defLit = case d of
+                          HsDef'Bool b -> preludecon (show b)
+                          HsDef'ByteString bs -> preludevar "read" $$ Lit () (String () (show bs) (show (show bs)))
+                          HsDef'RealFloat (SRF'Rational rat) -> Lit () (Frac () rat (show (fromRational rat :: Double)))
+                          HsDef'RealFloat SRF'nan -> Lit () (Int () 0 "0") $$ preludevar "/" $$ Lit () (Int () 0 "0")
+                          HsDef'RealFloat SRF'ninf -> Lit () (Int () (-1) "-1") $$ preludevar "/" $$ Lit () (Int () 0 "0")
+                          HsDef'RealFloat SRF'inf -> Lit () (Int () 1 "1") $$ preludevar "/" $$ Lit () (Int () 0 "0")
+                          HsDef'Integer i -> Lit () (Int () i (show i))
+                          HsDef'Enum s -> preludevar "read" $$ Lit () (String () s (show s))
+                        defParse = case isRequired fld of
+                          True -> Paren () defLit
+                          False -> Paren () (preludecon "Just" $$ Paren () defLit)
+                        tmpVar = distinctVar "tmp"
+                        modfun = if isRequired fld then preludevar "id" else preludecon "Just"
+                    in Do ()
+                       [ Generator () (patvar tmpVar) parseFieldCall'
+                       , Qualifier () $ preludevar "return" $$ Paren () (preludevar "maybe" $$ defParse $$ modfun $$ lvar tmpVar)
+                       ]
+            in Generator () (patvar fldName) parseFieldCall''
+        parseFun = Lambda () [patvar objVar] $ Do () $
+            map getFieldValue flds ++
+            [ Qualifier () $ preludevar "return" $$ Paren () (foldl' (\acc fld -> acc $$ lvar (getFname fld)) (lcon name) flds) ]
 
 instanceTextType :: DescriptorInfo -> Decl ()
 instanceTextType di

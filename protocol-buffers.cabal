@@ -32,15 +32,20 @@ Library
                    Text.ProtocolBuffers.TextMessage
                    Text.ProtocolBuffers.Unknown
                    Text.ProtocolBuffers.WireMessage
+                   Text.ProtocolBuffers.ProtoJSON
 
   build-depends: base >= 4.7.0 && < 5,
+                 aeson,
                  array,
+                 base16-bytestring,
+                 text,
                  binary,
                  bytestring,
                  containers,
                  directory,
                  filepath,
                  mtl,
+                 vector,
                  parsec,
                  utf8-string,
                  syb
