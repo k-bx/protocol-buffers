@@ -103,7 +103,7 @@ localField di t = UnQual () (fieldIdent di t)
 
 -- pvar and preludevar and lvar are for lower-case identifiers
 isVar :: String -> Bool
-isVar (x:_) = isLower x || x == '_' || x == '<' || x == '/'
+isVar (x:_) = isLower x || x == '_' || x == '<' || x == '/' || x == '+'
 isVar _ = False
 
 isCon :: String -> Bool
@@ -421,17 +421,23 @@ instanceToJSONEnum ei
       [ inst "toJSON" [patvar "msg'"] (pcon "String" $$ Paren () (Case () (lvar "msg'") alts))
       ]
       where
-        mkAlt (_, alt) = Alt () (PApp () (unqualName alt) []) (Lit () (String () alt (show alt))) Nothing
-        alts = map mkAlt (enumValues ei)
+        mkAlt :: String -> Alt ()
+        mkAlt alt = Alt () (PApp () (UnQual () (Ident () alt)) []) (UnGuardedRhs () $ litStr alt) Nothing
+        alts = map (mkAlt . snd) (enumValues ei)
 
 instanceFromJSONEnum :: EnumInfo -> Decl ()
 instanceFromJSONEnum ei
   = InstDecl () Nothing (mkSimpleIRule (private "FromJSON") [TyCon () (unqualName name)]) . Just $
-      [ inst "parseJSON" [] (pvar "parseJSONEnum" $$ Lit () (String () name' (show name')))
+      [ inst "parseJSON" [] (pvar "withText" $$ litStr name' $$ Paren () (Lambda () [patvar "msg'"] body))
       ]
       where
         name = enumName $ ei
         name' = joinMod (haskellPrefix name ++ parentModule name ++ [baseName name, baseName name])
+        body = Case () (lvar "msg'") alts
+        mkAlt (_, alt) = Alt () (PLit () (Signless ()) (String () alt alt)) (UnGuardedRhs () (preludevar "return" $$ lcon alt)) Nothing
+        alts =
+            map mkAlt (enumValues ei) ++
+            [ Alt () (PWildCard ()) (UnGuardedRhs () $ preludevar "fail" $$ Paren () (litStr "Invalid value " $$ preludevar "++" $$ preludevar "show" $$ lvar "msg'" $$ preludevar "++" $$ litStr (" for enum "++name'))) Nothing ]
 
 instanceTextTypeEnum :: EnumInfo -> Decl ()
 instanceTextTypeEnum ei

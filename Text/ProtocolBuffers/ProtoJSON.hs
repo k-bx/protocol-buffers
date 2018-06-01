@@ -19,14 +19,6 @@ objectNoEmpty = object . filter (hasContent . snd)
       hasContent (Array xs) | V.null xs = False
       hasContent _ = True
 
-{-# INLINE parseJSONEnum #-}
-parseJSONEnum :: Read a => String -> Value -> Parser a
-parseJSONEnum name x = do
-    t <- parseJSON x
-    case readEither t of
-      Left _ -> fail $ "Invalid value "++show t++" for enum "++name
-      Right res -> return res
-
 {-# INLINE toJSONShowWithPayload #-}
 toJSONShowWithPayload :: Show a => a -> Value
 toJSONShowWithPayload x = object [("payload", toJSON . show $ x)]

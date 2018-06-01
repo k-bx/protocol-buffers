@@ -9,7 +9,8 @@ module Text.ProtocolBuffers.Header
     , choice, sepEndBy, spaces, try
     , (<=<)
     , FromJSON(..), ToJSON(..)
-    , explicitParseField, explicitParseFieldMaybe, withObject
+    , Value(..)
+    , explicitParseField, explicitParseFieldMaybe, withObject, withText
     , module Data.Generics
     , module Text.ProtocolBuffers.Basic
     , module Text.ProtocolBuffers.Extensions
@@ -23,8 +24,8 @@ module Text.ProtocolBuffers.Header
 
 import Control.Monad(ap, (<=<), mplus)
 import Control.Monad.Error.Class(throwError,catchError)
-import Data.Aeson (FromJSON(..), ToJSON(..))
-import Data.Aeson.Types (explicitParseField, explicitParseFieldMaybe, withObject)
+import Data.Aeson (FromJSON(..), ToJSON(..), Value(..))
+import Data.Aeson.Types (explicitParseField, explicitParseFieldMaybe, withObject, withText)
 import Data.ByteString.Lazy(empty)
 import Data.ByteString.Lazy.Char8(pack)
 import Data.Generics(Data(..))
