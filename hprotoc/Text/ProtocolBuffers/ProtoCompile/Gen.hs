@@ -418,8 +418,11 @@ enumX ei = DataDecl () (DataType ()) Nothing (DHead () (baseIdent (enumName ei))
 instanceToJSONEnum :: EnumInfo -> Decl ()
 instanceToJSONEnum ei
   = InstDecl () Nothing (mkSimpleIRule (private "ToJSON") [TyCon () (unqualName (enumName ei))]) . Just $
-      [ inst "toJSON" [] (pvar "toJSONShow")
+      [ inst "toJSON" [patvar "msg'"] (pcon "String" $$ Paren () (Case () (lvar "msg'") alts))
       ]
+      where
+        mkAlt (_, alt) = Alt () (PApp () (unqualName alt) []) (Lit () (String () alt (show alt))) Nothing
+        alts = map mkAlt (enumValues ei)
 
 instanceFromJSONEnum :: EnumInfo -> Decl ()
 instanceFromJSONEnum ei

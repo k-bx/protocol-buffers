@@ -19,10 +19,6 @@ objectNoEmpty = object . filter (hasContent . snd)
       hasContent (Array xs) | V.null xs = False
       hasContent _ = True
 
-{-# INLINE toJSONShow #-}
-toJSONShow :: Show a => a -> Value
-toJSONShow = toJSON . show
-
 {-# INLINE parseJSONEnum #-}
 parseJSONEnum :: Read a => String -> Value -> Parser a
 parseJSONEnum name x = do
