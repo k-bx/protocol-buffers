@@ -16,6 +16,8 @@
 --
 module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,oneofModule,prettyPrint) where
 
+import Text.DescriptorProtos.FieldDescriptorProto.Type hiding (Type)
+
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),DescriptorInfo(..),ProtoInfo(..),OneofInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..))
@@ -849,10 +851,10 @@ instanceToJSON di
         makePair fld =
             let fldName = getFname fld
                 fldName' = dropWhileEnd (== '\'') fldName
-                toJSONFun = case typeCode fld of
-                    3 -> pvar "toJSONShowWithPayload"
-                    4 -> pvar "toJSONShowWithPayload"
-                    12 -> pvar "toJSONByteString"
+                toJSONFun = case toEnum (getFieldType (typeCode fld)) of
+                    TYPE_INT64 -> pvar "toJSONShowWithPayload"
+                    TYPE_UINT64 -> pvar "toJSONShowWithPayload"
+                    TYPE_BYTES -> pvar "toJSONByteString"
                     _ -> pvar "toJSON"
                 arg = Paren () (lvar fldName $$ lvar msgVar)
                 toJSONCall = case (isRequired fld, canRepeat fld) of
@@ -884,11 +886,11 @@ instanceFromJSON di
                 parseFieldFun = case (hsDefault fld, isRequired fld) of
                   (Nothing, True) -> pvar "explicitParseField"
                   _ -> pvar "explicitParseFieldMaybe"
-                parseJSONFun = case typeCode fld of
-                    3 -> pvar "parseJSONReadWithPayload" $$ Lit () (String () "int64" (show "int64"))
-                    4 -> pvar "parseJSONReadWithPayload" $$ Lit () (String () "uint64" (show "uint64"))
-                    8 -> pvar "parseJSONBool"
-                    12 -> pvar "parseJSONByteString"
+                parseJSONFun = case toEnum (getFieldType (typeCode fld)) of
+                    TYPE_INT64 -> pvar "parseJSONReadWithPayload" $$ Lit () (String () "int64" (show "int64"))
+                    TYPE_UINT64 -> pvar "parseJSONReadWithPayload" $$ Lit () (String () "uint64" (show "uint64"))
+                    TYPE_BOOL -> pvar "parseJSONBool"
+                    TYPE_BYTES -> pvar "parseJSONByteString"
                     _ -> pvar "parseJSON"
                 parseJSONFun' = case canRepeat fld of
                   False -> parseJSONFun
