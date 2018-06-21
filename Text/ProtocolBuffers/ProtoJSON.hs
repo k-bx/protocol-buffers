@@ -8,8 +8,9 @@ import qualified Data.Vector as V
 import Text.ProtocolBuffers.Basic
 import Text.Read (readEither)
 
-import qualified Data.ByteString.Base16.Lazy as BL16
-import qualified Data.Text.Lazy.Encoding as TL
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Base16 as B16
+import qualified Data.Text.Encoding as T
 
 {-# INLINE objectNoEmpty #-}
 objectNoEmpty :: [Pair] -> Value
@@ -39,12 +40,12 @@ parseJSONBool _ = fail "Expected Bool"
 
 {-# INLINE toJSONByteString #-}
 toJSONByteString :: ByteString -> Value
-toJSONByteString bs = object [("payload", toJSON . TL.decodeUtf8 . BL16.encode $ bs)]
+toJSONByteString bs = object [("payload", String . T.decodeUtf8 . B16.encode . BL.toStrict $ bs)]
 
 {-# INLINE parseJSONByteString #-}
 parseJSONByteString :: Value -> Parser ByteString
 parseJSONByteString = withObject "bytes" $ \o -> do
     t <- o .: "payload"
-    case BL16.decode (TL.encodeUtf8 t) of
-      (bs, "") -> return bs
+    case B16.decode (T.encodeUtf8 t) of
+      (bs, "") -> return (BL.fromStrict bs)
       _ -> fail "Failed to parse base16."
