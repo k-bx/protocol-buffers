@@ -29,6 +29,7 @@ module Text.ProtocolBuffers.WireMessage
     , prependMessageSize,putSize,putVarUInt,getVarInt,putLazyByteString,splitWireTag,fieldIdOf
     , wireSizeReq,wireSizeOpt,wireSizeRep,wireSizePacked
     , wirePutReq,wirePutOpt,wirePutRep,wirePutPacked
+    , wirePutReqWithSize,wirePutOptWithSize,wirePutRepWithSize,wirePutPackedWithSize
     , wireSizeErr,wirePutErr,wireGetErr
     , getMessageWith,getBareMessageWith,wireGetEnum,wireGetPackedEnum
     , unknownField,unknown,wireGetFromWire
@@ -45,7 +46,7 @@ import Data.Bits (Bits(..))
 --import qualified Data.ByteString as S(last)
 --import qualified Data.ByteString.Unsafe as S(unsafeIndex)
 import qualified Data.ByteString.Lazy as BS (length)
-import qualified Data.Foldable as F(foldl',forM_)
+import qualified Data.Foldable as F(foldl')
 --import Data.List (genericLength)
 import Data.Maybe(fromMaybe)
 import Data.Sequence ((|>))
@@ -179,7 +180,7 @@ getFromBS parser bs = case runGetOnLazy parser bs of
                         Left msg -> error msg
                         Right (r,_) -> r
 
--- This is like 'runGet', without the ability to pass in more input
+-- | This is like 'runGet', without the ability to pass in more input
 -- beyond the initial ByteString.  Thus the 'ByteString' argument is
 -- taken to be the entire input.  To be able to incrementally feed in
 -- more input you should use 'runGet' and respond to 'Partial'
@@ -195,33 +196,64 @@ runGetOnLazy parser bs = resolve (runGetAll parser bs)
 prependMessageSize :: WireSize -> WireSize
 prependMessageSize n = n + size'WireSize n
 
+{-# INLINE wirePutReqWithSize #-}
+-- | Used in generated code.
+wirePutReqWithSize :: Wire v => WireTag -> FieldType -> v -> (Put, WireSize)
+wirePutReqWithSize wireTag fieldType v =
+  let startTag = getWireTag wireTag
+      tagSize = size'WireTag wireTag
+      !(putAct, !size) = wirePutWithSize fieldType v
+      endTag = succ startTag
+  in case fieldType of
+       10 -> (putVarUInt startTag >> putAct >> putVarUInt endTag, tagSize+size+tagSize)
+       _ -> (putVarUInt startTag >> putAct, tagSize+size)
+
+{-# INLINE wirePutOptWithSize #-}
+-- | Used in generated code.
+wirePutOptWithSize :: Wire v => WireTag -> FieldType -> Maybe v -> (Put, WireSize)
+wirePutOptWithSize _wireTag _fieldType Nothing = (return (), 0)
+wirePutOptWithSize wireTag fieldType (Just v) = wirePutReqWithSize wireTag fieldType v
+
+{-# INLINE wirePutRepWithSize #-}
+-- | Used in generated code.
+wirePutRepWithSize :: Wire v => WireTag -> FieldType -> Seq v -> (Put, WireSize)
+wirePutRepWithSize wireTag fieldType vs =
+  let combine (act, size) v =
+          let !(act', !size') = wirePutReqWithSize wireTag fieldType v
+          in (act>>act', size+size')
+  in F.foldl' combine (return (), 0) vs
+
+{-# INLINE wirePutPackedWithSize #-}
+-- | Used in generated code.
+wirePutPackedWithSize :: Wire v => WireTag -> FieldType -> Seq v -> (Put, WireSize)
+wirePutPackedWithSize wireTag fieldType vs =
+  let (actInner, size) = wirePutRepWithSize wireTag fieldType vs
+      tagSize = size'WireTag wireTag
+      act = do
+          putVarUInt (getWireTag wireTag)
+          putSize size
+          actInner
+  in (act, tagSize + prependMessageSize size + size)
+
 {-# INLINE wirePutReq #-}
 -- | Used in generated code.
 wirePutReq :: Wire v => WireTag -> FieldType -> v -> Put
-wirePutReq wireTag 10 v = let startTag = getWireTag wireTag
-                              endTag = succ startTag
-                          in putVarUInt startTag >> wirePut 10 v >> putVarUInt endTag
-wirePutReq wireTag fieldType v = putVarUInt (getWireTag wireTag) >> wirePut fieldType v
+wirePutReq wireTag fieldType v = fst (wirePutReqWithSize wireTag fieldType v)
 
 {-# INLINE wirePutOpt #-}
 -- | Used in generated code.
 wirePutOpt :: Wire v => WireTag -> FieldType -> Maybe v -> Put
-wirePutOpt _wireTag _fieldType Nothing = return ()
-wirePutOpt wireTag fieldType (Just v) = wirePutReq wireTag fieldType v
+wirePutOpt wireTag fieldType v = fst (wirePutOptWithSize wireTag fieldType v)
 
 {-# INLINE wirePutRep #-}
 -- | Used in generated code.
 wirePutRep :: Wire v => WireTag -> FieldType -> Seq v -> Put
-wirePutRep wireTag fieldType vs = F.forM_ vs (\v -> wirePutReq wireTag fieldType v)
+wirePutRep wireTag fieldType vs = fst (wirePutRepWithSize wireTag fieldType vs)
 
 {-# INLINE wirePutPacked #-}
 -- | Used in generated code.
 wirePutPacked :: Wire v => WireTag -> FieldType -> Seq v -> Put
-wirePutPacked wireTag fieldType vs = do
-  putVarUInt (getWireTag wireTag)
-  let size = F.foldl' (\n v -> n + wireSize fieldType v) 0 vs
-  putSize size
-  F.forM_ vs (\v -> wirePut fieldType v)
+wirePutPacked wireTag fieldType vs = fst (wirePutPackedWithSize wireTag fieldType vs)
 
 {-# INLINE wireSizeReq #-}
 -- | Used in generated code.
@@ -449,8 +481,16 @@ wireGetErr ft = answer where
 -- "Text.ProtocolBuffers.WireMessage" and exported to use user by
 -- "Text.ProtocolBuffers".  These are less likely to change.
 class Wire b where
+  {-# MINIMAL wireGet, (wirePut, wireSize | wirePutWithSize) #-}
+  {-# INLINE wireSize #-}
   wireSize :: FieldType -> b -> WireSize
+  wireSize ft x = snd (wirePutWithSize ft x)
+  {-# INLINE wirePut #-}
   wirePut :: FieldType -> b -> Put
+  wirePut ft x = fst (wirePutWithSize ft x)
+  {-# INLINE wirePutWithSize #-}
+  wirePutWithSize :: FieldType -> b -> (Put, WireSize)
+  wirePutWithSize ft x = (wirePut ft x, wireSize ft x)
   wireGet :: FieldType -> Get b
   {-# INLINE wireGetPacked #-}
   wireGetPacked :: FieldType -> Get (Seq b)
