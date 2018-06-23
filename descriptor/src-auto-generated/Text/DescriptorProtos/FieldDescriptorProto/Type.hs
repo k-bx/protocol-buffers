@@ -1,12 +1,13 @@
-{-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
-{-# OPTIONS_GHC -fno-warn-unused-imports #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, DeriveGeneric, FlexibleInstances, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC  -fno-warn-unused-imports #-}
 module Text.DescriptorProtos.FieldDescriptorProto.Type (Type(..)) where
 import Prelude ((+), (/), (.))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
- 
+
 data Type = TYPE_DOUBLE
           | TYPE_FLOAT
           | TYPE_INT64
@@ -25,17 +26,17 @@ data Type = TYPE_DOUBLE
           | TYPE_SFIXED64
           | TYPE_SINT32
           | TYPE_SINT64
-          deriving (Prelude'.Read, Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
- 
+            deriving (Prelude'.Read, Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
+
 instance P'.Mergeable Type
- 
+
 instance Prelude'.Bounded Type where
   minBound = TYPE_DOUBLE
   maxBound = TYPE_SINT64
- 
+
 instance P'.Default Type where
   defaultValue = TYPE_DOUBLE
- 
+
 toMaybe'Enum :: Prelude'.Int -> P'.Maybe Type
 toMaybe'Enum 1 = Prelude'.Just TYPE_DOUBLE
 toMaybe'Enum 2 = Prelude'.Just TYPE_FLOAT
@@ -56,7 +57,7 @@ toMaybe'Enum 16 = Prelude'.Just TYPE_SFIXED64
 toMaybe'Enum 17 = Prelude'.Just TYPE_SINT32
 toMaybe'Enum 18 = Prelude'.Just TYPE_SINT64
 toMaybe'Enum _ = Prelude'.Nothing
- 
+
 instance Prelude'.Enum Type where
   fromEnum TYPE_DOUBLE = 1
   fromEnum TYPE_FLOAT = 2
@@ -115,7 +116,7 @@ instance Prelude'.Enum Type where
   pred TYPE_SINT32 = TYPE_SFIXED64
   pred TYPE_SINT64 = TYPE_SINT32
   pred _ = Prelude'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FieldDescriptorProto.Type"
- 
+
 instance P'.Wire Type where
   wireSize ft' enum = P'.wireSize ft' (Prelude'.fromEnum enum)
   wirePut ft' enum = P'.wirePut ft' (Prelude'.fromEnum enum)
@@ -123,12 +124,12 @@ instance P'.Wire Type where
   wireGet ft' = P'.wireGetErr ft'
   wireGetPacked 14 = P'.wireGetPackedEnum toMaybe'Enum
   wireGetPacked ft' = P'.wireGetErr ft'
- 
+
 instance P'.GPB Type
- 
+
 instance P'.MessageAPI msg' (msg' -> Type) Type where
   getVal m' f' = f' m'
- 
+
 instance P'.ReflectEnum Type where
   reflectEnum
    = [(1, "TYPE_DOUBLE", TYPE_DOUBLE), (2, "TYPE_FLOAT", TYPE_FLOAT), (3, "TYPE_INT64", TYPE_INT64),
@@ -146,7 +147,7 @@ instance P'.ReflectEnum Type where
        (7, "TYPE_FIXED32"), (8, "TYPE_BOOL"), (9, "TYPE_STRING"), (10, "TYPE_GROUP"), (11, "TYPE_MESSAGE"), (12, "TYPE_BYTES"),
        (13, "TYPE_UINT32"), (14, "TYPE_ENUM"), (15, "TYPE_SFIXED32"), (16, "TYPE_SFIXED64"), (17, "TYPE_SINT32"),
        (18, "TYPE_SINT64")]
- 
+
 instance P'.TextType Type where
   tellT = P'.tellShow
   getT = P'.getRead

@@ -1,32 +1,34 @@
-{-# LANGUAGE BangPatterns, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
-{-# OPTIONS_GHC -fno-warn-unused-imports #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, DeriveGeneric, FlexibleInstances, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC  -fno-warn-unused-imports #-}
 module Text.DescriptorProtos.FileOptions.OptimizeMode (OptimizeMode(..)) where
 import Prelude ((+), (/), (.))
 import qualified Prelude as Prelude'
 import qualified Data.Typeable as Prelude'
+import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
- 
+
 data OptimizeMode = SPEED
                   | CODE_SIZE
                   | LITE_RUNTIME
-                  deriving (Prelude'.Read, Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data)
- 
+                    deriving (Prelude'.Read, Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data,
+                              Prelude'.Generic)
+
 instance P'.Mergeable OptimizeMode
- 
+
 instance Prelude'.Bounded OptimizeMode where
   minBound = SPEED
   maxBound = LITE_RUNTIME
- 
+
 instance P'.Default OptimizeMode where
   defaultValue = SPEED
- 
+
 toMaybe'Enum :: Prelude'.Int -> P'.Maybe OptimizeMode
 toMaybe'Enum 1 = Prelude'.Just SPEED
 toMaybe'Enum 2 = Prelude'.Just CODE_SIZE
 toMaybe'Enum 3 = Prelude'.Just LITE_RUNTIME
 toMaybe'Enum _ = Prelude'.Nothing
- 
+
 instance Prelude'.Enum OptimizeMode where
   fromEnum SPEED = 1
   fromEnum CODE_SIZE = 2
@@ -40,7 +42,7 @@ instance Prelude'.Enum OptimizeMode where
   pred CODE_SIZE = SPEED
   pred LITE_RUNTIME = CODE_SIZE
   pred _ = Prelude'.error "hprotoc generated code: pred failure for type Text.DescriptorProtos.FileOptions.OptimizeMode"
- 
+
 instance P'.Wire OptimizeMode where
   wireSize ft' enum = P'.wireSize ft' (Prelude'.fromEnum enum)
   wirePut ft' enum = P'.wirePut ft' (Prelude'.fromEnum enum)
@@ -48,12 +50,12 @@ instance P'.Wire OptimizeMode where
   wireGet ft' = P'.wireGetErr ft'
   wireGetPacked 14 = P'.wireGetPackedEnum toMaybe'Enum
   wireGetPacked ft' = P'.wireGetErr ft'
- 
+
 instance P'.GPB OptimizeMode
- 
+
 instance P'.MessageAPI msg' (msg' -> OptimizeMode) OptimizeMode where
   getVal m' f' = f' m'
- 
+
 instance P'.ReflectEnum OptimizeMode where
   reflectEnum = [(1, "SPEED", SPEED), (2, "CODE_SIZE", CODE_SIZE), (3, "LITE_RUNTIME", LITE_RUNTIME)]
   reflectEnumInfo _
@@ -61,7 +63,7 @@ instance P'.ReflectEnum OptimizeMode where
       (P'.makePNF (P'.pack ".google.protobuf.FileOptions.OptimizeMode") ["Text"] ["DescriptorProtos", "FileOptions"] "OptimizeMode")
       ["Text", "DescriptorProtos", "FileOptions", "OptimizeMode.hs"]
       [(1, "SPEED"), (2, "CODE_SIZE"), (3, "LITE_RUNTIME")]
- 
+
 instance P'.TextType OptimizeMode where
   tellT = P'.tellShow
   getT = P'.getRead

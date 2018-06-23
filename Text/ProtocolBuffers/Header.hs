@@ -29,7 +29,8 @@ import Text.Parsec(choice, sepEndBy, spaces, try)
 
 import Text.ProtocolBuffers.Basic -- all
 import Text.ProtocolBuffers.Extensions
-  ( wireSizeExtField,wirePutExtField,loadExtension,notExtension
+  ( wireSizeExtField,wirePutExtField,wirePutExtFieldWithSize
+  , loadExtension,notExtension
   , wireGetKeyToUnPacked, wireGetKeyToPacked
   , GPB,Key(..),ExtField,ExtendMessage(..),MessageAPI(..),ExtKey(wireGetKey),PackedSeq )
 import Text.ProtocolBuffers.Identifiers(FIName(..),MName(..),FName(..))
@@ -38,15 +39,18 @@ import Text.ProtocolBuffers.Reflections
   , GetMessageInfo(GetMessageInfo),DescriptorInfo(extRanges),makePNF )
 import Text.ProtocolBuffers.TextMessage -- all
 import Text.ProtocolBuffers.Unknown
-  ( UnknownField,UnknownMessage(..),wireSizeUnknownField,wirePutUnknownField,catch'Unknown )
+  ( UnknownField,UnknownMessage(..),wireSizeUnknownField,wirePutUnknownField,wirePutUnknownFieldWithSize,catch'Unknown )
 import Text.ProtocolBuffers.WireMessage
   ( Wire(..)
   , prependMessageSize,putSize,splitWireTag
+  , runPutM
   , wireSizeReq,wireSizeOpt,wireSizeRep
   , wirePutReq,wirePutOpt,wirePutRep
-  , wirePutPacked,wireSizePacked
+  , wirePutReqWithSize,wirePutOptWithSize,wirePutRepWithSize
+  , sequencePutWithSize
+  , wirePutPacked,wirePutPackedWithSize,wireSizePacked
   , getMessageWith,getBareMessageWith,wireGetEnum,wireGetPackedEnum
-  , wireSizeErr,wirePutErr,wireGetErr
+  , wireSizeErr,wirePutErr,wireGetErr,size'WireSize
   , unknown,unknownField
   , fieldIdOf)
 
