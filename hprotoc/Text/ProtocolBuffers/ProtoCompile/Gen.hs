@@ -1023,7 +1023,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                 , Qualifier () $ preludevar "return" $$ Paren () (pvar "size'WireSize" $$ lvar "size'")
                                 ])
                       ])
-              (pvar "sequencePutWithSize" $$ List () [lvar "put'Fields", lvar "put'Size"])
+              (pvar "sequencePutWithSize" $$ List () [lvar "put'Size", lvar "put'Fields"])
             ])
         putStmts = putStmtsAll
           where putStmtsAll | Just v <- mUnknown = putStmtsListExt ++ [ pvar "wirePutUnknownFieldWithSize" $$ v ]
