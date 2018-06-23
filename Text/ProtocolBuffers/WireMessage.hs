@@ -211,10 +211,9 @@ sequencePutWithSize =
 wirePutReqWithSize :: Wire v => WireTag -> FieldType -> v -> PutM WireSize
 wirePutReqWithSize wireTag fieldType v =
   let startTag = getWireTag wireTag
-      tagSize = size'WireTag wireTag
-      putTag tag = putVarUInt tag >> return tagSize
-      putAct = wirePutWithSize fieldType v
       endTag = succ startTag
+      putTag tag = putVarUInt tag >> return (size'Word32 tag)
+      putAct = wirePutWithSize fieldType v
   in case fieldType of
        10 -> sequencePutWithSize [putTag startTag, putAct, putTag endTag]
        _ -> sequencePutWithSize [putTag startTag, putAct]
@@ -235,11 +234,11 @@ wirePutRepWithSize wireTag fieldType vs =
 -- | Used in generated code.
 wirePutPackedWithSize :: Wire v => WireTag -> FieldType -> Seq v -> PutM WireSize
 wirePutPackedWithSize wireTag fieldType vs =
-  let actInner = wirePutRepWithSize wireTag fieldType vs
+  let actInner = sequencePutWithSize $ fmap (wirePutWithSize fieldType) vs
       (size, _) = runPutM actInner -- This should be lazy enough not to allocate the ByteString
       tagSize = size'WireTag wireTag
       putTag tag = putVarUInt (getWireTag tag) >> return tagSize
-  in sequencePutWithSize [putTag wireTag, putSize size>>return (prependMessageSize size), actInner]
+  in sequencePutWithSize [putTag wireTag, putSize size>>return (size'WireSize size), actInner]
 
 {-# INLINE wirePutReq #-}
 -- | Used in generated code.
