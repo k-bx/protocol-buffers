@@ -39,7 +39,7 @@ import Text.ProtocolBuffers.Reflections
   , GetMessageInfo(GetMessageInfo),DescriptorInfo(extRanges),makePNF )
 import Text.ProtocolBuffers.TextMessage -- all
 import Text.ProtocolBuffers.Unknown
-  ( UnknownField,UnknownMessage(..),wireSizeUnknownField,wirePutUnknownField,catch'Unknown )
+  ( UnknownField,UnknownMessage(..),wireSizeUnknownField,wirePutUnknownField,wirePutUnknownFieldWithSize,catch'Unknown )
 import Text.ProtocolBuffers.WireMessage
   ( Wire(..)
   , prependMessageSize,putSize,splitWireTag

@@ -1018,9 +1018,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
               (pvar "sequencePutWithSize" $$ List () [lvar "put'Fields", lvar "put'Size"])
             ])
         putStmts = putStmtsAll
-          where putStmtsAll | Just v <- mUnknown =
-                                  putStmtsListExt ++
-                                  [Tuple () Boxed [pvar "wirePutUnknownField" $$ v, pvar "wireSizeUnknownField" $$ v] ]
+          where putStmtsAll | Just v <- mUnknown = putStmtsListExt ++ [ pvar "wirePutUnknownFieldWithSize" $$ v ]
                             | otherwise = putStmtsListExt
                 putStmtsListExt | Just v <- mExt = sortedPutStmtsList ++ [ pvar "wirePutExtFieldWithSize" $$ v ]
                                 | otherwise = sortedPutStmtsList

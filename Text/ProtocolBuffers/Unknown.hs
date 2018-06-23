@@ -4,7 +4,7 @@
 -- notice.  Importer beware.
 module Text.ProtocolBuffers.Unknown
   ( UnknownField(..),UnknownMessage(..),UnknownFieldValue(..)
-  , wireSizeUnknownField,wirePutUnknownField,catch'Unknown
+  , wireSizeUnknownField,wirePutUnknownField, wirePutUnknownFieldWithSize,catch'Unknown
   ) where
 
 import qualified Data.ByteString.Lazy as L
@@ -52,6 +52,11 @@ wireSizeUnknownField (UnknownField m) = F.foldl' aSize 0 m  where
 wirePutUnknownField :: UnknownField -> Put
 wirePutUnknownField (UnknownField m) = F.mapM_ aPut m where
   aPut (UFV tag bs) = putVarUInt (getWireTag tag) >> putLazyByteString bs
+
+-- | This is used by the generated code
+wirePutUnknownFieldWithSize :: UnknownField -> PutM WireSize
+wirePutUnknownFieldWithSize m =
+  wirePutUnknownField m >> return (wireSizeUnknownField m)
 
 {-# INLINE catch'Unknown #-}
 -- | This is used by the generated code
