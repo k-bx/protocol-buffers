@@ -577,7 +577,10 @@ descriptorBootModule :: DescriptorInfo -> Module ()
 descriptorBootModule di
   = let protoName = descName di
         un = unqualName protoName
-        classes = [prelude "Show",prelude "Eq",prelude "Ord",prelude "Typeable",prelude "Data", prelude "Generic"
+        classes = [prelude "Show",prelude "Eq",prelude "Ord",prelude "Data", prelude "Generic"
+#if __GLASGOW_HASKELL__ < 780
+                  ,prelude "Typeable"
+#endif
                   ,private "Mergeable",private "Default"
                   ,private "Wire",private "GPB",private "ReflectDescriptor"
                   , private "TextType", private "TextMsg"
@@ -586,7 +589,12 @@ descriptorBootModule di
                   ++ if storeUnknown di then [private "UnknownMessage"] else []
         instMesAPI = InstDecl () Nothing (mkSimpleIRule (private "MessageAPI")
                        [TyVar () (Ident () "msg'"), TyParen () (TyFun () (TyVar () (Ident () "msg'")) (TyCon () un)), (TyCon () un)]) Nothing
-        dataDecl = DataDecl () (DataType ()) Nothing (DHead () (baseIdent protoName)) [] mzero
+        dataDecl = DataDecl () (DataType ()) Nothing (DHead () (baseIdent protoName)) [] $
+#if __GLASGOW_HASKELL__ >= 780
+            pure derivesTypeable
+#else
+            mzero
+#endif
         mkInst s = InstDecl () Nothing (mkSimpleIRule s [TyCon () un]) Nothing
         eabs = EAbs () (NoNamespace ()) un
     in Module () (Just (ModuleHead () (ModuleName () (fqMod protoName)) Nothing (Just (ExportSpecList () [eabs])))) (modulePragmas $ makeLenses di) minimalImports
@@ -1207,9 +1215,10 @@ mkDeriving xs = Deriving () Nothing (map (\x -> mkSimpleIRule x []) xs)
 mkDeriving xs = Deriving () (map (\x -> mkSimpleIRule x []) xs)
 #endif
 
-derives,derivesEnum :: Deriving ()
+derives,derivesEnum,derivesTypeable :: Deriving ()
 derives = mkDeriving $ map prelude ["Show","Eq","Ord","Typeable","Data","Generic"]
 derivesEnum = mkDeriving $ map prelude ["Read","Show","Eq","Ord","Typeable","Data","Generic"]
+derivesTypeable = mkDeriving $ [prelude "Typeable"]
 
 -- All of these type names are also exported by Text.ProtocolBuffers.Header via Text.ProtocolBuffers.Basic
 useType :: Int -> Maybe String
