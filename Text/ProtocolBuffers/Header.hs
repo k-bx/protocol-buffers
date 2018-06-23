@@ -43,13 +43,14 @@ import Text.ProtocolBuffers.Unknown
 import Text.ProtocolBuffers.WireMessage
   ( Wire(..)
   , prependMessageSize,putSize,splitWireTag
+  , runPutM
   , wireSizeReq,wireSizeOpt,wireSizeRep
   , wirePutReq,wirePutOpt,wirePutRep
   , wirePutReqWithSize,wirePutOptWithSize,wirePutRepWithSize
   , sequencePutWithSize
   , wirePutPacked,wirePutPackedWithSize,wireSizePacked
   , getMessageWith,getBareMessageWith,wireGetEnum,wireGetPackedEnum
-  , wireSizeErr,wirePutErr,wireGetErr
+  , wireSizeErr,wirePutErr,wireGetErr,size'WireSize
   , unknown,unknownField
   , fieldIdOf)
 

@@ -696,8 +696,8 @@ wirePutExtField (ExtField m) = mapM_ aPut (M.assocs m) where
 
 -- FIXME: implement this directly
 -- | This is used by the generated code
-wirePutExtFieldWithSize :: ExtField -> (Put, WireSize)
-wirePutExtFieldWithSize m = (wirePutExtField m, wireSizeExtField m)
+wirePutExtFieldWithSize :: ExtField -> PutM WireSize
+wirePutExtFieldWithSize m = wirePutExtField m >> return (wireSizeExtField m)
 
 notExtension :: (ReflectDescriptor a, ExtendMessage a,Typeable a) => FieldId -> WireType -> a -> Get a
 notExtension fieldId _wireType msg = throwError ("Field id "++show fieldId++" is not a valid extension field id for "++show (typeOf (undefined `asTypeOf` msg)))
