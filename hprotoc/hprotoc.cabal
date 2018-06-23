@@ -6,7 +6,7 @@ license:        BSD3
 license-file:   LICENSE
 copyright:      (c) 2008-2015 Christopher Edward Kuklewicz
 author:         Christopher Edward Kuklewicz
-maintainer:     Kostiantyn Rybnikov <k-bx@k-bx.com>
+maintainer:     Timo von Holtz <tvh@tvholtz.de>, Kostiantyn Rybnikov <k-bx@k-bx.com>
 homepage:       https://github.com/k-bx/protocol-buffers
 package-url:    http://hackage.haskell.org/package/hprotoc
 synopsis:       Parse Google Protocol Buffer specifications
