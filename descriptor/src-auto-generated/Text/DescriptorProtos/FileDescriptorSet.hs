@@ -45,7 +45,7 @@ instance P'.Wire FileDescriptorSet where
                 = do
                     P'.putSize size'
                     Prelude'.return (P'.size'WireSize size')
-            in P'.sequencePutWithSize [put'Fields, put'Size]
+            in P'.sequencePutWithSize [put'Size, put'Fields]
   wireGet ft'
    = case ft' of
        10 -> P'.getBareMessageWith (P'.catch'Unknown update'Self)
