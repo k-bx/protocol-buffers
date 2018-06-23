@@ -969,51 +969,29 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                         , Alt () (PWildCard ())     (UnGuardedRhs () e) noWhere
                                         ]
 
--- wireSize generation
-        sizeCases = UnGuardedRhs () $ cases (lvar "calc'Size")
-                                         (pvar "prependMessageSize" $$ lvar "calc'Size")
-                                         (pvar "wireSizeErr" $$ lvar "ft'" $$ lvar "self'")
-        whereCalcSize = Just (BDecls () [defun "calc'Size" [] sizes])
-        sizes | null sizesList = Lit () (Hse.Int () 0 "0")
-              | otherwise = Paren () (foldl1' (+!) sizesList)
-          where (+!) = mkOp "+"
-                sizesList | Just v <- mUnknown = sizesListExt ++ [ pvar "wireSizeUnknownField" $$ v ]
-                          | otherwise = sizesListExt
-                sizesListExt | Just v <- mExt = sizesListFields ++ [ pvar "wireSizeExtField" $$ v ]
-                             | otherwise = sizesListFields
-                sizesListFields =  concat . zipWith toSize vars . F.toList $
-                                     fmap Left fieldInfos >< fmap Right oneofInfos
-        toSize var (Left fi)
-          = let f = if isPacked fi then "wireSizePacked"
-                    else if isRequired fi then "wireSizeReq"
-                         else if canRepeat fi then "wireSizeRep"
-                              else "wireSizeOpt"
-            in [foldl' (App ()) (pvar f) [ litInt (wireTagLength fi)
-                                    , litInt (getFieldType (typeCode fi))
-                                    , var]]
-        toSize var (Right oi) = map (toSize' var) . F.toList . oneofFields $ oi
-          where toSize' var r@(n,fi)
-                  = let f = "wireSizeOpt"
-                        var' = mkOp "Prelude'.=<<" (Var () (qualName (snd (oneofGet r)))) var
-                    in foldl' (App ()) (pvar f) [ litInt (wireTagLength fi)
-                                           , litInt (getFieldType (typeCode fi))
-                                           , var']
-
-
 -- wirePut generation
         putCases = UnGuardedRhs () $ cases
           (lvar "put'Fields")
-          (Do () [ Qualifier () $ pvar "putSize" $$
-                    (Paren () $ foldl' (App ()) (pvar "wireSize") [ litInt' 10 , lvar "self'" ])
-                , Qualifier () $ lvar "put'Fields" ])
-          (pvar "wirePutErr" $$ lvar "ft'" $$ lvar "self'")
-        wherePutFields = Just (BDecls () [defun "put'Fields" [] (Do () putStmts)])
-        putStmts = putStmtsContent
-          where putStmtsContent | null putStmtsAll = [Qualifier () $ preludevar "return" $$ Con () (Special () (UnitCon ()))]
-                                | otherwise = putStmtsAll
-                putStmtsAll | Just v <- mUnknown = putStmtsListExt ++ [ Qualifier () $ pvar "wirePutUnknownField" $$ v ]
-                             | otherwise = putStmtsListExt
-                putStmtsListExt | Just v <- mExt = sortedPutStmtsList ++ [ Qualifier () $ pvar "wirePutExtField" $$ v ]
+          (lvar "put'FieldsSized")
+          (Tuple () Boxed [pvar "wirePutErr" $$ lvar "ft'" $$ lvar "self'",pvar "wireSizeErr" $$ lvar "ft'" $$ lvar "self'"])
+        wherePutFields = Just (BDecls ()
+            [ defun "put'Fields" [] (pvar "sequencePutWithSize" $$ List () putStmts)
+            , defun "put'FieldsSized" [] $
+              Let () (BDecls ()
+                      [ PatBind () (PTuple () Boxed [patvar "put'FieldsAct",patvar "size'"]) (UnGuardedRhs () (lvar "put'Fields")) Nothing
+                      , defun "totalSize'" [] (pvar "prependMessageSize" $$ lvar "size'")
+                      , defun "put'FieldsActSized" []
+                         (Do () [ Qualifier () $ pvar "putSize" $$ lvar "size'"
+                                , Qualifier () $ lvar "put'FieldsAct" ])
+                      ])
+              (Tuple () Boxed [lvar "put'FieldsAct", lvar "totalSize'"])
+            ])
+        putStmts = putStmtsAll
+          where putStmtsAll | Just v <- mUnknown =
+                                  putStmtsListExt ++
+                                  [Tuple () Boxed [pvar "wirePutUnknownField" $$ v, pvar "wireSizeUnknownField" $$ v] ]
+                            | otherwise = putStmtsListExt
+                putStmtsListExt | Just v <- mExt = sortedPutStmtsList ++ [ pvar "wirePutExtFieldWithSize" $$ v ]
                                 | otherwise = sortedPutStmtsList
                 sortedPutStmtsList = map snd                                          -- remove number
                                      . sortBy (compare `on` fst)                      -- sort by number
@@ -1021,23 +999,21 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                 putStmtsList = concat . zipWith toPut vars . F.toList $
                                  fmap Left fieldInfos >< fmap Right oneofInfos
         toPut var (Left fi)
-          = let f = if isPacked fi then "wirePutPacked"
-                    else if isRequired fi then "wirePutReq"
-                         else if canRepeat fi then "wirePutRep"
-                              else "wirePutOpt"
+          = let f = if isPacked fi then "wirePutPackedWithSize"
+                    else if isRequired fi then "wirePutReqWithSize"
+                         else if canRepeat fi then "wirePutRepWithSize"
+                              else "wirePutOptWithSize"
             in [(fieldNumber fi,
-                 Qualifier () $
                    foldl' (App ()) (pvar f) [ litInt (getWireTag (wireTag fi))
                                        , litInt (getFieldType (typeCode fi))
                                        , var]
                  )]
-        toPut var (Right oi) = map (toPut' var) . F.toList . oneofFields $ oi
-          where toPut' var r@(n,fi)
-                  = let f = "wirePutOpt"
+        toPut var (Right oi) = map toPut' . F.toList . oneofFields $ oi
+          where toPut' r@(_n,fi)
+                  = let f = "wirePutOptWithSize"
                         var' = mkOp "Prelude'.=<<" (Var () (qualName (snd (oneofGet r)))) var
                     in (fieldNumber fi
-                       ,Qualifier () $
-                          foldl' (App ()) (pvar f) [ litInt (getWireTag (wireTag fi))
+                       , foldl' (App ()) (pvar f) [ litInt (getWireTag (wireTag fi))
                                               , litInt (getFieldType (typeCode fi))
                                               , var']
                        )
@@ -1170,8 +1146,7 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                                               (oneofCon f $$ lvar "new'Field"))
 
     in InstDecl () Nothing (mkSimpleIRule (private "Wire") [TyCon () me]) . Just . map (InsDecl ()) $
-        [ FunBind () [Match () (Ident () "wireSize") [patvar "ft'",PAsPat () (Ident () "self'") (PParen () mine)] sizeCases whereCalcSize]
-        , FunBind () [Match () (Ident () "wirePut")  [patvar "ft'",PAsPat () (Ident () "self'") (PParen () mine)] putCases wherePutFields]
+        [ FunBind () [Match () (Ident () "wirePutWithSize")  [patvar "ft'",PAsPat () (Ident () "self'") (PParen () mine)] putCases wherePutFields]
         , FunBind () [Match () (Ident () "wireGet") [patvar "ft'"] getCases whereDecls]
         ]
 

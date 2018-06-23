@@ -24,7 +24,7 @@ module Text.ProtocolBuffers.Extensions
   , Key(..),ExtKey(..),MessageAPI(..)
   , PackedSeq(..), EP(..)
   -- * Internal types, functions, and classes
-  , wireSizeExtField,wirePutExtField,loadExtension,notExtension
+  , wireSizeExtField,wirePutExtField,wirePutExtFieldWithSize,loadExtension,notExtension
   , wireGetKeyToUnPacked, wireGetKeyToPacked
   , GPB,ExtField(..),ExtendMessage(..),ExtFieldValue(..)
   ) where
@@ -693,6 +693,11 @@ wirePutExtField (ExtField m) = mapM_ aPut (M.assocs m) where
   aPut (fi,(ExtOptional ft (GPDyn d))) = wirePutOpt (toWireTag fi ft) ft (Just d)
   aPut (fi,(ExtRepeated ft (GPDynSeq s))) = wirePutRep (toWireTag fi ft) ft s
   aPut (fi,(ExtPacked   ft (GPDynSeq s))) = wirePutPacked (toPackedWireTag fi) ft s
+
+-- FIXME: implement this directly
+-- | This is used by the generated code
+wirePutExtFieldWithSize :: ExtField -> (Put, WireSize)
+wirePutExtFieldWithSize m = (wirePutExtField m, wireSizeExtField m)
 
 notExtension :: (ReflectDescriptor a, ExtendMessage a,Typeable a) => FieldId -> WireType -> a -> Get a
 notExtension fieldId _wireType msg = throwError ("Field id "++show fieldId++" is not a valid extension field id for "++show (typeOf (undefined `asTypeOf` msg)))

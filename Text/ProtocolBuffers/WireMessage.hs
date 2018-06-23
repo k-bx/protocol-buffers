@@ -30,6 +30,7 @@ module Text.ProtocolBuffers.WireMessage
     , wireSizeReq,wireSizeOpt,wireSizeRep,wireSizePacked
     , wirePutReq,wirePutOpt,wirePutRep,wirePutPacked
     , wirePutReqWithSize,wirePutOptWithSize,wirePutRepWithSize,wirePutPackedWithSize
+    , sequencePutWithSize
     , wireSizeErr,wirePutErr,wireGetErr
     , getMessageWith,getBareMessageWith,wireGetEnum,wireGetPackedEnum
     , unknownField,unknown,wireGetFromWire
@@ -46,7 +47,7 @@ import Data.Bits (Bits(..))
 --import qualified Data.ByteString as S(last)
 --import qualified Data.ByteString.Unsafe as S(unsafeIndex)
 import qualified Data.ByteString.Lazy as BS (length)
-import qualified Data.Foldable as F(foldl')
+import qualified Data.Foldable as F(foldl', Foldable)
 --import Data.List (genericLength)
 import Data.Maybe(fromMaybe)
 import Data.Sequence ((|>))
@@ -196,6 +197,12 @@ runGetOnLazy parser bs = resolve (runGetAll parser bs)
 prependMessageSize :: WireSize -> WireSize
 prependMessageSize n = n + size'WireSize n
 
+{-# INLINE sequencePutWithSize #-}
+-- | Used in generated code.
+sequencePutWithSize :: F.Foldable f => f (Put, WireSize) -> (Put, WireSize)
+sequencePutWithSize =
+    F.foldl' (\(a1, !size1) (a2, !size2) -> (a1>>a2, size1+size2)) (return (), 0)
+
 {-# INLINE wirePutReqWithSize #-}
 -- | Used in generated code.
 wirePutReqWithSize :: Wire v => WireTag -> FieldType -> v -> (Put, WireSize)
@@ -218,10 +225,7 @@ wirePutOptWithSize wireTag fieldType (Just v) = wirePutReqWithSize wireTag field
 -- | Used in generated code.
 wirePutRepWithSize :: Wire v => WireTag -> FieldType -> Seq v -> (Put, WireSize)
 wirePutRepWithSize wireTag fieldType vs =
-  let combine (act, size) v =
-          let !(act', !size') = wirePutReqWithSize wireTag fieldType v
-          in (act>>act', size+size')
-  in F.foldl' combine (return (), 0) vs
+  sequencePutWithSize $ fmap (wirePutReqWithSize wireTag fieldType) vs
 
 {-# INLINE wirePutPackedWithSize #-}
 -- | Used in generated code.

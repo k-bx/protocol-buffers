@@ -29,7 +29,8 @@ import Text.Parsec(choice, sepEndBy, spaces, try)
 
 import Text.ProtocolBuffers.Basic -- all
 import Text.ProtocolBuffers.Extensions
-  ( wireSizeExtField,wirePutExtField,loadExtension,notExtension
+  ( wireSizeExtField,wirePutExtField,wirePutExtFieldWithSize
+  , loadExtension,notExtension
   , wireGetKeyToUnPacked, wireGetKeyToPacked
   , GPB,Key(..),ExtField,ExtendMessage(..),MessageAPI(..),ExtKey(wireGetKey),PackedSeq )
 import Text.ProtocolBuffers.Identifiers(FIName(..),MName(..),FName(..))
@@ -44,7 +45,9 @@ import Text.ProtocolBuffers.WireMessage
   , prependMessageSize,putSize,splitWireTag
   , wireSizeReq,wireSizeOpt,wireSizeRep
   , wirePutReq,wirePutOpt,wirePutRep
-  , wirePutPacked,wireSizePacked
+  , wirePutReqWithSize,wirePutOptWithSize,wirePutRepWithSize
+  , sequencePutWithSize
+  , wirePutPacked,wirePutPackedWithSize,wireSizePacked
   , getMessageWith,getBareMessageWith,wireGetEnum,wireGetPackedEnum
   , wireSizeErr,wirePutErr,wireGetErr
   , unknown,unknownField
