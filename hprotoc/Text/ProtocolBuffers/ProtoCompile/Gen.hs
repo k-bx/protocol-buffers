@@ -591,11 +591,7 @@ descriptorBootModule di
                        [TyVar () (Ident () "msg'"), TyParen () (TyFun () (TyVar () (Ident () "msg'")) (TyCon () un)), (TyCon () un)]) Nothing
         dataDecl = DataDecl () (DataType ()) Nothing (DHead () (baseIdent protoName)) [] $
 #if __GLASGOW_HASKELL__ >= 780
-#if MIN_VERSION_haskell_src_exts(1, 20, 0)
-            [derivesTypeable]
-#else
-            Just derivesTypeable
-#endif
+            pure derivesTypeable
 #else
             mzero
 #endif
