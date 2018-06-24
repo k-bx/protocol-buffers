@@ -1,5 +1,10 @@
 Newest at the top.
 
+2.4.11
+
+- pr #66. Attach deriving Typeable to data declaration in hs-boot files
+- pr #65. Fix time complexity of serialization
+
 2.4.10
 
 - pr #59. Add Semigroup instance

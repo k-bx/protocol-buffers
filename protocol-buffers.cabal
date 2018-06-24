@@ -1,5 +1,5 @@
 name:           protocol-buffers
-version:        2.4.10
+version:        2.4.11
 cabal-version:  >= 1.6
 build-type:     Simple
 license:        BSD3
@@ -20,7 +20,7 @@ source-repository head
 
 Library
   -- Added -fspec-constr-count=10 to quiet ghc-7.0.2.
-  ghc-options:  -Wall -O2 -fspec-constr-count=10 
+  ghc-options:  -Wall -O2 -fspec-constr-count=10
   -- ghc-prof-options: -auto-all -prof
   exposed-modules: Text.ProtocolBuffers
                    Text.ProtocolBuffers.Basic
