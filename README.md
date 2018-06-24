@@ -5,8 +5,8 @@ This the README file for `protocol-buffers`,
 `protocol-buffers-descriptors`, and `hprotoc`. These are three
 interdependent Haskell packages originally written by Chris Kuklewicz.
 
-Currently, maintainership was taken by Kostiantyn Rybnikov. It is
-planned to only support GHC 7.8 and newer unless someone explicitly
+Currently, maintainership was taken by Timo von Holtz. It is
+planned to only support GHC 7.10 and newer unless someone explicitly
 asks for support of earlier versions.
 
 (Needs check) This README was updated most recently to reflect version
@@ -299,7 +299,7 @@ It is very natural to combine the oneof specification into Haskell
 ADT, so we implement the feature.
 
 In `hprotoc/oneoftest`, we have an example for this. `school.proto` defines
-a collection of members in a school, which is organized into dormitories. 
+a collection of members in a school, which is organized into dormitories.
 Each member should have common attributes like `id` and `name`, but there are
 attributes only specific to students, faculties or administrators.
 
@@ -308,7 +308,7 @@ and admin type. How it is defined should be easily understood from `school.proto
 
 Once `protocol-buffers` is installed, using `hprotoc`, we can generate Haskell
 source codes. Assuming we run `hprotoc` on the `oneoftest` directory and generate
-source code in `hs` directory: 
+source code in `hs` directory:
 
 ```
 oneoftest> hprotoc --proto_path=. --haskell_out=hs school.proto
@@ -327,13 +327,13 @@ and `School.Member.Property` module defines `Property` (as `oneof`) by
 data Property = Prop_student {prop_student :: Student }
               | Prop_faculty {prop_faculty :: Faculty }
               | Prop_admin   {prop_admin   :: Admin   }
-```                            
+```
 where `Student`, `Faculty` and `Admin` are defined as ordinary nested message
 data types in separate modules, respectively. Therefore, the `oneof` feature
 is smoothly matched with Haskell sum types. Note that `Maybe` will be always
 present for a `oneof` field in the owner data type definition (Here, `Maybe Property`
 in the definition of `Member`). This is because of compatibility with other language
-implementations that treat `oneof` as a collection of `optional` fields. 
+implementations that treat `oneof` as a collection of `optional` fields.
 
 In the `oneoftest` directory, we provides a Haskell example in `hprotoc/oneoftest/hs`,
 modification of the previous example using lenses in `hprotoc/oneoftest/hs-lens`
@@ -372,7 +372,7 @@ members {
     grade: 5
     specialty: "defense of dark arts"
   }
-}                                
+}
 ```
 
 ```
