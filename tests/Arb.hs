@@ -68,7 +68,7 @@ instance Random Word8 where
 -}
 
 instance Arbitrary Utf8 where
-  arbitrary = do 
+  arbitrary = do
     len <- frequency
              [ (3, choose (1,3))
              , (1, return 0) ]

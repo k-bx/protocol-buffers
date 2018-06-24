@@ -1,0 +1,39 @@
+name:                protobuf-test-suite
+version:             0.1.0.0
+synopsis:            Protocol buffers auto-generated test suite package for testing protobuf codegen and serdes
+author:              Nobody
+maintainer:          nobody@example.com
+build-type:          Simple
+cabal-version:       >= 1.8
+library
+  exposed-modules:
+        HSCodeGen.AddressBookProtos.AddressBook
+        HSCodeGen.AddressBookProtos.Person.PhoneNumber
+        HSCodeGen.AddressBookProtos.Person.PhoneType
+        HSCodeGen.AddressBookProtos.Person
+        HSCodeGen.AddressBookProtos
+  build-depends:        base
+                      , filepath
+                      , process
+                      , protocol-buffers
+                      , protocol-buffers-descriptor
+  hs-source-dirs:       src
+  ghc-options:          -O1
+
+test-suite protobuf-tests
+  build-depends:   protocol-buffers,
+                   protocol-buffers-descriptor,
+                   protobuf-test-suite
+  type: exitcode-stdio-1.0
+
+  main-is:        Main.hs
+  hs-source-dirs: test/src
+
+  build-depends: base >= 4.7.0 && < 5
+               , text
+               , containers
+               , HUnit
+               , bytestring
+  other-modules:
+      Text.ProtocolBuffers.Tests
+    , Text.ProtocolBuffers.Tests.AddressBook
