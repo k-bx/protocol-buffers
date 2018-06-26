@@ -20,7 +20,7 @@ import HSCodeGen.AddressBookProtos.Person.PhoneType   (PhoneType(..))
 
 addressBookTest :: Test
 addressBookTest = TestCase $
-  assertBool "Address book encoded then decoded round-trip should be equivalent"
+  assertBool "Address book encoded then decoded should be an identity"
              roundTripEncodeDecode
 
 roundTripEncodeDecode :: Bool
