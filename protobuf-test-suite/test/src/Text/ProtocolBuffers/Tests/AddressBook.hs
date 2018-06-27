@@ -1,4 +1,6 @@
-module Text.ProtocolBuffers.Tests.AddressBook (addressBookTest) where
+module Text.ProtocolBuffers.Tests.AddressBook
+  ( addressBookTest
+  ) where
 
 import Test.HUnit (Test(TestCase), assertBool)
 import qualified Data.Sequence as Seq
