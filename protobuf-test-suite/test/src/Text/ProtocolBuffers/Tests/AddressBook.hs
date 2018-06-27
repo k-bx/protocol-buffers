@@ -42,10 +42,10 @@ addressBook =
   }
 
 mkPerson :: String -> Int -> Maybe String -> Seq (String, PhoneType) -> Person
-mkPerson name id email phoneNumbers =
+mkPerson name id' email phoneNumbers =
   Person {
     Person'.name = uFromString name
-  , Person'.id = fromIntegral id
+  , Person'.id = fromIntegral id'
   , Person'.email = uFromString <$> email
   , Person'.phone = mkPhoneNumbers phoneNumbers
   , Person'.unknown'field = defaultValue
