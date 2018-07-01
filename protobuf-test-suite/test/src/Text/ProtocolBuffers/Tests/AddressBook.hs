@@ -25,6 +25,8 @@ addressBookTests :: TestTree
 addressBookTests = testGroup "Address book tests"
   [ testCase "Address book text-encoded then decoded should be an identity" $
       roundTripTextEncodeDecode @? "text-encoded then decoded was not an identity"
+  , testCase "Address book fail" $
+      False @? "fail on purpose"
   ]
 
 roundTripTextEncodeDecode :: Bool
