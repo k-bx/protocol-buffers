@@ -1,8 +1,9 @@
 module Text.ProtocolBuffers.Tests.AddressBook
-  ( addressBookTest
+  ( addressBookTests
   ) where
 
-import Test.HUnit (Test(TestCase), assertBool)
+import Test.Tasty (TestTree, testGroup)
+import Test.Tasty.HUnit (testCase, (@?))
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq)
 import qualified Data.ByteString.Lazy.Char8 as LB
@@ -20,13 +21,14 @@ import HSCodeGen.AddressBookProtos.Person             (Person(..))
 import HSCodeGen.AddressBookProtos.Person.PhoneNumber (PhoneNumber(..))
 import HSCodeGen.AddressBookProtos.Person.PhoneType   (PhoneType(..))
 
-addressBookTest :: Test
-addressBookTest = TestCase $
-  assertBool "Address book encoded then decoded should be an identity"
-             roundTripEncodeDecode
+addressBookTests :: TestTree
+addressBookTests = testGroup "Address book tests"
+  [ testCase "Address book text-encoded then decoded should be an identity" $
+      roundTripTextEncodeDecode @? "text-encoded then decoded was not an identity"
+  ]
 
-roundTripEncodeDecode :: Bool
-roundTripEncodeDecode =
+roundTripTextEncodeDecode :: Bool
+roundTripTextEncodeDecode =
   let encoded = messagePutText addressBook
       decoded = case messageGetText $ LB.pack encoded of
                   Left _ -> False

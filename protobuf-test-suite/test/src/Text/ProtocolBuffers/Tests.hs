@@ -3,11 +3,11 @@ module Text.ProtocolBuffers.Tests
   )
   where
 
-import Test.HUnit (Test(..), runTestTT, Counts)
+import Test.Tasty (defaultMain, testGroup)
 
-import Text.ProtocolBuffers.Tests.AddressBook (addressBookTest)
+import Text.ProtocolBuffers.Tests.AddressBook (addressBookTests)
 
-tests :: IO Counts
-tests = runTestTT $ TestList
-  [ TestLabel "Address Book test" addressBookTest
+tests :: IO ()
+tests = defaultMain $ testGroup "Protocol Buffers tests" $
+  [ addressBookTests
   ]

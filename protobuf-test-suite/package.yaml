@@ -21,7 +21,8 @@ tests:
       - base
       - text
       - containers
-      - HUnit
+      - tasty
+      - tasty-hunit
       - bytestring
     other-modules:
       - Text.ProtocolBuffers.Tests
