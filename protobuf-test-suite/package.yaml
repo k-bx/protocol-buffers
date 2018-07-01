@@ -1,0 +1,29 @@
+name: protobuf-test-suite
+version: 0.1.0
+
+library:
+  source-dirs: src
+  dependencies:
+    - base
+    - filepath
+    - process
+    - protocol-buffers
+    - protocol-buffers-descriptor
+
+tests:
+  protobuf-tests:
+    main: Main.hs
+    source-dirs: test/src
+    dependencies:
+      - protocol-buffers
+      - protocol-buffers-descriptor
+      - protobuf-test-suite
+      - base
+      - text
+      - containers
+      - HUnit
+      - bytestring
+    other-modules:
+      - Text.ProtocolBuffers.Tests
+      - Text.ProtocolBuffers.Tests.AddressBook
+
