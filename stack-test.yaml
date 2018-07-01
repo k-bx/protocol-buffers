@@ -1,7 +1,0 @@
-packages:
-- '.'
-- descriptor/
-- hprotoc/
-- protobuf-test-suite/
-extra-deps: []
-resolver: nightly-2018-05-21
