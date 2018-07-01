@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Text.ProtocolBuffers.Tests.AddressBook
   ( addressBookTests
   ) where
@@ -25,8 +26,8 @@ addressBookTests :: TestTree
 addressBookTests = testGroup "Address book tests"
   [ testCase "Address book text-encoded then decoded should be an identity" $
       roundTripTextEncodeDecode @? "text-encoded then decoded was not an identity"
-  , testCase "Address book fail" $
-      False @? "fail on purpose"
+  , testCase "Address book wire-encoded then decoded should be an identity" $
+      roundTripWireEncodeDecode @? "wire-encoded then decoded was not an identity"
   ]
 
 roundTripTextEncodeDecode :: Bool
@@ -35,6 +36,14 @@ roundTripTextEncodeDecode =
       decoded = case messageGetText $ LB.pack encoded of
                   Left _ -> False
                   Right result -> result == addressBook
+  in decoded
+
+roundTripWireEncodeDecode :: Bool
+roundTripWireEncodeDecode =
+  let encoded = messagePut addressBook
+      decoded = case messageGet encoded of
+                  Right (result, "") -> result == addressBook
+                  _ -> False
   in decoded
 
 addressBook :: AddressBook
