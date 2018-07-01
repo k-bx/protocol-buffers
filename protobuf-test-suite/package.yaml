@@ -23,6 +23,8 @@ tests:
       - containers
       - tasty
       - tasty-hunit
+      - tasty-quickcheck
+      - QuickCheck
       - bytestring
     other-modules:
       - Text.ProtocolBuffers.Tests

@@ -1,13 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 module Text.ProtocolBuffers.Tests.AddressBook
   ( addressBookTests
+  , addressBookQuickChecks
   ) where
 
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (testCase, (@?))
+import Test.Tasty.HUnit (testCase, (@?), (@?=))
+import Test.Tasty.QuickCheck as QC
+import Test.QuickCheck ()
+
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq)
 import qualified Data.ByteString.Lazy.Char8 as LB
+import Control.Applicative (liftA)
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Header
@@ -24,39 +30,82 @@ import HSCodeGen.AddressBookProtos.Person.PhoneType   (PhoneType(..))
 
 addressBookTests :: TestTree
 addressBookTests = testGroup "Address book tests"
-  [ testCase "Address book text-encoded then decoded should be an identity" $
-      roundTripTextEncodeDecode @? "text-encoded then decoded was not an identity"
-  , testCase "Address book wire-encoded then decoded should be an identity" $
-      roundTripWireEncodeDecode @? "wire-encoded then decoded was not an identity"
+  [ testCase "Text-encode then decode identity" $
+      roundTripTextEncodeDecode addressBook1 @?= Just addressBook1
+  , testCase "Text-decoded empty optional value should be decoded to its default" $
+      roundTripTextEncodeDecode addressBook2 @?= (Just . mapDefaultPhoneType $ addressBook2)
+  -- , testCase "Text-encode then decode identity 2" $
+  --     roundTripTextEncodeDecode addressBook3 @?= Just addressBook3
+  , testCase "Wire-encode then decoded identity" $
+      roundTripWireEncodeDecode addressBook1 @?= Just addressBook1
+  , testCase "Wire-decoded empty optional value should be decoded to its default" $
+      roundTripWireEncodeDecode addressBook2 @?= (Just . mapDefaultPhoneType $ addressBook2)
+  -- , testCase "Wire-encode then decoded identity 2" $
+  --     roundTripTextEncodeDecode addressBook3 @?= Just addressBook3
   ]
 
-roundTripTextEncodeDecode :: Bool
-roundTripTextEncodeDecode =
+addressBookQuickChecks :: TestTree
+addressBookQuickChecks = testGroup "Address book QuickChecks"
+  [ QC.testProperty "Address book wire-encoded then decoded identity" $
+      \book -> maybe False (mapDefaultPhoneType book ==) (roundTripWireEncodeDecode book)
+  -- , QC.testProperty "Address book text-encoded then decoded identity" $
+  --     \book -> maybe False (mapDefaultPhoneType book ==) (roundTripTextEncodeDecode book)
+  ]
+
+roundTripTextEncodeDecode :: AddressBook -> Maybe AddressBook
+roundTripTextEncodeDecode addressBook =
   let encoded = messagePutText addressBook
-      decoded = case messageGetText $ LB.pack encoded of
-                  Left _ -> False
-                  Right result -> result == addressBook
-  in decoded
+  in case messageGetText $ LB.pack encoded of
+       Left _ -> Nothing
+       Right result -> Just result
 
-roundTripWireEncodeDecode :: Bool
-roundTripWireEncodeDecode =
+roundTripWireEncodeDecode :: AddressBook -> Maybe AddressBook
+roundTripWireEncodeDecode addressBook =
   let encoded = messagePut addressBook
-      decoded = case messageGet encoded of
-                  Right (result, "") -> result == addressBook
-                  _ -> False
-  in decoded
+  in case messageGet encoded of
+       Right (result, "") -> Just result
+       _ -> Nothing
 
-addressBook :: AddressBook
-addressBook =
+addressBook1 :: AddressBook
+addressBook1 =
   AddressBook {
     AddressBook'.person = Seq.fromList
-      [ mkPerson "Alice" 1 (Just "alice@example.com") $ Seq.singleton ("123-456-7890", HOME)
-      , mkPerson "Bob" 2 Nothing $ Seq.fromList [("1-800-123-4567", MOBILE), ("604-291-1234", WORK)]
+      [ mkPerson "Alice" (-1) (Just "alice@example.com") $ Seq.singleton ("123-456-7890", Just HOME)
+      , mkPerson "Bob" 2 Nothing $ Seq.fromList [("1-800-123-4567", Just MOBILE), ("604-291-1234", Just WORK)]
       ]
   , AddressBook'.unknown'field = defaultValue
   }
 
-mkPerson :: String -> Int -> Maybe String -> Seq (String, PhoneType) -> Person
+addressBook2 :: AddressBook
+addressBook2 =
+  AddressBook {
+    AddressBook'.person = Seq.fromList
+      [ mkPerson "Nobody" 2 Nothing $ Seq.singleton ("111-111-1111", Nothing)
+      ]
+  , AddressBook'.unknown'field = defaultValue
+  }
+
+mapDefaultPhoneType :: AddressBook -> AddressBook
+mapDefaultPhoneType AddressBook{AddressBook'.person = ps, ..} =
+  let people = fmap personMap ps
+      personMap Person{Person'.phone = phone, ..} =
+        let phoneNums = fmap phonesMap phone
+            phonesMap PhoneNumber{PhoneNumber'.type' = Nothing, PhoneNumber'.number = num} =
+              defaultValue{PhoneNumber'.number = num}
+            phonesMap other = other
+         in Person{Person'.phone = phoneNums, ..}
+   in AddressBook{AddressBook'.person = people, ..}
+
+addressBook3 :: AddressBook
+addressBook3 =
+  AddressBook {
+    AddressBook'.person = Seq.fromList
+      [ mkPerson "" 1 (Just "\550252") $ Seq.singleton ("", Just HOME)
+      ]
+  , AddressBook'.unknown'field = defaultValue
+  }
+
+mkPerson :: String -> Int -> Maybe String -> Seq (String, Maybe PhoneType) -> Person
 mkPerson name id' email phoneNumbers =
   Person {
     Person'.name = uFromString name
@@ -66,12 +115,29 @@ mkPerson name id' email phoneNumbers =
   , Person'.unknown'field = defaultValue
   }
 
-mkPhoneNumbers :: Seq (String, PhoneType) -> Seq PhoneNumber
+mkPhoneNumbers :: Seq (String, Maybe PhoneType) -> Seq PhoneNumber
 mkPhoneNumbers = fmap mkPhoneNumbers' where
-  mkPhoneNumbers' (num, t) =
+  mkPhoneNumbers' (num, phoneType) =
     PhoneNumber {
       PhoneNumber'.number = uFromString num
-    , PhoneNumber'.type' = Just t
+    , PhoneNumber'.type' = phoneType
     , PhoneNumber'.unknown'field = defaultValue
     }
 
+instance Arbitrary AddressBook where
+  arbitrary = AddressBook <$> arbitrary
+                          <*> pure defaultValue
+
+instance Arbitrary Person where
+  arbitrary = Person <$> liftA uFromString arbitrary
+                     <*> arbitrary
+                     <*> frequency [ (2, liftA (Just . uFromString) arbitrary)
+                                   , (1, pure Nothing)]
+                     <*> liftA Seq.fromList (listOf arbitrary)
+                     <*> pure defaultValue
+
+instance Arbitrary PhoneNumber where
+  arbitrary = PhoneNumber <$> liftA uFromString arbitrary
+                          <*> frequency [ (3, liftA Just $ elements [HOME, WORK, MOBILE])
+                                        , (1, pure Nothing)]
+                          <*> pure defaultValue

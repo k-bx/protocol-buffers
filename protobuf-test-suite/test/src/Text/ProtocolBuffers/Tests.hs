@@ -5,9 +5,10 @@ module Text.ProtocolBuffers.Tests
 
 import Test.Tasty (defaultMain, testGroup)
 
-import Text.ProtocolBuffers.Tests.AddressBook (addressBookTests)
+import Text.ProtocolBuffers.Tests.AddressBook (addressBookTests, addressBookQuickChecks)
 
 tests :: IO ()
 tests = defaultMain $ testGroup "Protocol Buffers tests" $
   [ addressBookTests
+  , addressBookQuickChecks
   ]
