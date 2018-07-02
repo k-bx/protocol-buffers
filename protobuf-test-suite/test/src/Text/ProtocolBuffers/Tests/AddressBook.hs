@@ -124,8 +124,10 @@ mkPhoneNumbers = fmap mkPhoneNumbers' where
     , PhoneNumber'.unknown'field = defaultValue
     }
 
-instance Arbitrary AddressBook where
-  arbitrary = AddressBook <$> arbitrary
+instance Arbitrary PhoneNumber where
+  arbitrary = PhoneNumber <$> liftA uFromString arbitrary
+                          <*> frequency [ (3, liftA Just $ elements [HOME, WORK, MOBILE])
+                                        , (1, pure Nothing)]
                           <*> pure defaultValue
 
 instance Arbitrary Person where
@@ -136,8 +138,6 @@ instance Arbitrary Person where
                      <*> liftA Seq.fromList (listOf arbitrary)
                      <*> pure defaultValue
 
-instance Arbitrary PhoneNumber where
-  arbitrary = PhoneNumber <$> liftA uFromString arbitrary
-                          <*> frequency [ (3, liftA Just $ elements [HOME, WORK, MOBILE])
-                                        , (1, pure Nothing)]
+instance Arbitrary AddressBook where
+  arbitrary = AddressBook <$> liftA Seq.fromList (listOf arbitrary)
                           <*> pure defaultValue
