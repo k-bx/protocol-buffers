@@ -747,8 +747,8 @@ descriptorX di = DataDecl () (DataType ()) Nothing (DHead () name) [QualConDecl 
         name = baseIdent self
         con = RecDecl () name eFields
                 where eFields = map (\(ns, t) -> FieldDecl () ns t) $ F.foldr ((:) . fieldX) end (fields di)
-                      end = eOneof <>
-                            (if hasExt di then pure extfield else mempty) <>
+                      end = (if hasExt di then pure extfield else mempty) <>
+                            eOneof <>
                             (if storeUnknown di then pure unknownField else mempty)
                       eOneof = F.foldr ((:) . fieldOneofX) [] (descOneofs di)
 
