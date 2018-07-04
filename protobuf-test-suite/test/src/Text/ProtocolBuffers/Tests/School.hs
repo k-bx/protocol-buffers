@@ -65,9 +65,9 @@ instance Arbitrary Student where
 instance Arbitrary Member where
   arbitrary = Member <$> arbitrary
                      <*> liftA uFromString arbitrary
-                     <*> oneof [ liftA Just arbitraryProperty
-                               , pure Nothing
-                               ]
+                     <*> frequency [ (3, liftA Just arbitraryProperty)
+                                   , (1, pure Nothing)
+                                   ]
                      <*> pure defaultValue
     where
       arbitraryProperty :: Gen Property'.Property
@@ -82,15 +82,15 @@ instance Arbitrary Dormitory where
                         <*> pure defaultValue
 
 roundTripTextEncodeDecode :: Dormitory -> Maybe Dormitory
-roundTripTextEncodeDecode addressBook =
-  let encoded = messagePutText addressBook
+roundTripTextEncodeDecode dormitory =
+  let encoded = messagePutText dormitory
   in case messageGetText $ LB.pack encoded of
        Left _ -> Nothing
        Right result -> Just result
 
 roundTripWireEncodeDecode :: Dormitory -> Maybe Dormitory
-roundTripWireEncodeDecode addressBook =
-  let encoded = messagePut addressBook
+roundTripWireEncodeDecode dormitory =
+  let encoded = messagePut dormitory
   in case messageGet encoded of
        Right (result, "") -> Just result
        _ -> Nothing
