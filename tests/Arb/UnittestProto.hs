@@ -57,7 +57,7 @@ instance Arbitrary TestRequired where arbitrary = futz TestRequired
 --instance Arbitrary OptionalGroup_extension where arbitrary = futz OptionalGroup_extension
 --instance Arbitrary RepeatedGroup_extension where arbitrary = futz RepeatedGroup_extension
 
-instance Arbitrary TestAllTypes where 
+instance Arbitrary TestAllTypes where
   arbitrary = futz TestAllTypes
 
 instance Arbitrary TestAllExtensions where
@@ -144,7 +144,7 @@ newRepKey = Key 1000001 9 Nothing
 -- This is all 70 known for TestAllExtensions plus the two above.
 -- The String names are currently discarded.
 allKeys :: [ ( String , TestAllExtensions -> Gen TestAllExtensions ) ]
-allKeys = 
+allKeys =
   [ ( "newOptKey" , maybeKey newOptKey )
   , ( "newRepKey" , seqKey newRepKey )
   , ( "single" , maybeKey single )
@@ -234,7 +234,7 @@ tests_TestAllExtensions =
   , ( "Size2", prop_Size2 )
   , ( "WireArb1", prop_WireArb1 )
   , ( "WireArb2", prop_WireArb2 )
-  , ( "WireArb3", prop_WireArb3 ) 
+  , ( "WireArb3", prop_WireArb3 )
   ]
 
 

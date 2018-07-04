@@ -3,6 +3,7 @@ module Main where
 import Test.QuickCheck
 import Arb.UnittestProto
 
+main :: IO ()
 main =  do
   cs
   mapM_ (\(name,test) -> putStrLn name >> quickCheck test) tests_TestAllExtensions

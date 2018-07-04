@@ -2,5 +2,6 @@ packages:
 - '.'
 - descriptor/
 - hprotoc/
+- protobuf-test-suite/
 resolver: nightly-2017-10-23
 extra-deps: []

@@ -32,7 +32,6 @@ matrix:
 install:
   - stack --no-terminal --skip-ghc-check setup
   - stack --no-terminal --skip-ghc-check install happy alex
-  - stack --no-terminal --skip-ghc-check test --only-snapshot
 
 script:
-  - stack --no-terminal --skip-ghc-check test
+  - make test

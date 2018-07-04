@@ -2,6 +2,7 @@ packages:
 - '.'
 - descriptor/
 - hprotoc/
+- protobuf-test-suite/
 extra-deps:
 - haskell-src-exts-1.18.1
 resolver: lts-3.5
