@@ -29,4 +29,5 @@ tests:
     other-modules:
       - Text.ProtocolBuffers.Tests
       - Text.ProtocolBuffers.Tests.AddressBook
+      - Text.ProtocolBuffers.Tests.School
 
