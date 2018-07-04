@@ -22,6 +22,7 @@ import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),
 
 import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(Result(..),VertexKind(..),pKey,pfKey,getKind,Part(..))
 
+import Data.Monoid ((<>))
 import Control.Monad(mzero)
 import qualified Data.ByteString.Lazy.Char8 as LC(unpack)
 import qualified Data.Foldable as F(foldr,toList)
@@ -647,8 +648,11 @@ descriptorNormalModule result di
                | otherwise = []
         declKeys | sepKey = []
                  | otherwise = keysXTypeVal (descName di) (keys di)
-    in Module () (Just (ModuleHead () m Nothing (Just (ExportSpecList () ((EThingWith () (EWildcard () 0) un [] : exportLenses di ++ exportKeys)))))) (modulePragmas $ makeLenses di) imports
-         (descriptorX di : lenses ++ declKeys ++ instancesDescriptor di)
+    in Module ()
+              (Just (ModuleHead () m Nothing (Just (ExportSpecList () ((EThingWith () (EWildcard () 0) un [] : exportLenses di ++ exportKeys))))))
+              (modulePragmas $ makeLenses di)
+              imports
+              (descriptorX di : lenses ++ declKeys ++ instancesDescriptor di)
 
 mkLenses :: Exp ()
 mkLenses = Var () (Qual () (ModuleName () "Control.Lens.TH") (Ident () "makeLenses"))
@@ -743,9 +747,9 @@ descriptorX di = DataDecl () (DataType ()) Nothing (DHead () name) [QualConDecl 
         name = baseIdent self
         con = RecDecl () name eFields
                 where eFields = map (\(ns, t) -> FieldDecl () ns t) $ F.foldr ((:) . fieldX) end (fields di)
-                      end = (if hasExt di then (extfield:) else id)
-                            . (if storeUnknown di then (unknownField:) else id)
-                            $ eOneof
+                      end = eOneof <>
+                            (if hasExt di then pure extfield else mempty) <>
+                            (if storeUnknown di then pure unknownField else mempty)
                       eOneof = F.foldr ((:) . fieldOneofX) [] (descOneofs di)
 
         bangType = if lazyFields di then TyParen () {- UnBangedTy -} else TyBang () (BangedTy ()) (NoUnpackPragma ()) . TyParen ()
