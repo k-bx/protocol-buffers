@@ -53,7 +53,7 @@ instance Arbitrary Person where
           scale (`div` 2) $ vector n
 
 instance Arbitrary Talent where
-  arbitrary = Talent <$> arbitrary
+  arbitrary = Talent <$> liftA Seq.fromList (listOf arbitrary)
                      <*> arbitrary
 
 instance Arbitrary Film where
