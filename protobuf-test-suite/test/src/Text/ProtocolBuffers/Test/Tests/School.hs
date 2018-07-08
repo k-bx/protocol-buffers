@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-module Text.ProtocolBuffers.Tests.School
+module Text.ProtocolBuffers.Test.Tests.School
   ( schoolQuickChecks
   ) where
 

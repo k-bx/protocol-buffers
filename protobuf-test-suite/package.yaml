@@ -26,8 +26,11 @@ tests:
       - tasty-quickcheck
       - QuickCheck
       - bytestring
+      - utf8-string
     other-modules:
-      - Text.ProtocolBuffers.Tests
-      - Text.ProtocolBuffers.Tests.AddressBook
-      - Text.ProtocolBuffers.Tests.School
+      - Text.ProtocolBuffers.Test.QuickCheck
+      - Text.ProtocolBuffers.Test.Tests
+      - Text.ProtocolBuffers.Test.Tests.AddressBook
+      - Text.ProtocolBuffers.Test.Tests.School
+      - Text.ProtocolBuffers.Test.Tests.Films
 
