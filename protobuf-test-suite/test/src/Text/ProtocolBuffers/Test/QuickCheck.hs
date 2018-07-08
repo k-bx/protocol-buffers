@@ -27,9 +27,3 @@ instance Arbitrary L.ByteString where
              , (1, return 0) ]
     fmap L.pack (vector len)
 
--- instance Arbitrary a => Arbitrary (Seq a) where
---   arbitrary = do
---     len <- frequency
---              [ (3, choose (1,3))
---              , (1, return 0) ]
---     fmap Seq.fromList (vector len)
