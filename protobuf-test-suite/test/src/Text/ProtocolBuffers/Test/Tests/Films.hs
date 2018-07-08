@@ -44,11 +44,15 @@ roundTripWireEncodeDecode playlist =
 instance Arbitrary Person where
   arbitrary = Person <$> arbitrary
                      <*> liftA uFromString arbitrary
-                     <*> liftA Seq.singleton arbitrary -- TODO: Use shrink or sized to handle capping recursion
+                     <*> arbitraryFilmography
                      <*> arbitrary
+    where
+      arbitraryFilmography =
+        liftA Seq.fromList $
+        sized $ \n ->
+          scale (`div` 2) $ vector n
 
 instance Arbitrary Talent where
-  -- arbitrary = Talent <$> liftA Seq.fromList (listof arbitrary)
   arbitrary = Talent <$> arbitrary
                      <*> arbitrary
 
@@ -58,6 +62,7 @@ instance Arbitrary Film where
                    <*> arbitrary
 
 instance Arbitrary Playlist where
-  arbitrary = Playlist <$> liftA Seq.fromList (listOf arbitrary)
-                       <*> arbitrary
+  arbitrary = resize 8 $
+    Playlist <$> liftA Seq.fromList (listOf arbitrary)
+             <*> arbitrary
 
