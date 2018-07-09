@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-module Text.ProtocolBuffers.Tests.AddressBook
+module Text.ProtocolBuffers.Test.Tests.AddressBook
   ( addressBookTests
   , addressBookQuickChecks
   ) where
