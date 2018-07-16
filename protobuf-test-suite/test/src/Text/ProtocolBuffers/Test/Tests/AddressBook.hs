@@ -10,6 +10,7 @@ import Test.Tasty.HUnit (testCase, (@?), (@?=))
 import Test.Tasty.QuickCheck as QC
 import Test.QuickCheck ()
 
+import qualified Data.Aeson as J
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq)
 import qualified Data.ByteString.Lazy.Char8 as LB
@@ -50,6 +51,8 @@ addressBookQuickChecks = testGroup "Address book QuickChecks"
       \book -> maybe False (mapDefaultPhoneType book ==) (roundTripWireEncodeDecode book)
   -- , QC.testProperty "Address book text-encoded then decoded identity" $
   --     \book -> maybe False (mapDefaultPhoneType book ==) (roundTripTextEncodeDecode book)
+  , QC.testProperty "Address book json-encoded then decoded identity" $
+      \book -> maybe False (mapDefaultPhoneType book ==) (roundTripJsonEncodeDecode book)
   ]
 
 roundTripTextEncodeDecode :: AddressBook -> Maybe AddressBook
@@ -64,6 +67,13 @@ roundTripWireEncodeDecode addressBook =
   let encoded = messagePut addressBook
   in case messageGet encoded of
        Right (result, "") -> Just result
+       _ -> Nothing
+
+roundTripJsonEncodeDecode :: AddressBook -> Maybe AddressBook
+roundTripJsonEncodeDecode addressBook =
+  let encoded = J.toJSON addressBook
+  in case J.fromJSON encoded of
+       J.Success result -> Just result
        _ -> Nothing
 
 addressBook1 :: AddressBook

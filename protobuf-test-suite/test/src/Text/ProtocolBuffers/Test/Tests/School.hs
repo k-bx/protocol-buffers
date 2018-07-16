@@ -8,6 +8,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.QuickCheck as QC
 import Test.QuickCheck ()
 
+import qualified Data.Aeson as J
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq)
 import qualified Data.ByteString.Lazy.Char8 as LB
@@ -36,6 +37,8 @@ schoolQuickChecks :: TestTree
 schoolQuickChecks = testGroup "School QuickChecks"
   [ QC.testProperty "School wire-encoded then decoded identity" $
       \school -> maybe False (school ==) (roundTripWireEncodeDecode school)
+  , QC.testProperty "School json-encoded then decoded identity" $
+      \school -> maybe False (school ==) (roundTripJsonEncodeDecode school)
   -- , QC.testProperty "School text-encoded then decoded identity" $
   --     \school -> maybe False (school ==) (roundTripTextEncodeDecode school)
   ]
@@ -93,4 +96,11 @@ roundTripWireEncodeDecode dormitory =
   let encoded = messagePut dormitory
   in case messageGet encoded of
        Right (result, "") -> Just result
+       _ -> Nothing
+
+roundTripJsonEncodeDecode :: Dormitory -> Maybe Dormitory
+roundTripJsonEncodeDecode dormitory =
+  let encoded = J.toJSON dormitory
+  in case J.fromJSON encoded of
+       J.Success result -> Just result
        _ -> Nothing

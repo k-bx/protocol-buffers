@@ -6,6 +6,7 @@ module Text.ProtocolBuffers.Test.Tests.Films
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.QuickCheck as QC
 
+import qualified Data.Aeson as J
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq)
 import qualified Data.ByteString.Lazy.Char8 as LB
@@ -32,6 +33,8 @@ playlistQuickChecks :: TestTree
 playlistQuickChecks = testGroup "Film playlist QuickChecks"
   [ QC.testProperty "Film playlist wire-encoded then decoded identity" $
       \films -> maybe False (films ==) (roundTripWireEncodeDecode films)
+  , QC.testProperty "Film playlist json-encoded then decoded identity" $
+      \films -> maybe False (films ==) (roundTripJsonEncodeDecode films)
   ]
 
 roundTripWireEncodeDecode :: Playlist -> Maybe Playlist
@@ -39,6 +42,13 @@ roundTripWireEncodeDecode playlist =
   let encoded = messagePut playlist
   in case messageGet encoded of
        Right (result, "") -> Just result
+       _ -> Nothing
+
+roundTripJsonEncodeDecode :: Playlist -> Maybe Playlist
+roundTripJsonEncodeDecode playlist =
+  let encoded = J.toJSON playlist
+  in case J.fromJSON encoded of
+       J.Success result -> Just result
        _ -> Nothing
 
 instance Arbitrary Person where
