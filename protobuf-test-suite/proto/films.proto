@@ -1,0 +1,18 @@
+message playlist {
+  repeated film playlist = 1;
+}
+
+message talent {
+  repeated person credits = 1;
+
+  message person {
+    required string role = 1;
+    required string person_name = 2;
+    repeated film filmography = 3;
+  }
+}
+
+message film {
+  required string film_name = 1;
+  required talent film_talent = 2;
+}

@@ -10,4 +10,5 @@ test: build codegen
 
 clean:
 	stack clean
+	rm -rf protobuf-test-suite/src/HSCodeGen
 .PHONY: clean

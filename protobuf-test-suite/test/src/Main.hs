@@ -1,6 +1,6 @@
 module Main where
 
-import Text.ProtocolBuffers.Tests (tests)
+import Text.ProtocolBuffers.Test.Tests (tests)
 
 main :: IO ()
 main = tests
