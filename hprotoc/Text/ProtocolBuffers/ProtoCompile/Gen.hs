@@ -924,7 +924,7 @@ instanceFromJSON di
             in Generator () (patvar fldName) parseFieldCall''
         parseFun = Lambda () [patvar objVar] $ Do () $
             map getFieldValue flds ++
-            [ Qualifier () $ preludevar "return" $$ Paren () (foldl' (\acc fld -> acc $$ lvar (getFname fld)) (lcon name) flds) ]
+            [ Qualifier () $ preludevar "return" $$ RecUpdate () (pvar "defaultValue") (map (\fld -> FieldUpdate () (local (getFname fld)) (lvar (getFname fld))) flds) ]
 
 instanceTextType :: DescriptorInfo -> Decl ()
 instanceTextType di
