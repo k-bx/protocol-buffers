@@ -105,7 +105,7 @@ localField di t = UnQual () (fieldIdent di t)
 
 -- pvar and preludevar and lvar are for lower-case identifiers
 isVar :: String -> Bool
-isVar (x:_) = isLower x || x == '_' || x == '<' || x == '/' || x == '+'
+isVar (x:_) = isLower x || x == '_' || x == '<' || x == '+'
 isVar _ = False
 
 isCon :: String -> Bool
@@ -903,15 +903,7 @@ instanceFromJSON di
                   (_ , True)  -> parseFieldCall'
                   (Nothing, False)  -> parseFieldCall'
                   (Just d, False) ->
-                    let defLit = case d of
-                          HsDef'Bool b -> preludecon (show b)
-                          HsDef'ByteString bs -> preludevar "read" $$ Lit () (String () (show bs) (show (show bs)))
-                          HsDef'RealFloat (SRF'Rational rat) -> Lit () (Frac () rat (show (fromRational rat :: Double)))
-                          HsDef'RealFloat SRF'nan -> Lit () (Int () 0 "0") $$ preludevar "/" $$ Lit () (Int () 0 "0")
-                          HsDef'RealFloat SRF'ninf -> Lit () (Int () (-1) "-1") $$ preludevar "/" $$ Lit () (Int () 0 "0")
-                          HsDef'RealFloat SRF'inf -> Lit () (Int () 1 "1") $$ preludevar "/" $$ Lit () (Int () 0 "0")
-                          HsDef'Integer i -> Lit () (Int () i (show i))
-                          HsDef'Enum s -> preludevar "read" $$ Lit () (String () s (show s))
+                    let defLit = defToSyntax (typeCode fld) d
                         defParse = case isRequired fld of
                           True -> Paren () defLit
                           False -> Paren () (preludecon "Just" $$ Paren () defLit)
