@@ -715,7 +715,7 @@ standardImports isEnumMod ext lenses =
        ops | ext = map (IVar () . Symbol ()) $ base ++ ["==","<=","&&"]
            | otherwise = map (IVar () . Symbol ()) base
        base | isEnumMod = ["+","/","."]
-            | otherwise = ["+","/","++"]
+            | otherwise = ["+","/","++","."]
        lensTH | lenses = [ImportDecl () (ModuleName () "Control.Lens.TH") True False False Nothing Nothing Nothing]
               | otherwise = []
 
@@ -885,25 +885,34 @@ instanceFromJSON di
   where
         name = mName $ baseName $ descName di
         flds = F.toList (fields di)
+        os = F.toList (descOneofs di)
         reservedVars = map toPrintName flds
         distinctVar var = if var `elem` reservedVars then distinctVar (var ++ "'") else var
         objVar = distinctVar "o"
         getFname fld = fName $ baseName' $ fieldName fld
+        getOneofFname oi = fName $ baseName' $ oneofFName oi
+        parseJSONFun fld = case toEnum (getFieldType (typeCode fld)) of
+            TYPE_INT64 -> pvar "parseJSONReadWithPayload" $$ Lit () (String () "int64" (show "int64"))
+            TYPE_UINT64 -> pvar "parseJSONReadWithPayload" $$ Lit () (String () "uint64" (show "uint64"))
+            TYPE_BOOL -> pvar "parseJSONBool"
+            TYPE_BYTES -> pvar "parseJSONByteString"
+            _ -> pvar "parseJSON"
+        getOption r@(_, fi) =
+            let fldName = getFname fi
+            in preludevar "fmap" $$ Paren () (preludevar "fmap" $$ oneofCon r) $$
+                  Paren () (pvar "explicitParseFieldMaybe" $$ parseJSONFun fi $$ lvar objVar $$ litStr fldName)
+        getOneofValue oi =
+            let fldName = getOneofFname oi
+            in Generator () (patvar fldName) (preludevar "fmap" $$ pvar "msum" $$ Paren () (preludevar "sequence" $$ List () ((map getOption (F.toList (oneofFields oi)) ++ [preludevar "return" $$ preludecon "Nothing"]))))
         getFieldValue fld =
             let fldName = getFname fld
                 fldName' = dropWhileEnd (== '\'') fldName
                 parseFieldFun = case (hsDefault fld, isRequired fld) of
                   (Nothing, True) -> pvar "explicitParseField"
                   _ -> pvar "explicitParseFieldMaybe"
-                parseJSONFun = case toEnum (getFieldType (typeCode fld)) of
-                    TYPE_INT64 -> pvar "parseJSONReadWithPayload" $$ Lit () (String () "int64" (show "int64"))
-                    TYPE_UINT64 -> pvar "parseJSONReadWithPayload" $$ Lit () (String () "uint64" (show "uint64"))
-                    TYPE_BOOL -> pvar "parseJSONBool"
-                    TYPE_BYTES -> pvar "parseJSONByteString"
-                    _ -> pvar "parseJSON"
                 parseJSONFun' = case canRepeat fld of
-                  False -> parseJSONFun
-                  True -> Paren () (preludevar "mapM" $$ parseJSONFun $$ pvar "<=<" $$ pvar "parseJSON")
+                  False -> parseJSONFun fld
+                  True -> Paren () (preludevar "mapM" $$ parseJSONFun fld $$ pvar "<=<" $$ pvar "parseJSON")
                 parseFieldCall = parseFieldFun $$ parseJSONFun' $$ lvar objVar $$ Lit () (String () fldName' (show fldName'))
                 parseFieldCall' = case canRepeat fld of
                   False -> parseFieldCall
@@ -925,7 +934,10 @@ instanceFromJSON di
             in Generator () (patvar fldName) parseFieldCall''
         parseFun = Lambda () [patvar objVar] $ Do () $
             map getFieldValue flds ++
-            [ Qualifier () $ preludevar "return" $$ RecUpdate () (pvar "defaultValue") (map (\fld -> FieldUpdate () (local (getFname fld)) (lvar (getFname fld))) flds) ]
+            map getOneofValue os ++
+            [ Qualifier () $ preludevar "return" $$ RecUpdate () (pvar "defaultValue") (
+                (map (\fld -> FieldUpdate () (local (getFname fld)) (lvar (getFname fld))) flds) ++
+                (map (\oi -> FieldUpdate () (local (getOneofFname oi)) (lvar (getOneofFname oi))) os)) ]
 
 instanceTextType :: DescriptorInfo -> Decl ()
 instanceTextType di

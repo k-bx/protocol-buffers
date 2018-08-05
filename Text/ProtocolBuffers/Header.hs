@@ -4,6 +4,7 @@
 module Text.ProtocolBuffers.Header
     ( append, emptyBS
     , pack, fromMaybe, ap
+    , msum
     , fromDistinctAscList, member
     , throwError,catchError
     , choice, sepEndBy, spaces, try
@@ -22,7 +23,7 @@ module Text.ProtocolBuffers.Header
     , module Text.ProtocolBuffers.ProtoJSON
     ) where
 
-import Control.Monad(ap, (<=<), mplus)
+import Control.Monad(ap, (<=<), msum)
 import Control.Monad.Error.Class(throwError,catchError)
 import Data.Aeson (FromJSON(..), ToJSON(..), Value(..))
 import Data.Aeson.Types (explicitParseField, explicitParseFieldMaybe, withObject, withText)
