@@ -25,7 +25,6 @@ import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),
 import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(Result(..),VertexKind(..),pKey,pfKey,getKind,Part(..))
 
 import Data.Monoid ((<>))
-import Control.Monad(mzero)
 import qualified Data.ByteString.Lazy.Char8 as LC(unpack)
 import qualified Data.Foldable as F(foldr,toList)
 import Data.List(sortBy,foldl',foldl1',group,sort,union)
@@ -36,9 +35,9 @@ import Language.Haskell.Exts.Syntax as Hse
 import Data.Char(isLower,isUpper)
 import qualified Data.Map as M
 import Data.Maybe(mapMaybe)
-import Data.List (dropWhileEnd, intercalate)
+import Data.List (dropWhileEnd)
 import           Data.Sequence (ViewL(..),(><))
-import qualified Data.Sequence as Seq(null,length,empty,viewl)
+import qualified Data.Sequence as Seq(null,length,viewl)
 import qualified Data.Set as S
 import System.FilePath(joinPath)
 
@@ -289,12 +288,12 @@ oneofCon (name,_) = Con () (qualName name)
 
 oneofPat :: (ProtoName,FieldInfo) -> (Pat (),Pat ())
 oneofPat (name,fi) =
-  let fName@(Ident () fname) = baseIdent' (fieldName fi)
+  let fName@(Ident () _fname) = baseIdent' (fieldName fi)
   in (PApp () (qualName name) [PVar () fName],PApp () (unqualName name) [PVar () fName])
 
 oneofRec :: (ProtoName,FieldInfo) -> (Exp (),Exp ())
 oneofRec (_,fi) =
-  let fName@(Ident () fname) = baseIdent' (fieldName fi)
+  let (Ident () fname) = baseIdent' (fieldName fi)
   in (litStr fname,lvar fname)
 
 oneofGet :: (ProtoName,FieldInfo) -> (String,ProtoName)
@@ -690,12 +689,11 @@ mkLenses = Var () (Qual () (ModuleName () "Control.Lens.TH") (Ident () "makeLens
 exportLenses :: DescriptorInfo -> [ExportSpec ()]
 exportLenses di =
   if makeLenses di
-    then
-      map (EVar () . unqualFName . stripPrefix) (lensFieldNames di)
+    then map (EVar () . unqualFName . stripPrefix) lensFieldNames
     else []
   where stripPrefix pfn = pfn { baseNamePrefix' = "" }
-        lensFieldNames di = map fieldName (F.toList (fields di))
-                            ++ map oneofFName (F.toList (descOneofs di))
+        lensFieldNames = map fieldName (F.toList (fields di))
+                         ++ map oneofFName (F.toList (descOneofs di))
 
 minimalImports :: [ImportDecl ()]
 minimalImports =
@@ -717,7 +715,7 @@ standardImports isEnumMod ext lenses =
        ops | ext = map (IVar () . Symbol ()) $ base ++ ["==","<=","&&"]
            | otherwise = map (IVar () . Symbol ()) base
        base | isEnumMod = ["+","/","."]
-            | otherwise = ["+","/"]
+            | otherwise = ["+","/","++"]
        lensTH | lenses = [ImportDecl () (ModuleName () "Control.Lens.TH") True False False Nothing Nothing Nothing]
               | otherwise = []
 
@@ -842,30 +840,42 @@ instanceToJSON di
       [ inst "toJSON" [patvar msgVar] serializeFun
       ]
   where
-        name = mName $ baseName $ descName di
         flds = F.toList (fields di)
+        os = F.toList (descOneofs di)
         msgVar = distinctVar "msg"
         reservedVars = map toPrintName flds
         distinctVar var = if var `elem` reservedVars then distinctVar (var ++ "'") else var
         getFname fld = fName $ baseName' $ fieldName fld
+        toJSONFun fld = case toEnum (getFieldType (typeCode fld)) of
+            TYPE_INT64 -> pvar "toJSONShowWithPayload"
+            TYPE_UINT64 -> pvar "toJSONShowWithPayload"
+            TYPE_BYTES -> pvar "toJSONByteString"
+            _ -> pvar "toJSON"
+        makeOneOfPair oi =
+            let Ident () funcname = baseIdent' (oneofFName oi)
+                oneOfFlds = F.toList (oneofFields oi)
+                caseAlt :: (ProtoName,FieldInfo) -> Alt ()
+                caseAlt f = Alt () patt (UnGuardedRhs () rhs) noWhere
+                  where patt = PApp () (prelude "Just") [fst (oneofPat f)]
+                        (rstr,rvar) = oneofRec f
+                        rhs = List () [Tuple () Boxed [ rstr, toJSONFun (snd f) $$ rvar ] ]
+                caseAltNothing :: Alt ()
+                caseAltNothing = Alt () (PApp () (prelude "Nothing") []) (UnGuardedRhs () rhs) noWhere
+                  where rhs = List () []
+            in Case () (Paren () (lvar funcname $$ lvar msgVar)) (map caseAlt oneOfFlds ++ [caseAltNothing])
         makePair fld =
             let fldName = getFname fld
                 fldName' = dropWhileEnd (== '\'') fldName
-                toJSONFun = case toEnum (getFieldType (typeCode fld)) of
-                    TYPE_INT64 -> pvar "toJSONShowWithPayload"
-                    TYPE_UINT64 -> pvar "toJSONShowWithPayload"
-                    TYPE_BYTES -> pvar "toJSONByteString"
-                    _ -> pvar "toJSON"
                 arg = Paren () (lvar fldName $$ lvar msgVar)
                 toJSONCall = case (isRequired fld, canRepeat fld) of
-                    (True, False) -> toJSONFun $$ arg
-                    (_, _) -> pvar "toJSON" $$ Paren () (preludevar "fmap" $$ toJSONFun $$ arg)
+                    (True, False) -> toJSONFun fld $$ arg
+                    (_, _) -> pvar "toJSON" $$ Paren () (preludevar "fmap" $$ toJSONFun fld $$ arg)
             in Tuple () Boxed
                   [ Lit () (String () fldName' (show fldName'))
                   , toJSONCall
                   ]
         serializeFun =
-            pvar "objectNoEmpty" $$ List () (map makePair flds)
+            pvar "objectNoEmpty" $$ Paren () (mkOp "++" (List () (map makePair flds)) (preludevar "concat" $$ List () (map makeOneOfPair os)))
 
 instanceFromJSON :: DescriptorInfo -> Decl ()
 instanceFromJSON di
@@ -875,7 +885,6 @@ instanceFromJSON di
   where
         name = mName $ baseName $ descName di
         flds = F.toList (fields di)
-        msgVar = distinctVar "msg"
         reservedVars = map toPrintName flds
         distinctVar var = if var `elem` reservedVars then distinctVar (var ++ "'") else var
         objVar = distinctVar "o"
@@ -1005,8 +1014,6 @@ printOneof :: String -> OneofInfo -> Exp ()
 printOneof msgVar oi
     = Case () (Paren () (lvar funcname $$ lvar msgVar)) (map caseAlt flds ++ [caseAltNothing])
   where Ident () funcname = baseIdent' (oneofFName oi)
-        IName uname = last $ splitFI $ protobufName' (oneofFName oi)
-        printname = uToString uname
         flds = F.toList (oneofFields oi)
         caseAlt :: (ProtoName,FieldInfo) -> Alt ()
         caseAlt f = Alt () patt  (UnGuardedRhs () rhs) noWhere
