@@ -44,13 +44,22 @@ import qualified Text.Google.Protobuf.Compiler.CodeGeneratorResponse.File as CGR
 import Paths_hprotoc(version)
 
 
-data Options = Options { optPrefix :: [MName String]
-                       , optAs :: [(CanonFP,[MName String])]
-                       , optTarget :: LocalFP
-                       , optInclude :: [LocalFP]
-                       , optProto :: LocalFP
-                       , optDesc :: Maybe (LocalFP)
-                       , optImports,optVerbose,optUnknownFields,optLazy,optLenses,optDryRun :: Bool }
+data Options =
+    Options
+    { optPrefix :: [MName String]
+    , optAs :: [(CanonFP,[MName String])]
+    , optTarget :: LocalFP
+    , optInclude :: [LocalFP]
+    , optProto :: LocalFP
+    , optDesc :: Maybe (LocalFP)
+    , optImports :: Bool
+    , optVerbose :: Bool
+    , optUnknownFields :: Bool
+    , optLazy :: Bool
+    , optLenses :: Bool
+    , optJson :: Bool
+    , optDryRun :: Bool
+    }
   deriving Show
 
 setPrefix,setTarget,setInclude,setProto,setDesc :: String -> Options -> Options
@@ -65,6 +74,7 @@ setVerbose    o = o { optVerbose = True }
 setUnknown    o = o { optUnknownFields = True }
 setLazy       o = o { optLazy = True }
 setLenses     o = o { optLenses = True }
+setJson       o = o { optJson = True }
 setDryRun     o = o { optDryRun = True }
 
 toPrefix :: String -> [MName String]
@@ -113,6 +123,8 @@ optionList =
                "new default is now messages with strict fields, this reverts to generating lazy fields"
   , Option [] ["lenses"] (NoArg (Mutate setLenses))
                "generate lenses for accessing fields"
+  , Option [] ["json"] (NoArg (Mutate setJson))
+               "generate json instances"
   , Option ['v'] ["verbose"] (NoArg (Mutate  setVerbose))
                "increase amount of printed information"
   , Option [] ["version"]  (NoArg (Switch VersionInfo))
@@ -155,7 +167,9 @@ defaultOptions = do
                    , optUnknownFields = False
                    , optLazy = False
                    , optLenses = False
-                   , optDryRun = False }
+                   , optJson = False
+                   , optDryRun = False
+                   }
 
 main :: IO ()
 main = do
@@ -257,7 +271,7 @@ run' o@(Output print' writeFile') options env fdps = do
   nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
   let NameMap _ rm = nameMap  -- DEBUG
   print' "Haskell name mangling done"
-  let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options,optLenses options) nameMap fdp
+  let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options,optLenses options, optJson options) nameMap fdp
       result = makeResult protoInfo
   seq result (print' "Recursive modules resolved")
   let produceMSG di = do

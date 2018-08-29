@@ -9,4 +9,5 @@ stack exec hprotoc -- \
   --haskell_out=$HASKELL_SRC_PATH \
   --proto_path=$PROTO_PATH \
   --prefix=$PROTO_PREFIX \
+  --json \
   --unknown_fields `find $PROTO_PATH -type f | egrep '\.proto$'`

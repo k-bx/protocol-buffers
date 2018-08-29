@@ -397,7 +397,7 @@ enumModule ei
            (standardImports True False False) (enumDecls ei)
 
 enumDecls :: EnumInfo -> [Decl ()]
-enumDecls ei =  map ($ ei) [ enumX
+enumDecls ei = map ($ ei) [ enumX
                            , instanceMergeableEnum
                            , instanceBounded
                            , instanceDefaultEnum ]
@@ -408,8 +408,10 @@ enumDecls ei =  map ($ ei) [ enumX
                            , instanceMessageAPI . enumName
                            , instanceReflectEnum
                            , instanceTextTypeEnum
-                           , instanceToJSONEnum
-                           , instanceFromJSONEnum
+                           ] ++
+                filter (const (enumJsonInstances ei))
+                           [ instanceToJSONEnum ei
+                           , instanceFromJSONEnum ei
                            ]
 
 enumX :: EnumInfo -> Decl ()
@@ -536,7 +538,9 @@ instanceReflectEnum ei
           where one (v,ns) = Tuple () Boxed [litInt (getEnumCode v),litStr ns,lcon ns]
         ei' = foldl' (App ()) (pcon "EnumInfo") [protoNameExp
                                              ,List () $ map litStr (enumFilePath ei)
-                                             ,List () (map two values)]
+                                             ,List () (map two values)
+                                             ,preludecon (show (enumJsonInstances ei))
+                                             ]
           where two (v,ns) = Tuple () Boxed [litInt (getEnumCode v),litStr ns]
         protoNameExp = Paren () $ foldl' (App ()) (pvar "makePNF")
                                         [ xxx'Exp, mList a, mList b, litStr (mName c) ]
@@ -612,11 +616,11 @@ descriptorBootModule di
 #endif
                   ,private "Mergeable",private "Default"
                   ,private "Wire",private "GPB",private "ReflectDescriptor"
-                  , private "TextType", private "TextMsg"
-                  , private "FromJSON", private "ToJSON"
+                  ,private "TextType", private "TextMsg"
                   ]
-                  ++ if hasExt di then [private "ExtendMessage"] else []
-                  ++ if storeUnknown di then [private "UnknownMessage"] else []
+                  ++ (if hasExt di then [private "ExtendMessage"] else [])
+                  ++ (if storeUnknown di then [private "UnknownMessage"] else [])
+                  ++ (if jsonInstances di then [private "FromJSON", private "ToJSON"] else [])
         instMesAPI = InstDecl () Nothing (mkSimpleIRule (private "MessageAPI")
                        [TyVar () (Ident () "msg'"), TyParen () (TyFun () (TyVar () (Ident () "msg'")) (TyCon () un)), (TyCon () un)]) Nothing
         dataDecl = DataDecl () (DataType ()) Nothing (DHead () (baseIdent protoName)) [] $
@@ -805,6 +809,7 @@ instancesDescriptor :: DescriptorInfo -> [Decl ()]
 instancesDescriptor di = map ($ di) $
    (if hasExt di then (instanceExtendMessage:) else id) $
    (if storeUnknown di then (instanceUnknownMessage:) else id) $
+   (if jsonInstances di then ([instanceToJSON,instanceFromJSON]++) else id) $
    [ instanceMergeable
    , instanceDefault
    , instanceWireDescriptor
@@ -813,8 +818,6 @@ instancesDescriptor di = map ($ di) $
    , instanceReflectDescriptor
    , instanceTextType
    , instanceTextMsg
-   , instanceToJSON
-   , instanceFromJSON
    ]
 
 instanceExtendMessage :: DescriptorInfo -> Decl ()

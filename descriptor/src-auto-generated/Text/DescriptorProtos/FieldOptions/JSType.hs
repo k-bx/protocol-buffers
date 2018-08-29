@@ -62,6 +62,7 @@ instance P'.ReflectEnum JSType where
       (P'.makePNF (P'.pack ".google.protobuf.FieldOptions.JSType") ["Text"] ["DescriptorProtos", "FieldOptions"] "JSType")
       ["Text", "DescriptorProtos", "FieldOptions", "JSType.hs"]
       [(0, "JS_NORMAL"), (1, "JS_STRING"), (2, "JS_NUMBER")]
+      Prelude'.True
 
 instance P'.TextType JSType where
   tellT = P'.tellShow
