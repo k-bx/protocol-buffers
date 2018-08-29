@@ -65,11 +65,7 @@ module Text.ProtocolBuffers.Get
 -- The Get monad is an instance of binary-strict's BinaryParser:
 -- import qualified Data.Binary.Strict.Class as P(BinaryParser(..))
 -- The Get monad is an instance of all of these library classes:
-#if __GLASGOW_HASKELL__ < 710
-import Control.Applicative(Applicative(pure,(<*>)),Alternative(empty,(<|>)))
-#else
 import Control.Applicative(Alternative(empty,(<|>)))
-#endif
 import Control.Monad(MonadPlus(mzero,mplus),when)
 import Control.Monad.Error.Class(MonadError(throwError,catchError),Error(strMsg))
 -- It can be a MonadCont, but the semantics are too broken without a ton of work.
@@ -87,12 +83,7 @@ import qualified Data.ByteString.Lazy as L(take,drop,length,span,toChunks,fromCh
 import qualified Data.ByteString.Lazy.Internal as L(ByteString(..),chunk)
 import qualified Data.Foldable as F(foldr,foldr1)    -- used with Seq
 import Data.Int(Int32,Int64)                         -- index type for L.ByteString
-#if __GLASGOW_HASKELL__ < 710
-import Data.Monoid(Monoid(mempty,mappend))           -- Writer has a Monoid contraint
-import Data.Word(Word,Word8,Word16,Word32,Word64)
-#else
 import Data.Word(Word8,Word16,Word32,Word64)
-#endif
 import Data.Sequence(Seq,null,(|>))                  -- used for future queue in handler state
 import Foreign.ForeignPtr(withForeignPtr)
 import Foreign.Ptr(Ptr,castPtr,plusPtr,minusPtr,nullPtr)
@@ -870,12 +861,6 @@ shiftl_w32 (W32# w) (I# i) = W32# (w `uncheckedShiftL#`   i)
 
 #if WORD_SIZE_IN_BITS < 64
 shiftl_w64 (W64# w) (I# i) = W64# (w `uncheckedShiftL64#` i)
-
-#if __GLASGOW_HASKELL__ <= 606
--- Exported by GHC.Word in GHC 6.8 and higher
-foreign import ccall unsafe "stg_uncheckedShiftL64"
-    uncheckedShiftL64#     :: Word64# -> Int# -> Word64#
-#endif
 
 #else
 shiftl_w64 (W64# w) (I# i) = W64# (w `uncheckedShiftL#` i)

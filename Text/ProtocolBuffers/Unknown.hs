@@ -10,9 +10,6 @@ module Text.ProtocolBuffers.Unknown
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Foldable as F
 import Data.Generics
-#if __GLASGOW_HASKELL__ < 710
-import Data.Monoid(mempty,mappend)
-#endif
 import Data.Sequence((|>))
 import Data.Typeable()
 import Control.Monad.Error.Class(catchError)

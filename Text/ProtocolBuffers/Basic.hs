@@ -21,9 +21,6 @@ import Data.Generics(Data(..))
 import Data.Int(Int32,Int64)
 import Data.Ix(Ix)
 import Data.Semigroup (Semigroup(..))
-#if __GLASGOW_HASKELL__ < 710
-import Data.Monoid(Monoid(..))
-#endif
 import Data.Sequence(Seq,(><))
 import Data.Typeable(Typeable)
 import Data.Word(Word8,Word32,Word64)

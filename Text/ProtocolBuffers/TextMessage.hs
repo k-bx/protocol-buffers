@@ -13,9 +13,6 @@ module Text.ProtocolBuffers.TextMessage (
         getSubMessage,
     ) where
 
-#if __GLASGOW_HASKELL__ < 710
-import Control.Applicative ((<$>), (<*), (*>))
-#endif
 import Control.Monad.Identity (Identity)
 import Control.Monad (void)
 import Control.Monad.Writer (Writer, execWriter, tell, censor)
