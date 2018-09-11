@@ -65,6 +65,7 @@ instance P'.ReflectEnum Label where
         "Label")
       ["Text", "DescriptorProtos", "FieldDescriptorProto", "Label.hs"]
       [(1, "LABEL_OPTIONAL"), (2, "LABEL_REQUIRED"), (3, "LABEL_REPEATED")]
+      Prelude'.True
 
 instance P'.TextType Label where
   tellT = P'.tellShow

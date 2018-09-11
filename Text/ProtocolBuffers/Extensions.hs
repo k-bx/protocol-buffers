@@ -35,9 +35,6 @@ import qualified Data.Foldable as F
 import Data.Map(Map)
 import qualified Data.Map as M
 import Data.Maybe(fromMaybe,isJust)
-#if __GLASGOW_HASKELL__ < 710
-import Data.Monoid(mappend,mconcat)
-#endif
 import Data.Sequence((|>),(><),viewl,ViewL(..))
 import qualified Data.Sequence as Seq(singleton,null,empty)
 import Data.Typeable(Typeable,typeOf,cast)

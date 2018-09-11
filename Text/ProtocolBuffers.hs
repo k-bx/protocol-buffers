@@ -47,6 +47,7 @@ module Text.ProtocolBuffers(
   , module Text.ProtocolBuffers.Reflections
   , module Text.ProtocolBuffers.TextMessage
   , module Text.ProtocolBuffers.WireMessage
+  , module Text.ProtocolBuffers.ProtoJSON
   ) where
 
 import Text.ProtocolBuffers.Basic
@@ -62,6 +63,7 @@ import Text.ProtocolBuffers.Reflections
   , KeyInfo,FieldInfo(..),DescriptorInfo(..),EnumInfo(..),ProtoInfo(..),makePNF )
 import Text.ProtocolBuffers.TextMessage
   ( messagePutText, messageGetText )
+import Text.ProtocolBuffers.ProtoJSON
 import Text.ProtocolBuffers.WireMessage
   ( Wire,Put,Get,runPut,runGet,runGetOnLazy
   , messageSize,messagePut,messageGet,messagePutM,messageGetM

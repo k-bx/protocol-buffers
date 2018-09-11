@@ -82,6 +82,7 @@ data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , storeUnknown :: Bool
                                      , lazyFields :: Bool
                                      , makeLenses :: Bool
+                                     , jsonInstances :: Bool
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
@@ -160,6 +161,7 @@ data OneofInfo = OneofInfo { oneofName :: ProtoName
 data EnumInfo = EnumInfo { enumName :: ProtoName
                          , enumFilePath :: [FilePath]
                          , enumValues :: [(EnumCode,String)] -- ^ The String is the Haskell name to write into the generated source files
+                         , enumJsonInstances :: Bool
                          }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 

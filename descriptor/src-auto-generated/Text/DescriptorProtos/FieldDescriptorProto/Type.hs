@@ -147,6 +147,7 @@ instance P'.ReflectEnum Type where
        (7, "TYPE_FIXED32"), (8, "TYPE_BOOL"), (9, "TYPE_STRING"), (10, "TYPE_GROUP"), (11, "TYPE_MESSAGE"), (12, "TYPE_BYTES"),
        (13, "TYPE_UINT32"), (14, "TYPE_ENUM"), (15, "TYPE_SFIXED32"), (16, "TYPE_SFIXED64"), (17, "TYPE_SINT32"),
        (18, "TYPE_SINT64")]
+      Prelude'.True
 
 instance P'.TextType Type where
   tellT = P'.tellShow

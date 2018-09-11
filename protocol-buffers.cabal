@@ -32,21 +32,23 @@ Library
                    Text.ProtocolBuffers.TextMessage
                    Text.ProtocolBuffers.Unknown
                    Text.ProtocolBuffers.WireMessage
+                   Text.ProtocolBuffers.ProtoJSON
 
-  build-depends: base >= 4.7.0 && < 5,
+  build-depends: base >= 4.9.0 && < 5,
+                 aeson >= 1.1.0.0,
                  array,
+                 base16-bytestring,
+                 text,
                  binary,
                  bytestring,
                  containers,
                  directory,
                  filepath,
                  mtl,
+                 vector,
                  parsec,
                  utf8-string,
                  syb
-  if !impl(ghc >= 8.0)
-    build-depends:
-      semigroups >= 0.11 && < 0.19
 
 -- Most of these are needed for protocol-buffers (Get and WireMessage.hs)
 -- Nothing especially hazardous in this list

@@ -61,6 +61,7 @@ instance P'.ReflectEnum CType where
    = P'.EnumInfo (P'.makePNF (P'.pack ".google.protobuf.FieldOptions.CType") ["Text"] ["DescriptorProtos", "FieldOptions"] "CType")
       ["Text", "DescriptorProtos", "FieldOptions", "CType.hs"]
       [(0, "STRING"), (1, "CORD"), (2, "STRING_PIECE")]
+      Prelude'.True
 
 instance P'.TextType CType where
   tellT = P'.tellShow

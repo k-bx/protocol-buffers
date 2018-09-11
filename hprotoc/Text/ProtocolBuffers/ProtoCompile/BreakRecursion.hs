@@ -116,9 +116,6 @@ import Data.Set(Set)
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections
-#if __GLASGOW_HASKELL__ < 710
-import Data.Monoid
-#endif
 
 import Debug.Trace(trace)
 

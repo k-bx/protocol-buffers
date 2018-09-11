@@ -13,6 +13,7 @@ module Text.ProtocolBuffers.Basic
   , isValidUTF8, toUtf8, utf8, uToString, uFromString
   ) where
 
+import Data.Aeson
 import Data.Bits(Bits)
 import Data.ByteString.Lazy(ByteString)
 import Data.Foldable as F(Foldable(foldl))
@@ -20,15 +21,14 @@ import Data.Generics(Data(..))
 import Data.Int(Int32,Int64)
 import Data.Ix(Ix)
 import Data.Semigroup (Semigroup(..))
-#if __GLASGOW_HASKELL__ < 710
-import Data.Monoid(Monoid(..))
-#endif
 import Data.Sequence(Seq,(><))
 import Data.Typeable(Typeable)
 import Data.Word(Word8,Word32,Word64)
 
 import qualified Data.ByteString.Lazy as L(unpack)
 import Data.ByteString.Lazy.UTF8 as U (toString,fromString)
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Encoding as TL
 
 -- Num instances are derived below for the purpose of getting fromInteger for case matching
 
@@ -58,6 +58,15 @@ instance Semigroup Utf8 where
 instance Monoid Utf8 where
   mempty = Utf8 mempty
   mappend = (<>)
+
+instance ToJSON Utf8 where
+    toJSON (Utf8 t) = toJSON (TL.decodeUtf8 t)
+
+instance FromJSON Utf8 where
+    parseJSON value =
+        case value of
+          String t -> return . Utf8 . TL.encodeUtf8 . TL.fromStrict $ t
+          _ -> fail ("Value " ++ show value ++ " is not a UTF-8 string")
 
 -- | 'WireTag' is the 32 bit value with the upper 29 bits being the
 -- 'FieldId' and the lower 3 bits being the 'WireType'

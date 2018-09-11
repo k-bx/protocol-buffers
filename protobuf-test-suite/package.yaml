@@ -19,6 +19,7 @@ tests:
       - protocol-buffers-descriptor
       - protobuf-test-suite
       - base
+      - aeson
       - text
       - containers
       - tasty

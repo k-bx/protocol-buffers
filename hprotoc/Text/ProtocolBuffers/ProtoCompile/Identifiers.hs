@@ -25,9 +25,6 @@ import Data.List hiding (uncons)
 import Data.Set(Set)
 import qualified Data.Set as S
 import Text.ProtocolBuffers.Basic
-#if __GLASGOW_HASKELL__ < 710
-import Data.Monoid
-#endif
 
 -- | Contains one identifier name
 newtype IName a = IName {iName::a} deriving (Show,Read,Eq,Ord)

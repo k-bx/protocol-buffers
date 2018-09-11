@@ -63,6 +63,7 @@ instance P'.ReflectEnum OptimizeMode where
       (P'.makePNF (P'.pack ".google.protobuf.FileOptions.OptimizeMode") ["Text"] ["DescriptorProtos", "FileOptions"] "OptimizeMode")
       ["Text", "DescriptorProtos", "FileOptions", "OptimizeMode.hs"]
       [(1, "SPEED"), (2, "CODE_SIZE"), (3, "LITE_RUNTIME")]
+      Prelude'.True
 
 instance P'.TextType OptimizeMode where
   tellT = P'.tellShow
