@@ -1190,9 +1190,10 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
 
 -- wireGet generation
 -- new for 1.5.7, rewriting this a great deal!
-        getCases = let param = if storeUnknown di
-                                 then Paren () (pvar "catch'Unknown" $$ lvar "update'Self")
-                                 else lvar "update'Self"
+        getCases = let handleUnknown = if storeUnknown di
+                                         then pvar "loadUnknown"
+                                         else pvar "discardUnknown"
+                       param = Paren () (pvar "catch'Unknown'" $$ handleUnknown $$ lvar "update'Self")
                    in UnGuardedRhs () $ cases (pvar "getBareMessageWith" $$ param)
                                            (pvar "getMessageWith" $$ param)
                                            (pvar "wireGetErr" $$ lvar "ft'")

@@ -4,7 +4,8 @@
 -- notice.  Importer beware.
 module Text.ProtocolBuffers.Unknown
   ( UnknownField(..),UnknownMessage(..),UnknownFieldValue(..)
-  , wireSizeUnknownField,wirePutUnknownField, wirePutUnknownFieldWithSize,catch'Unknown
+  , wireSizeUnknownField,wirePutUnknownField, wirePutUnknownFieldWithSize
+  , catch'Unknown, catch'Unknown', loadUnknown, discardUnknown
   ) where
 
 import qualified Data.ByteString.Lazy as L
@@ -56,14 +57,30 @@ wirePutUnknownFieldWithSize m =
   wirePutUnknownField m >> return (wireSizeUnknownField m)
 
 {-# INLINE catch'Unknown #-}
+-- | This is used by the generated code. Here for backwards compatibility.
+catch'Unknown :: (UnknownMessage a) => (WireTag -> a -> Get a) -> WireTag -> a -> Get a
+catch'Unknown = catch'Unknown' loadUnknown
+
+{-# INLINE catch'Unknown' #-}
+catch'Unknown' :: (WireTag -> a -> Get a) -> (WireTag -> a -> Get a) -> WireTag -> a -> Get a
+catch'Unknown' handleUnknown update'Self wire'Tag old'Self =
+    catchError (update'Self wire'Tag old'Self) (\_ -> handleUnknown wire'Tag old'Self)
+
+{-# INLINE loadUnknown #-}
 -- | This is used by the generated code
-catch'Unknown :: (Typeable a, UnknownMessage a) => (WireTag -> a -> Get a) -> (WireTag -> a -> Get a)
-catch'Unknown update'Self = \wire'Tag old'Self -> catchError (update'Self wire'Tag old'Self) (\_ -> loadUnknown wire'Tag old'Self)
-  where loadUnknown :: (Typeable a, UnknownMessage a) => WireTag -> a -> Get a
-        loadUnknown tag msg = do
-          let (fieldId,wireType) = splitWireTag tag
-              (UnknownField uf) = getUnknownField msg
-          bs <- wireGetFromWire fieldId wireType
-          let v' = seq bs $ UFV tag bs
-              uf' = seq v' $ uf |> v'
-          seq uf' $ return $ putUnknownField (UnknownField uf') msg
+loadUnknown :: (UnknownMessage a) => WireTag -> a -> Get a
+loadUnknown tag msg = do
+  let (fieldId,wireType) = splitWireTag tag
+      (UnknownField uf) = getUnknownField msg
+  bs <- wireGetFromWire fieldId wireType
+  let v' = seq bs $ UFV tag bs
+      uf' = seq v' $ uf |> v'
+  seq uf' $ return $ putUnknownField (UnknownField uf') msg
+
+{-# INLINE discardUnknown #-}
+-- | This is used by the generated code
+discardUnknown :: WireTag -> a -> Get a
+discardUnknown tag msg = do
+  let (fieldId,wireType) = splitWireTag tag
+  _bs <- wireGetFromWire fieldId wireType
+  return msg
