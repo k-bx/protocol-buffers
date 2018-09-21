@@ -928,12 +928,17 @@ instanceFromJSON di
                        , Qualifier () $ preludevar "return" $$ Paren () (preludevar "maybe" $$ defParse $$ modfun $$ lvar tmpVar)
                        ]
             in Generator () (patvar fldName) parseFieldCall''
+        updates =
+                (map (\fld -> FieldUpdate () (local (getFname fld)) (lvar (getFname fld))) flds) ++
+                (map (\oi -> FieldUpdate () (local (getOneofFname oi)) (lvar (getOneofFname oi))) os)
+        retVal =
+            case updates of
+              [] -> pvar "defaultValue"
+              (_:_) -> RecUpdate () (pvar "defaultValue") updates
         parseFun = Lambda () [patvar objVar] $ Do () $
             map getFieldValue flds ++
             map getOneofValue os ++
-            [ Qualifier () $ preludevar "return" $$ RecUpdate () (pvar "defaultValue") (
-                (map (\fld -> FieldUpdate () (local (getFname fld)) (lvar (getFname fld))) flds) ++
-                (map (\oi -> FieldUpdate () (local (getOneofFname oi)) (lvar (getOneofFname oi))) os)) ]
+            [ Qualifier () $ preludevar "return" $$ retVal ]
 
 instanceTextType :: DescriptorInfo -> Decl ()
 instanceTextType di
