@@ -12,7 +12,6 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.Text.Encoding as T
 
-{-# INLINE objectNoEmpty #-}
 objectNoEmpty :: [Pair] -> Value
 objectNoEmpty = object . filter (hasContent . snd)
     where
@@ -20,11 +19,9 @@ objectNoEmpty = object . filter (hasContent . snd)
       hasContent (Array xs) | V.null xs = False
       hasContent _ = True
 
-{-# INLINE toJSONShowWithPayload #-}
 toJSONShowWithPayload :: Show a => a -> Value
 toJSONShowWithPayload x = object [("payload", toJSON . show $ x)]
 
-{-# INLINE parseJSONReadWithPayload #-}
 parseJSONReadWithPayload :: Read a => String -> Value -> Parser a
 parseJSONReadWithPayload tyName = withObject tyName $ \o -> do
     t <- o .: "payload"
@@ -32,17 +29,14 @@ parseJSONReadWithPayload tyName = withObject tyName $ \o -> do
       Left e -> fail e
       Right res -> return res
 
-{-# INLINE parseJSONBool #-}
 parseJSONBool :: Value -> Parser Bool
 parseJSONBool (Bool b) = return b
 parseJSONBool (Number sci) = return (sci >= 1)
 parseJSONBool _ = fail "Expected Bool"
 
-{-# INLINE toJSONByteString #-}
 toJSONByteString :: ByteString -> Value
 toJSONByteString bs = object [("payload", String . T.decodeUtf8 . B16.encode . BL.toStrict $ bs)]
 
-{-# INLINE parseJSONByteString #-}
 parseJSONByteString :: Value -> Parser ByteString
 parseJSONByteString = withObject "bytes" $ \o -> do
     t <- o .: "payload"
