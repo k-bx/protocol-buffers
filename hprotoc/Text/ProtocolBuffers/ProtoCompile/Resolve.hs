@@ -581,7 +581,7 @@ mrmName s f a = do
   tell [(fqSelf,self)]
   return template'
 
--- Compute the nameMap that determine how to translate from proto names to haskell names
+-- | Compute the nameMap that determine how to translate from proto names to haskell names
 -- The loop oever makeNameMap uses the (optional) package name
 -- makeNameMaps is called from the run' routine in ProtoCompile.hs for both standalone and plugin use.
 -- hPrefix and hAs are command line controlled options.
@@ -600,12 +600,12 @@ makeNameMaps hPrefix hAs env = do
                                        Just p -> p
                                        Nothing -> hPrefix  -- this is the usual branch unless overridden on command line
   let (tl,tls) = getTLS env
-  (fdp:fdps) <- mapM top'FDP (tl:tls)
+  fdp <- top'FDP tl
+  fdps <- mapM top'FDP tls
   (NameMap tuple m) <- makeNameMap (getPrefix fdp) fdp
   let f (NameMap _ x) = x
   ms <- fmap (map f) . mapM (\y -> makeNameMap (getPrefix y) y) $ fdps
   let nameMap = (NameMap tuple (M.unions (m:ms)))
---  trace (show nameMap) $ 
   return nameMap
 
 -- | 'makeNameMap' conservatively checks its input.
@@ -1122,7 +1122,7 @@ interpretOptions name msg unos = do
       msg' = seq ef' (putExtField (ExtField ef') msg)
   return msg'
 
--- 'interpretOption' is called by 'interpretOptions'
+-- | 'interpretOption' is called by 'interpretOptions'
 -- The 'interpretOption' function is quite long because there are two things going on.
 -- The first is the actual type must be retrieved from the UninterpretedOption and encoded.
 -- The second is that messages/groups holding messages/groups ... holding the above must wrap this.
@@ -1133,7 +1133,9 @@ interpretOptions name msg unos = do
 interpretOption :: [IName String] -> D.UninterpretedOption -> RE (FieldId,ExtFieldValue)
 interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
                                 [] -> iFail $ "Empty name_part"
-                                (part:parts) -> go Nothing optName part parts
+                                (part:parts) -> do
+                                    (fieldId, raw) <- go Nothing optName part parts
+                                    return (fieldId, ExtFromWire raw)
  where
   iFail :: String -> RE a  -- needed by ghc-7.0.2
   iFail msg = do env <- ask
@@ -1143,7 +1145,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
                                  , "  message: "++msg ]
 
   -- This takes care of an intermediate message or group type
-  go :: Maybe Entity {- E'Message E'Group -} -> [IName String] -> D.NamePart -> [D.NamePart] -> RE (FieldId,ExtFieldValue)
+  go :: Maybe Entity {- E'Message E'Group -} -> [IName String] -> D.NamePart -> [D.NamePart] -> RE (FieldId,Seq EP)
   go mParent names (D.NamePart { D.NamePart.name_part = name
                                , D.NamePart.is_extension = isKey }) (next:rest) = do
     -- get entity (Field or Key) and the TYPE_*
@@ -1175,7 +1177,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
       E'Group {} -> return TYPE_GROUP
       _ -> iFail $ "Intermediate entry is not an E'Message or E'Group: "++show (eName entity)
     -- recursive call to get inner result
-    (fid',ExtFromWire raw') <- go (Just entity) (eName entity) next rest
+    (fid', raw') <- go (Just entity) (eName entity) next rest
     -- wrap old tag + inner result with outer info
     let tag@(WireTag tag') = mkWireTag fid' wt'
         (EP wt' bs') = Seq.index raw' 0
@@ -1189,7 +1191,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
                                      putLazyByteString bs'
                                      putVarUInt (succ (getWireTag (mkWireTag fid wt)))
                     _ -> fail $ "bug! raw with type "++show t++" should be impossible"
-    return (fid,ExtFromWire (Seq.singleton (EP wt bs)))
+    return (fid, Seq.singleton (EP wt bs))
 
   -- This takes care of the acutal value of the option, which must be a basic type
   go mParent names (D.NamePart { D.NamePart.name_part = name
@@ -1211,11 +1213,11 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
            Just TYPE_MESSAGE -> {- impossible -} iFail $ "Last entry was a TYPE_MESSAGE instead of concrete value type" -- impossible
            Just typeCode -> return typeCode
     -- Need to define a polymorphic 'done' to convert actual data type to its wire encoding
-    let done :: Wire v => v -> RE (FieldId,ExtFieldValue)
+    let done :: Wire v => v -> RE (FieldId,Seq EP)
         done v = let ft = FieldType (fromEnum t)
                      wt = toWireType ft
                      fid = fNumber fk
-                 in return (fid,ExtFromWire (Seq.singleton (EP wt (runPut (wirePut ft v)))))
+                 in return (fid, Seq.singleton (EP wt (runPut (wirePut ft v))))
     -- The actual type and value fed to 'done' depends on the values 't' and 'uno':
     case t of
       TYPE_ENUM -> -- Now must also also handle Message and Group
