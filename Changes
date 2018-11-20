@@ -1,5 +1,12 @@
 Newest at the top.
 
+2.4.12
+
+- New option to derive ToJSON/FromJSON
+- Fix build for GHC-8.6
+- Drop support for GHC-7.10
+- New testsuite
+
 2.4.11
 
 - pr #66. Attach deriving Typeable to data declaration in hs-boot files
