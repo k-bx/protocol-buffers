@@ -15,6 +15,7 @@ category:       Text
 extra-source-files: README,
                     google-proto-files/google/protobuf/descriptor.proto,
                     google-proto-files/google/protobuf/plugin.proto
+Tested-With: GHC == 8.0.2, GHC == 8.2.1, GHC == 8.4.2, GHC == 8.6.2
 source-repository head
   type: git
   location: git://github.com/k-bx/protocol-buffers.git

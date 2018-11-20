@@ -14,6 +14,7 @@ description:    Uses protocol-buffers package
 category:       Text
 data-files:     descriptor.proto
 extra-source-files: README
+Tested-With: GHC == 8.0.2, GHC == 8.2.1, GHC == 8.4.2, GHC == 8.6.2
 source-repository head
   type: git
   location: git://github.com/k-bx/protocol-buffers.git

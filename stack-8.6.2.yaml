@@ -4,4 +4,4 @@ packages:
 - hprotoc/
 - protobuf-test-suite/
 extra-deps: []
-resolver: nightly-2018-10-13
+resolver: nightly-2018-11-20
