@@ -862,7 +862,7 @@ instanceToJSON di
         makePair fld =
             let fldName = getFname fld
                 fldName' = dropWhileEnd (== '\'') fldName
-                arg = Paren () (lvar fldName $$ lvar msgVar)
+                arg = Paren () (lvar (baseNamePrefix' (fieldName fld) ++ fldName) $$ lvar msgVar)
                 toJSONCall = case (isRequired fld, canRepeat fld) of
                     (True, False) -> toJSONFun fld $$ arg
                     (_, _) -> pvar "toJSON" $$ Paren () (preludevar "fmap" $$ toJSONFun fld $$ arg)
@@ -929,8 +929,8 @@ instanceFromJSON di
                        ]
             in Generator () (patvar fldName) parseFieldCall''
         updates =
-                (map (\fld -> FieldUpdate () (local (getFname fld)) (lvar (getFname fld))) flds) ++
-                (map (\oi -> FieldUpdate () (local (getOneofFname oi)) (lvar (getOneofFname oi))) os)
+                (map (\fld -> FieldUpdate () (local (baseNamePrefix' (fieldName fld) ++ getFname fld)) (lvar (getFname fld))) flds) ++
+                (map (\oi -> FieldUpdate () (local (baseNamePrefix' (oneofFName oi) ++ getOneofFname oi)) (lvar (getOneofFname oi))) os)
         retVal =
             case updates of
               [] -> pvar "defaultValue"
