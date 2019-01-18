@@ -22,6 +22,7 @@ import Data.Int(Int32,Int64)
 import Data.Ix(Ix)
 import Data.Semigroup (Semigroup(..))
 import Data.Sequence(Seq,(><))
+import Data.String (IsString(..))
 import Data.Typeable(Typeable)
 import Data.Word(Word8,Word32,Word64)
 
@@ -51,6 +52,9 @@ instance Show Utf8 where
   showsPrec d (Utf8 bs) = let s :: Int -> String -> ShowS
                               s = showsPrec
                           in s d (U.toString bs)
+
+instance IsString Utf8 where
+  fromString = uFromString
 
 instance Semigroup Utf8 where
   (<>) (Utf8 x) (Utf8 y) = Utf8 (x <> y)
