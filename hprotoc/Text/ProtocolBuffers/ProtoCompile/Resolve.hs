@@ -1190,7 +1190,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
                     TYPE_GROUP -> do putVarUInt tag'
                                      putLazyByteString bs'
                                      putVarUInt (succ (getWireTag (mkWireTag fid wt)))
-                    _ -> fail $ "bug! raw with type "++show t++" should be impossible"
+                    _ -> error $ "bug! raw with type "++show t++" should be impossible"
     return (fid, Seq.singleton (EP wt bs))
 
   -- This takes care of the acutal value of the option, which must be a basic type
@@ -1370,7 +1370,7 @@ loadProto' fdpReader protoFile = goState (load Set.empty protoFile) where
             return global'env
 
 loadFailed :: (Monad m) => LocalFP -> String -> m a
-loadFailed f msg = fail . unlines $ ["Parsing proto:",show (unLocalFP f),"has failed with message",msg]
+loadFailed f msg = error . unlines $ ["Parsing proto:",show (unLocalFP f),"has failed with message",msg]
 
 -- | Given a list of paths to search, loads proto files by
 -- looking for them in the file system.
