@@ -469,7 +469,7 @@ wireSizeErr :: Typeable a => FieldType -> a -> WireSize
 wireSizeErr ft x = error $ concat [ "Impossible? wireSize field type mismatch error: Field type number ", show ft
                                   , " does not match internal type ", show (typeOf x) ]
 wirePutErr :: Typeable a => FieldType -> a -> PutM b
-wirePutErr ft x = fail $ concat [ "Impossible? wirePut field type mismatch error: Field type number ", show ft
+wirePutErr ft x = error $ concat [ "Impossible? wirePut field type mismatch error: Field type number ", show ft
                                 , " does not match internal type ", show (typeOf x) ]
 wireGetErr :: Typeable a => FieldType -> Get a
 wireGetErr ft = answer where

@@ -75,6 +75,7 @@ import Control.Monad.Error.Class(MonadError(throwError,catchError),Error(strMsg)
 --import qualified Data.ByteString as S(unpack)    -- XXX testing
 --import qualified Data.ByteString.Lazy as L(pack) -- XXX testing
 import Control.Monad(ap)                             -- instead of Functor.fmap; ap for Applicative
+import qualified Control.Monad.Fail as Fail
 import Data.Bits(Bits((.|.),(.&.)),shiftL)
 import qualified Data.ByteString as S(concat,length,null,splitAt,findIndex)
 import qualified Data.ByteString.Internal as S(ByteString(..),toForeignPtr,inlinePerformIO)
@@ -784,6 +785,11 @@ instance Monad Get where
   {-# INLINE return #-}
   m >>= k  = Get (\sc -> unGet m (\ a -> seq a $ unGet (k a) sc))
   {-# INLINE (>>=) #-}
+#if !MIN_VERSION_base(4,11,0)
+  fail = Fail.fail
+#endif
+
+instance Fail.MonadFail Get where
   fail = throwError . strMsg
 
 instance MonadError String Get where

@@ -28,7 +28,7 @@
     The nameMap this computes is passed by run' to makeProtoInfo from MakeReflections
 
     The bug is being reported by main>runStandalon>loadStandalone>loadProto'>makeTopLevel>resolveFDP>fqFileDP>fqMessage>fqField>resolvePredEnv
-    
+
 
   entityField uses resolveMGE instead of expectMGE and resolveEnv : this should allow field types to resolve just to MGE insteadof other field names.
 
@@ -148,6 +148,7 @@ import Text.ProtocolBuffers.ProtoCompile.Instances
 import Text.ProtocolBuffers.ProtoCompile.Parser
 
 import Control.Applicative
+import qualified Control.Monad.Fail as Fail
 import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Reader
@@ -185,7 +186,7 @@ errMsg :: String -> String
 errMsg s = "Text.ProtocolBuffers.ProtoCompile.Resolve fatal error encountered, message:\n"++indent s
 
 err :: forall b. String -> b
-err = error . errMsg 
+err = error . errMsg
 
 throw :: (Error e, MonadError e m) =>  String -> m a
 throw s = throwError (strMsg (errMsg s))
@@ -465,7 +466,7 @@ resolvePredEnv userMessage accept nameU envIn = do
   lookupEnv xs (Local _ vals env) = filteredLookup vals xs <|> lookupEnv xs env
 
   lookupTopLevel :: PackageID [IName String] -> [IName String] -> TopLevel -> Maybe E'Entity
-  lookupTopLevel main xs tl = 
+  lookupTopLevel main xs tl =
     (if matchesMain main (top'Package tl) then filteredLookup (top'mVals tl) xs else Nothing)
     <|>
     (matchPrefix (top'Package tl) xs >>= filteredLookup (top'mVals tl))
@@ -647,7 +648,7 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
           fdps = D.DescriptorProto.field dp
           fdpss = map  (\i->Seq.filter ((== Just i) . D.FieldDescriptorProto.oneof_index) fdps) [0..]
 
-  
+
   mrmFile :: D.FileDescriptorProto -> MRM ()
   mrmFile fdp = do
     F.mapM_ mrmMsg     (D.FileDescriptorProto.message_type fdp)
@@ -660,7 +661,7 @@ makeNameMap hPrefix fdpIn = go (makeOne fdpIn) where
       F.mapM_ mrmEnum    (D.DescriptorProto.enum_type   dp)
       F.mapM_ mrmField   (D.DescriptorProto.extension   dp)
       F.mapM_ mrmField   (fieldNotOneof                 dp)
-      F.mapM_ mrmOneof   (oneofFieldMap                 dp)      
+      F.mapM_ mrmOneof   (oneofFieldMap                 dp)
       F.mapM_ mrmMsg     (D.DescriptorProto.nested_type dp)
   mrmField fdp = mrmName "mrmField.name" D.FieldDescriptorProto.name fdp
   mrmOneof (odp,fdps) = do
@@ -718,7 +719,7 @@ makeTopLevel fdp packageName imports = do
   let -- There should be no TYPE_GROUP in the extension list here, but to be safe:
       isGroup = (`elem` groupNames) where
         groupNamesRaw = map toString . mapMaybe D.FieldDescriptorProto.type_name
-                   . filter (maybe False (TYPE_GROUP ==) . D.FieldDescriptorProto.type') 
+                   . filter (maybe False (TYPE_GROUP ==) . D.FieldDescriptorProto.type')
                    $ (F.toList . D.FileDescriptorProto.extension $ fdp)
         groupNamesI = mapMaybe validI groupNamesRaw
         groupNamesDI = mapMaybe validDI groupNamesRaw  -- These fully qualified names from using hprotoc as a plugin for protoc
@@ -787,7 +788,7 @@ entityMsg isGroup dp = annErr ("entityMsg DescriptorProto name is "++show (D.Des
   when (Set.size numbers /= Seq.length (D.DescriptorProto.field dp)) $
     throwError $ "entityMsg.field.number: There must be duplicate field numbers for "++show names++"\n "++show numbers
   let groupNamesRaw = map toString . mapMaybe D.FieldDescriptorProto.type_name
-                      . filter (maybe False (TYPE_GROUP ==) . D.FieldDescriptorProto.type') 
+                      . filter (maybe False (TYPE_GROUP ==) . D.FieldDescriptorProto.type')
                       $ (F.toList . D.DescriptorProto.field $ dp) ++ (F.toList . D.DescriptorProto.extension $ dp)
       groupNamesI = mapMaybe validI groupNamesRaw
       groupNamesDI = mapMaybe validDI groupNamesRaw  -- These fully qualified names from using hprotoc as a plugin for protoc
@@ -989,7 +990,7 @@ fqField isKey fdp = annErr ("fqField FieldDescriptorProto name is "++show (D.Fie
   -- This has gotten more verbose with the addition of verifying packed is being used properly.
   actualType <- case (fType entity,mTypeName) of
                   (Just TYPE_GROUP, Just (E'Group {})) | isNotPacked fdp -> return TYPE_GROUP
-                                                       | otherwise -> 
+                                                       | otherwise ->
                     fqFail ("fqField.actualType : This Group is invalid, you cannot pack a group field.") fdp entity
                   (Nothing, Just (E'Message {})) | isNotPacked fdp -> return TYPE_MESSAGE
                                                  | otherwise ->
@@ -1029,9 +1030,9 @@ fqField isKey fdp = annErr ("fqField FieldDescriptorProto name is "++show (D.Fie
        isRepeated _ = False
 
        isNotPacked :: D.FieldDescriptorProto -> Bool
-       isNotPacked (D.FieldDescriptorProto { 
+       isNotPacked (D.FieldDescriptorProto {
                      D.FieldDescriptorProto.options =
-                      Just (D.FieldOptions { 
+                      Just (D.FieldOptions {
                              D.FieldOptions.packed =
                                Just isPacked })}) =
          not isPacked
@@ -1190,7 +1191,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
                     TYPE_GROUP -> do putVarUInt tag'
                                      putLazyByteString bs'
                                      putVarUInt (succ (getWireTag (mkWireTag fid wt)))
-                    _ -> fail $ "bug! raw with type "++show t++" should be impossible"
+                    _ -> error $ "bug! raw with type "++show t++" should be impossible"
     return (fid, Seq.singleton (EP wt bs))
 
   -- This takes care of the acutal value of the option, which must be a basic type
@@ -1245,7 +1246,7 @@ interpretOption optName uno = case F.toList (D.UninterpretedOption.name uno) of
         bs <- getJust "UninterpretedOption.string_value" (D.UninterpretedOption.string_value uno)
         maybe (done (Utf8 bs)) (\i -> iFail $ "Invalid utf8 in string_value at index: "++show i)
               (isValidUTF8 bs)
-          
+
       TYPE_BYTES    -> done =<< getJust "UninterpretedOption.string_value" (D.UninterpretedOption.string_value uno)
       TYPE_BOOL     -> done =<< bVal
       TYPE_DOUBLE   -> done =<< dVal
@@ -1324,8 +1325,8 @@ findFile paths (LocalFP target) = test paths where
 -- corresponding to it; returns also a canonicalised path.
 type DescriptorReader m = (Monad m) => LocalFP -> m (D.FileDescriptorProto, LocalFP)
 
-loadProto' :: (Functor r,Monad r) => DescriptorReader r -> LocalFP -> r (Env,[D.FileDescriptorProto])
-loadProto' fdpReader protoFile = goState (load Set.empty protoFile) where
+loadProto' :: (Functor r,Monad r) => (forall a. String -> StateT (Map LocalFP Env) r a) -> DescriptorReader r -> LocalFP -> r (Env,[D.FileDescriptorProto])
+loadProto' doFail fdpReader protoFile = goState (load Set.empty protoFile) where
   goState act = do (env,m) <- runStateT act mempty
                    let fromRight (Right x) = x
                        fromRight (Left s) = error $ "loadProto failed to resolve a FileDescriptorProto: "++s
@@ -1333,14 +1334,14 @@ loadProto' fdpReader protoFile = goState (load Set.empty protoFile) where
   load parentsIn file = do
     built <- get
     when (Set.member file parentsIn)
-         (loadFailed file (unlines ["imports failed: recursive loop detected"
+         (doFail $ loadFailed file (unlines ["imports failed: recursive loop detected"
                                    ,unlines . map show . M.assocs $ built,show parentsIn]))
     case M.lookup file built of  -- check memorized results
       Just result -> return result
       Nothing -> do
             (parsed'fdp, canonicalFile) <- lift $ fdpReader file
             let rawPackage = getPackage parsed'fdp
-            packageName <- either (loadFailed canonicalFile . show)
+            packageName <- either (doFail . loadFailed canonicalFile . show)
                                   (return . fmap (map iToString . snd)) -- 2012-09-19 suspicious
                                   (checkPackageID rawPackage)
 
@@ -1364,37 +1365,37 @@ loadProto' fdpReader protoFile = goState (load Set.empty protoFile) where
             imports <- mapM (fmap getTL . load parents) importList
             let eEnv = makeTopLevel parsed'fdp packageName imports -- makeTopLevel is the "internal entry point" of Resolve.hs
             -- Stricly force these two value to report errors here
-            global'env <- either (loadFailed file) return eEnv
-            _ <- either (loadFailed file) return (top'FDP . getTL $ global'env)
+            global'env <- either (doFail . loadFailed file) return eEnv
+            _ <- either (doFail . loadFailed file) return (top'FDP . getTL $ global'env)
             modify (M.insert file global'env) -- add to memorized results
             return global'env
 
-loadFailed :: (Monad m) => LocalFP -> String -> m a
-loadFailed f msg = fail . unlines $ ["Parsing proto:",show (unLocalFP f),"has failed with message",msg]
+loadFailed :: LocalFP -> String -> String
+loadFailed f msg = unlines $ ["Parsing proto:",show (unLocalFP f),"has failed with message",msg]
 
 -- | Given a list of paths to search, loads proto files by
 -- looking for them in the file system.
 loadProto :: [LocalFP] -> LocalFP -> IO (Env,[D.FileDescriptorProto])
-loadProto protoDirs protoFile = loadProto' findAndParseSource protoFile where
+loadProto protoDirs protoFile = loadProto' fail findAndParseSource protoFile where
       findAndParseSource :: DescriptorReader IO
       findAndParseSource file = do
         mayToRead <- liftIO $ findFile protoDirs file
         case mayToRead of
-          Nothing -> loadFailed file (unlines (["loading failed, could not find file: "++show (unLocalFP file)
+          Nothing -> fail $ loadFailed file (unlines (["loading failed, could not find file: "++show (unLocalFP file)
                                                ,"Searched paths were:"] ++ map (("  "++).show.unLocalFP) protoDirs))
           Just (toRead,relpath) -> do
             protoContents <- liftIO $ do putStrLn ("Loading filepath: "++show (unLocalFP toRead))
                                          LC.readFile (unLocalFP toRead)
-            parsed'fdp <- either (loadFailed toRead . show) return $
+            parsed'fdp <- either (fail . loadFailed toRead . show) return $
                           (parseProto (unCanonFP relpath) protoContents)
             return (parsed'fdp, toRead)
 
 loadCodeGenRequest :: CGR.CodeGeneratorRequest -> LocalFP -> (Env,[D.FileDescriptorProto])
-loadCodeGenRequest req protoFile = runIdentity $ loadProto' lookUpParsedSource protoFile where
+loadCodeGenRequest req protoFile = runIdentity $ loadProto' error lookUpParsedSource protoFile where
   lookUpParsedSource :: DescriptorReader Identity
   lookUpParsedSource file = case M.lookup file fdpsByName of
     Just result -> return (result, file)
-    Nothing -> loadFailed file ("Request refers to file: "++show (unLocalFP file)
+    Nothing -> error $ loadFailed file ("Request refers to file: "++show (unLocalFP file)
                                     ++" but it was not supplied in the request.")
   fdpsByName = M.fromList . map keyByName . F.toList . CGR.proto_file $ req
   keyByName fdp = (fdpName fdp, fdp)
