@@ -15,7 +15,7 @@ category:       Text
 extra-source-files: TODO
                     README.md
                     Changes
-Tested-With: GHC == 8.0.2, GHC == 8.2.1, GHC == 8.4.2, GHC == 8.6.2
+Tested-With: GHC == 8.0.2, GHC == 8.2.2, GHC == 8.4.2, GHC == 8.6.2, GHC == 8.8.4
 source-repository head
   type: git
   location: git://github.com/k-bx/protocol-buffers.git
