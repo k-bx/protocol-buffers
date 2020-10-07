@@ -3,5 +3,5 @@ packages:
 - descriptor/
 - hprotoc/
 - protobuf-test-suite/
+resolver: lts-11.22
 extra-deps: []
-resolver: nightly-2019-11-21
