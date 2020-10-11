@@ -1,40 +1,41 @@
+# https://nixos.wiki/wiki/Nix_on_Travis
+language: nix
 sudo: false
+os: linux
 dist: bionic
-language: generic
 
 cache:
   directories:
+  - $HOME/nix.store
   - $HOME/.stack
   - $HOME/.local/bin
 
+env:
+  - STACK_YAML=stack-8.0.2.yaml
+  - STACK_YAML=stack-8.2.2.yaml
+  - STACK_YAML=stack-8.4.2.yaml
+  - STACK_YAML=stack-8.6.2.yaml
+  - STACK_YAML=stack-8.8.4.yaml
+
 before_install:
-  # stack
-  - mkdir -p ~/.local/bin
-  - mkdir -p ~/tmp
-  - travis_retry eval $"sudo apt-get update ; sleep 10"
-  - travis_retry eval $"sudo apt-get install --yes libgmp-dev haskell-stack ; sleep 10"
-  - if [ ! -d "$DIR" ]; then mkdir -p ~/.local/bin; fi
-  - travis_retry eval $"stack upgrade --binary-only ; sleep 10"
-  - export PATH=~/.local/bin:$PATH
-  - hash -r
-  - stack --version
+  - sudo mkdir -p /etc/nix
+  - echo "substituters = https://cache.nixos.org/ file://$HOME/nix.store" | sudo tee -a /etc/nix/nix.conf > /dev/null
+  - echo 'require-sigs = false' | sudo tee -a /etc/nix/nix.conf > /dev/null
+  - nix-env -iA nixpkgs.stack
+
+before_cache:
+  - mkdir -p $HOME/nix.store
+  - nix copy --to file://$HOME/nix.store -f default.nix buildInputs
+
+before_script:
+  - sudo mkdir -p /etc/nix && echo 'sandbox = true' | sudo tee /etc/nix/nix.conf
 
 matrix:
   include:
-    - env: GHCVER=8.0.2 STACK_YAML=stack-8.0.2.yaml
-      addons: {apt: {packages: [ghc-8.0.2],sources: [hvr-ghc]}}
-    - env: GHCVER=8.2.2 STACK_YAML=stack-8.2.2.yaml
-      addons: {apt: {packages: [ghc-8.2.2],sources: [hvr-ghc]}}
-    - env: GHCVER=8.4.2 STACK_YAML=stack-8.4.2.yaml
-      addons: {apt: {packages: [ghc-8.4.2],sources: [hvr-ghc]}}
-    - env: GHCVER=8.6.2 STACK_YAML=stack-8.6.2.yaml
-      addons: {apt: {packages: [ghc-8.6.2],sources: [hvr-ghc]}}
-    - env: GHCVER=8.8.4 STACK_YAML=stack-8.8.4.yaml
-      addons: {apt: {packages: [ghc-8.8.4],sources: [hvr-ghc]}}
 
 install:
-  - stack --no-terminal --skip-ghc-check setup
-  - stack --no-terminal --skip-ghc-check install happy alex
+  - stack --no-terminal setup
+  - stack --no-terminal --resolver lts-16.18 install happy alex
 
 script:
   - rm -f stack.yaml
