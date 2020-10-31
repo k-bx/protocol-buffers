@@ -55,20 +55,20 @@ Executable hprotoc
                    Text.ProtocolBuffers.ProtoCompile.MakeReflections
                    Text.ProtocolBuffers.ProtoCompile.Parser
                    Text.ProtocolBuffers.ProtoCompile.Resolve
-  extensions:      DeriveDataTypeable,
-                   EmptyDataDecls,
-                   FlexibleContexts,
-                   FlexibleInstances,
-                   FunctionalDependencies,
-                   GADTs,
-                   GeneralizedNewtypeDeriving,
-                   MagicHash,
-                   MultiParamTypeClasses,
-                   PatternGuards,
-                   RankNTypes,
-                   RecursiveDo,
-                   ScopedTypeVariables,
-                   TypeSynonymInstances
+  default-extensions:  DeriveDataTypeable,
+                       EmptyDataDecls,
+                       FlexibleContexts,
+                       FlexibleInstances,
+                       FunctionalDependencies,
+                       GADTs,
+                       GeneralizedNewtypeDeriving,
+                       MagicHash,
+                       MultiParamTypeClasses,
+                       PatternGuards,
+                       RankNTypes,
+                       RecursiveDo,
+                       ScopedTypeVariables,
+                       TypeSynonymInstances
 
 Library
   build-depends:   protocol-buffers == 2.4.14,
@@ -104,17 +104,17 @@ Library
                    Text.ProtocolBuffers.ProtoCompile.Identifiers
                    Text.ProtocolBuffers.ProtoCompile.Instances
                    Text.ProtocolBuffers.ProtoCompile.Lexer
-  extensions:      DeriveDataTypeable,
-                   EmptyDataDecls,
-                   FlexibleContexts
-                   FlexibleInstances,
-                   FunctionalDependencies,
-                   GADTs,
-                   GeneralizedNewtypeDeriving,
-                   MagicHash,
-                   MultiParamTypeClasses,
-                   PatternGuards,
-                   RankNTypes,
-                   RecursiveDo,
-                   ScopedTypeVariables,
-                   TypeSynonymInstances
+  default-extensions:  DeriveDataTypeable,
+                       EmptyDataDecls,
+                       FlexibleContexts
+                       FlexibleInstances,
+                       FunctionalDependencies,
+                       GADTs,
+                       GeneralizedNewtypeDeriving,
+                       MagicHash,
+                       MultiParamTypeClasses,
+                       PatternGuards,
+                       RankNTypes,
+                       RecursiveDo,
+                       ScopedTypeVariables,
+                       TypeSynonymInstances

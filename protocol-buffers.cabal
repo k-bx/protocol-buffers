@@ -55,19 +55,19 @@ Library
 
 -- Most of these are needed for protocol-buffers (Get and WireMessage.hs)
 -- Nothing especially hazardous in this list
-  extensions:      BangPatterns,
-                   CPP,
-                   DeriveDataTypeable,
-                   EmptyDataDecls,
-                   FlexibleInstances,
-                   FunctionalDependencies,
-                   GADTs,
-                   GeneralizedNewtypeDeriving,
-                   MagicHash,
-                   MultiParamTypeClasses,
-                   PatternGuards,
-                   RankNTypes,
-                   RecordWildCards
-                   ScopedTypeVariables,
-                   StandaloneDeriving,
-                   TypeSynonymInstances
+  default-extensions:  BangPatterns,
+                       CPP,
+                       DeriveDataTypeable,
+                       EmptyDataDecls,
+                       FlexibleInstances,
+                       FunctionalDependencies,
+                       GADTs,
+                       GeneralizedNewtypeDeriving,
+                       MagicHash,
+                       MultiParamTypeClasses,
+                       PatternGuards,
+                       RankNTypes,
+                       RecordWildCards
+                       ScopedTypeVariables,
+                       StandaloneDeriving,
+                       TypeSynonymInstances

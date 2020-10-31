@@ -64,6 +64,6 @@ Library
                    Text.DescriptorProtos.UninterpretedOption
                    Text.DescriptorProtos.UninterpretedOption.NamePart
 
-  extensions:      DeriveDataTypeable,
-                   FlexibleInstances,
-                   MultiParamTypeClasses
+  default-extensions:  DeriveDataTypeable,
+                       FlexibleInstances,
+                       MultiParamTypeClasses
