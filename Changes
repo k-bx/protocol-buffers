@@ -1,5 +1,9 @@
 Newest at the top.
 
+2.4.14
+
+- Issue #89 defaultUserHooks in Setup.hs is deprecated
+
 2.4.13
 
 - Fix build for GHC-8.8
