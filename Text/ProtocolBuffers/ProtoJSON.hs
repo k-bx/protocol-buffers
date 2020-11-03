@@ -41,5 +41,5 @@ parseJSONByteString :: Value -> Parser ByteString
 parseJSONByteString = withObject "bytes" $ \o -> do
     t <- o .: "payload"
     case B16.decode (T.encodeUtf8 t) of
-      (bs, "") -> return (BL.fromStrict bs)
-      _ -> fail "Failed to parse base16."
+      Right bs -> return (BL.fromStrict bs)
+      Left err -> fail $ "Failed to parse base16: " <> err
