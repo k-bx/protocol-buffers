@@ -3,5 +3,6 @@ packages:
 - descriptor/
 - hprotoc/
 - protobuf-test-suite/
-extra-deps: []
+extra-deps:
+- base16-bytestring-1.0.0.0@sha256:0cde0953fa84b8f5214b07f00153197b883f6801f59f3de6da3f62a55992874c,2749
 resolver: nightly-2020-09-21
