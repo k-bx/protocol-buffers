@@ -31,6 +31,8 @@ matrix:
       addons: {apt: {packages: [ghc-8.6.2],sources: [hvr-ghc]}}
     - env: GHCVER=8.8.4 STACK_YAML=stack-8.8.4.yaml
       addons: {apt: {packages: [ghc-8.8.4],sources: [hvr-ghc]}}
+    - env: GHCVER=8.10.2 STACK_YAML=stack-8.10.2.yaml
+      addons: {apt: {packages: [ghc-8.8.4],sources: [hvr-ghc]}}
 
 install:
   - stack --no-terminal --skip-ghc-check setup
