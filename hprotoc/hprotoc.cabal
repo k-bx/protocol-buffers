@@ -1,5 +1,5 @@
 name:           hprotoc
-version:        2.4.15
+version:        2.4.16
 cabal-version:  >= 1.10
 build-type:     Simple
 license:        BSD3
@@ -22,8 +22,8 @@ source-repository head
 
 Executable hprotoc
   default-language: Haskell2010
-  build-depends:   protocol-buffers == 2.4.15,
-                   protocol-buffers-descriptor == 2.4.15
+  build-depends:   protocol-buffers == 2.4.16,
+                   protocol-buffers-descriptor == 2.4.16
   Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell
@@ -72,8 +72,8 @@ Executable hprotoc
 
 Library
   default-language: Haskell2010
-  build-depends:   protocol-buffers == 2.4.15,
-                   protocol-buffers-descriptor == 2.4.15
+  build-depends:   protocol-buffers == 2.4.16,
+                   protocol-buffers-descriptor == 2.4.16
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell
   build-tools:     alex

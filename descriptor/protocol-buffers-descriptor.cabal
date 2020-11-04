@@ -1,5 +1,5 @@
 name:           protocol-buffers-descriptor
-version:        2.4.15
+version:        2.4.16
 cabal-version:  >= 1.10
 build-type:     Simple
 license:        BSD3
@@ -25,7 +25,7 @@ source-repository head
 Library
   default-language: Haskell2010
   build-depends: base >= 4.9.0 && < 5,
-                 protocol-buffers == 2.4.15,
+                 protocol-buffers == 2.4.16,
                  bytestring,
                  containers
 

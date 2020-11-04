@@ -1,5 +1,9 @@
 Newest at the top.
 
+2.4.16
+
+- PR #93. Fix up a534ea to support older base16-bytestring again, via CPP
+
 2.4.15
 
 - PR #92. Allow newer haskell-src-exts and test for GHC-8.10.2
