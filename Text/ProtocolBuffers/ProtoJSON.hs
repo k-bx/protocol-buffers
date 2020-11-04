@@ -41,5 +41,10 @@ parseJSONByteString :: Value -> Parser ByteString
 parseJSONByteString = withObject "bytes" $ \o -> do
     t <- o .: "payload"
     case B16.decode (T.encodeUtf8 t) of
+#    if MIN_VERSION_base16_bytestring(1,0,0)
       Right bs -> return (BL.fromStrict bs)
       Left err -> fail $ "Failed to parse base16: " <> err
+#    else
+      (bs, "") -> return (BL.fromStrict bs)
+      _ -> fail "Failed to parse base16."
+#    endif
