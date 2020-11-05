@@ -1,5 +1,11 @@
 Newest at the top.
 
+2.4.17
+
+- PR #94. Change code generate for `mergeAppend` to avoid triggering GHC bug
+- Fixes generated code for GHC-8.10
+- Some more small improvements of the generated code
+
 2.4.16
 
 - PR #93. Fix up a534ea to support older base16-bytestring again, via CPP

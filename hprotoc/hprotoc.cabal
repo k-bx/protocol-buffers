@@ -1,5 +1,5 @@
 name:           hprotoc
-version:        2.4.16
+version:        2.4.17
 cabal-version:  >= 1.10
 build-type:     Simple
 license:        BSD3
@@ -15,15 +15,15 @@ category:       Text
 extra-source-files: README,
                     google-proto-files/google/protobuf/descriptor.proto,
                     google-proto-files/google/protobuf/plugin.proto
-Tested-With: GHC == 8.0.2, GHC == 8.2.1, GHC == 8.4.2, GHC == 8.6.2
+Tested-With: GHC == 8.0.2, GHC == 8.2.2, GHC == 8.4.2, GHC == 8.6.2, GHC == 8.8.4, GHC == 8.10.2
 source-repository head
   type: git
   location: git://github.com/k-bx/protocol-buffers.git
 
 Executable hprotoc
   default-language: Haskell2010
-  build-depends:   protocol-buffers == 2.4.16,
-                   protocol-buffers-descriptor == 2.4.16
+  build-depends:   protocol-buffers == 2.4.17,
+                   protocol-buffers-descriptor == 2.4.17
   Main-Is:         Text/ProtocolBuffers/ProtoCompile.hs
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell
@@ -72,8 +72,8 @@ Executable hprotoc
 
 Library
   default-language: Haskell2010
-  build-depends:   protocol-buffers == 2.4.16,
-                   protocol-buffers-descriptor == 2.4.16
+  build-depends:   protocol-buffers == 2.4.17,
+                   protocol-buffers-descriptor == 2.4.17
   Hs-Source-Dirs:  .,
                    protoc-gen-haskell
   build-tools:     alex
