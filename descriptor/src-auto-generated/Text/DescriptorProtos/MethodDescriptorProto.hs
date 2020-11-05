@@ -3,6 +3,7 @@
 module Text.DescriptorProtos.MethodDescriptorProto (MethodDescriptorProto(..)) where
 import Prelude ((+), (/), (++), (.))
 import qualified Prelude as Prelude'
+import qualified Data.List as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
@@ -114,7 +115,7 @@ instance P'.TextMsg MethodDescriptorProto where
                 (P'.choice
                   [parse'name, parse'input_type, parse'output_type, parse'options, parse'client_streaming, parse'server_streaming])
                 P'.spaces
-       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+       Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
         parse'name
          = P'.try

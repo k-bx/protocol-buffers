@@ -3,6 +3,7 @@
 module Text.DescriptorProtos.FileOptions (FileOptions(..)) where
 import Prelude ((+), (/), (++), (.), (==), (<=), (&&))
 import qualified Prelude as Prelude'
+import qualified Data.List as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
@@ -194,7 +195,7 @@ instance P'.TextMsg FileOptions where
                    parse'objc_class_prefix, parse'csharp_namespace, parse'javanano_use_deprecated_package,
                    parse'uninterpreted_option])
                 P'.spaces
-       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+       Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
         parse'java_package
          = P'.try

@@ -695,6 +695,7 @@ exportLenses di =
 minimalImports :: [ImportDecl ()]
 minimalImports =
   [ ImportDecl () (ModuleName () "Prelude") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
+  , ImportDecl () (ModuleName () "Data.List") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Data.Typeable") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Data.Data") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "GHC.Generics") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
@@ -704,6 +705,7 @@ standardImports :: Bool -> Bool -> Bool -> [ImportDecl ()]
 standardImports isEnumMod ext lenses =
   [ ImportDecl () (ModuleName () "Prelude") False False False Nothing Nothing (Just (ImportSpecList () False ops))
   , ImportDecl () (ModuleName () "Prelude") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
+  , ImportDecl () (ModuleName () "Data.List") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Data.Typeable") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "GHC.Generics") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Data.Data") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
@@ -975,7 +977,7 @@ instanceTextMsg di
                         $$ Paren () (pvar "choice" $$ List () (map (lvar . parserName) flds ++ map (lvar . parserNameO) os))
                         $$ pvar "spaces",
                 Qualifier () $ (preludevar "return")
-                    $$ Paren () (preludevar "foldl"
+                    $$ Paren () (preludevar "foldl'"
                         $$ Lambda () [patvar "v", patvar "f"] (lvar "f" $$ lvar "v")
                         $$ pvar "defaultValue"
                         $$ lvar "mods")

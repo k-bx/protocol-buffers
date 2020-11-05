@@ -3,6 +3,7 @@
 module Text.DescriptorProtos.FieldDescriptorProto (FieldDescriptorProto(..)) where
 import Prelude ((+), (/), (++), (.))
 import qualified Prelude as Prelude'
+import qualified Data.List as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
@@ -141,7 +142,7 @@ instance P'.TextMsg FieldDescriptorProto where
                   [parse'name, parse'number, parse'label, parse'type', parse'type_name, parse'extendee, parse'default_value,
                    parse'oneof_index, parse'json_name, parse'options])
                 P'.spaces
-       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+       Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
         parse'name
          = P'.try

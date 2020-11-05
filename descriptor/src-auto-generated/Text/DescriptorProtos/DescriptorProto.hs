@@ -3,6 +3,7 @@
 module Text.DescriptorProtos.DescriptorProto (DescriptorProto(..)) where
 import Prelude ((+), (/), (++), (.))
 import qualified Prelude as Prelude'
+import qualified Data.List as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
@@ -148,7 +149,7 @@ instance P'.TextMsg DescriptorProto where
                   [parse'name, parse'field, parse'extension, parse'nested_type, parse'enum_type, parse'extension_range,
                    parse'oneof_decl, parse'options, parse'reserved_range, parse'reserved_name])
                 P'.spaces
-       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+       Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
         parse'name
          = P'.try

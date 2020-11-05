@@ -3,6 +3,7 @@
 module Text.DescriptorProtos.UninterpretedOption.NamePart (NamePart(..)) where
 import Prelude ((+), (/), (++), (.))
 import qualified Prelude as Prelude'
+import qualified Data.List as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
@@ -84,7 +85,7 @@ instance P'.TextMsg NamePart where
   textGet
    = do
        mods <- P'.sepEndBy (P'.choice [parse'name_part, parse'is_extension]) P'.spaces
-       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+       Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
         parse'name_part
          = P'.try

@@ -3,6 +3,7 @@
 module Text.DescriptorProtos.FieldDescriptorProto.Type (Type(..)) where
 import Prelude ((+), (/), (.))
 import qualified Prelude as Prelude'
+import qualified Data.List as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'

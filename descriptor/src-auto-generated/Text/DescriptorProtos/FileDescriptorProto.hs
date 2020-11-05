@@ -3,6 +3,7 @@
 module Text.DescriptorProtos.FileDescriptorProto (FileDescriptorProto(..)) where
 import Prelude ((+), (/), (++), (.))
 import qualified Prelude as Prelude'
+import qualified Data.List as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
@@ -169,7 +170,7 @@ instance P'.TextMsg FileDescriptorProto where
                   [parse'name, parse'package, parse'dependency, parse'public_dependency, parse'weak_dependency, parse'message_type,
                    parse'enum_type, parse'service, parse'extension, parse'options, parse'source_code_info, parse'syntax])
                 P'.spaces
-       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+       Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
         parse'name
          = P'.try

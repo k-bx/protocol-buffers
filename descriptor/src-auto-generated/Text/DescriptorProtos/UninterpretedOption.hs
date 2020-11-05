@@ -3,6 +3,7 @@
 module Text.DescriptorProtos.UninterpretedOption (UninterpretedOption(..)) where
 import Prelude ((+), (/), (++), (.))
 import qualified Prelude as Prelude'
+import qualified Data.List as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
@@ -118,7 +119,7 @@ instance P'.TextMsg UninterpretedOption where
                   [parse'name, parse'identifier_value, parse'positive_int_value, parse'negative_int_value, parse'double_value,
                    parse'string_value, parse'aggregate_value])
                 P'.spaces
-       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+       Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
         parse'name
          = P'.try

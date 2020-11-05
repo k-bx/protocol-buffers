@@ -3,6 +3,7 @@
 module Text.DescriptorProtos.ServiceOptions (ServiceOptions(..)) where
 import Prelude ((+), (/), (++), (.), (==), (<=), (&&))
 import qualified Prelude as Prelude'
+import qualified Data.List as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
@@ -98,7 +99,7 @@ instance P'.TextMsg ServiceOptions where
   textGet
    = do
        mods <- P'.sepEndBy (P'.choice [parse'deprecated, parse'uninterpreted_option]) P'.spaces
-       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+       Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
         parse'deprecated
          = P'.try

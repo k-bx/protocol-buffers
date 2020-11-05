@@ -3,6 +3,7 @@
 module Text.DescriptorProtos.MessageOptions (MessageOptions(..)) where
 import Prelude ((+), (/), (++), (.), (==), (<=), (&&))
 import qualified Prelude as Prelude'
+import qualified Data.List as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
@@ -123,7 +124,7 @@ instance P'.TextMsg MessageOptions where
                   [parse'message_set_wire_format, parse'no_standard_descriptor_accessor, parse'deprecated, parse'map_entry,
                    parse'uninterpreted_option])
                 P'.spaces
-       Prelude'.return (Prelude'.foldl (\ v f -> f v) P'.defaultValue mods)
+       Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
         parse'message_set_wire_format
          = P'.try
