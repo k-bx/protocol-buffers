@@ -1041,8 +1041,10 @@ instanceMergeable :: DescriptorInfo -> Decl ()
 instanceMergeable di
     = InstDecl () Nothing (mkSimpleIRule (private "Mergeable") [TyCon () un]) . Just $
         [ -- inst "mergeEmpty" [] (foldl' App (Con un) (replicate len (pvar "mergeEmpty"))),
-          inst "mergeAppend" [PApp () un patternVars1, PApp () un patternVars2]
-                             (foldl' (App ()) (Con () un) (zipWith append vars1 vars2))
+          inst "mergeAppend" [PApp () un patternVars1, PApp () un patternVars2] $
+              Let ()
+                (BDecls () (zipWith3 append vars1 vars2 varNames3))
+                (foldl' (App ()) (Con () un) vars3)
         ]
   where un = unqualName (descName di)
         len = (if hasExt di then succ else id)
@@ -1058,7 +1060,10 @@ instanceMergeable di
             where inf = map (\ n -> lvar ("x'" ++ show n)) [(1::Int)..]
         vars2 = take len inf
             where inf = map (\ n -> lvar ("y'" ++ show n)) [(1::Int)..]
-        append x y = Paren () $ pvar "mergeAppend" $$ x $$ y
+        vars3 = map lvar varNames3
+        varNames3 = take len inf
+            where inf = map (\ n -> "z'" ++ show n) [(1::Int)..]
+        append x y z = defun ("!" ++ z) [] $ pvar "mergeAppend" $$ x $$ y
 
 instanceDefault :: DescriptorInfo -> Decl ()
 instanceDefault di

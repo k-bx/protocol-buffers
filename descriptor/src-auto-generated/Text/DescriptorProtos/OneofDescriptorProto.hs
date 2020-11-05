@@ -17,7 +17,9 @@ instance P'.UnknownMessage OneofDescriptorProto where
 
 instance P'.Mergeable OneofDescriptorProto where
   mergeAppend (OneofDescriptorProto x'1 x'2) (OneofDescriptorProto y'1 y'2)
-   = OneofDescriptorProto (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2)
+   = let !z'1 = P'.mergeAppend x'1 y'1
+         !z'2 = P'.mergeAppend x'2 y'2
+      in OneofDescriptorProto z'1 z'2
 
 instance P'.Default OneofDescriptorProto where
   defaultValue = OneofDescriptorProto P'.defaultValue P'.defaultValue

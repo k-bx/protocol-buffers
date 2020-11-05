@@ -22,7 +22,11 @@ instance P'.UnknownMessage EnumDescriptorProto where
 
 instance P'.Mergeable EnumDescriptorProto where
   mergeAppend (EnumDescriptorProto x'1 x'2 x'3 x'4) (EnumDescriptorProto y'1 y'2 y'3 y'4)
-   = EnumDescriptorProto (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
+   = let !z'1 = P'.mergeAppend x'1 y'1
+         !z'2 = P'.mergeAppend x'2 y'2
+         !z'3 = P'.mergeAppend x'3 y'3
+         !z'4 = P'.mergeAppend x'4 y'4
+      in EnumDescriptorProto z'1 z'2 z'3 z'4
 
 instance P'.Default EnumDescriptorProto where
   defaultValue = EnumDescriptorProto P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue

@@ -22,11 +22,15 @@ instance P'.UnknownMessage UninterpretedOption where
 
 instance P'.Mergeable UninterpretedOption where
   mergeAppend (UninterpretedOption x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8) (UninterpretedOption y'1 y'2 y'3 y'4 y'5 y'6 y'7 y'8)
-   = UninterpretedOption (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
-      (P'.mergeAppend x'5 y'5)
-      (P'.mergeAppend x'6 y'6)
-      (P'.mergeAppend x'7 y'7)
-      (P'.mergeAppend x'8 y'8)
+   = let !z'1 = P'.mergeAppend x'1 y'1
+         !z'2 = P'.mergeAppend x'2 y'2
+         !z'3 = P'.mergeAppend x'3 y'3
+         !z'4 = P'.mergeAppend x'4 y'4
+         !z'5 = P'.mergeAppend x'5 y'5
+         !z'6 = P'.mergeAppend x'6 y'6
+         !z'7 = P'.mergeAppend x'7 y'7
+         !z'8 = P'.mergeAppend x'8 y'8
+      in UninterpretedOption z'1 z'2 z'3 z'4 z'5 z'6 z'7 z'8
 
 instance P'.Default UninterpretedOption where
   defaultValue

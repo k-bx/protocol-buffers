@@ -25,8 +25,12 @@ instance P'.UnknownMessage EnumOptions where
 
 instance P'.Mergeable EnumOptions where
   mergeAppend (EnumOptions x'1 x'2 x'3 x'4 x'5) (EnumOptions y'1 y'2 y'3 y'4 y'5)
-   = EnumOptions (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
-      (P'.mergeAppend x'5 y'5)
+   = let !z'1 = P'.mergeAppend x'1 y'1
+         !z'2 = P'.mergeAppend x'2 y'2
+         !z'3 = P'.mergeAppend x'3 y'3
+         !z'4 = P'.mergeAppend x'4 y'4
+         !z'5 = P'.mergeAppend x'5 y'5
+      in EnumOptions z'1 z'2 z'3 z'4 z'5
 
 instance P'.Default EnumOptions where
   defaultValue = EnumOptions P'.defaultValue (Prelude'.Just Prelude'.False) P'.defaultValue P'.defaultValue P'.defaultValue

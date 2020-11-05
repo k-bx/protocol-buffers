@@ -19,9 +19,13 @@ instance P'.UnknownMessage Location where
 
 instance P'.Mergeable Location where
   mergeAppend (Location x'1 x'2 x'3 x'4 x'5 x'6) (Location y'1 y'2 y'3 y'4 y'5 y'6)
-   = Location (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
-      (P'.mergeAppend x'5 y'5)
-      (P'.mergeAppend x'6 y'6)
+   = let !z'1 = P'.mergeAppend x'1 y'1
+         !z'2 = P'.mergeAppend x'2 y'2
+         !z'3 = P'.mergeAppend x'3 y'3
+         !z'4 = P'.mergeAppend x'4 y'4
+         !z'5 = P'.mergeAppend x'5 y'5
+         !z'6 = P'.mergeAppend x'6 y'6
+      in Location z'1 z'2 z'3 z'4 z'5 z'6
 
 instance P'.Default Location where
   defaultValue = Location P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue P'.defaultValue

@@ -18,7 +18,10 @@ instance P'.UnknownMessage SourceCodeInfo where
   putUnknownField u'f msg = msg{unknown'field = u'f}
 
 instance P'.Mergeable SourceCodeInfo where
-  mergeAppend (SourceCodeInfo x'1 x'2) (SourceCodeInfo y'1 y'2) = SourceCodeInfo (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2)
+  mergeAppend (SourceCodeInfo x'1 x'2) (SourceCodeInfo y'1 y'2)
+   = let !z'1 = P'.mergeAppend x'1 y'1
+         !z'2 = P'.mergeAppend x'2 y'2
+      in SourceCodeInfo z'1 z'2
 
 instance P'.Default SourceCodeInfo where
   defaultValue = SourceCodeInfo P'.defaultValue P'.defaultValue

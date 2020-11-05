@@ -35,21 +35,25 @@ instance P'.UnknownMessage FileOptions where
 instance P'.Mergeable FileOptions where
   mergeAppend (FileOptions x'1 x'2 x'3 x'4 x'5 x'6 x'7 x'8 x'9 x'10 x'11 x'12 x'13 x'14 x'15 x'16 x'17 x'18)
    (FileOptions y'1 y'2 y'3 y'4 y'5 y'6 y'7 y'8 y'9 y'10 y'11 y'12 y'13 y'14 y'15 y'16 y'17 y'18)
-   = FileOptions (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
-      (P'.mergeAppend x'5 y'5)
-      (P'.mergeAppend x'6 y'6)
-      (P'.mergeAppend x'7 y'7)
-      (P'.mergeAppend x'8 y'8)
-      (P'.mergeAppend x'9 y'9)
-      (P'.mergeAppend x'10 y'10)
-      (P'.mergeAppend x'11 y'11)
-      (P'.mergeAppend x'12 y'12)
-      (P'.mergeAppend x'13 y'13)
-      (P'.mergeAppend x'14 y'14)
-      (P'.mergeAppend x'15 y'15)
-      (P'.mergeAppend x'16 y'16)
-      (P'.mergeAppend x'17 y'17)
-      (P'.mergeAppend x'18 y'18)
+   = let !z'1 = P'.mergeAppend x'1 y'1
+         !z'2 = P'.mergeAppend x'2 y'2
+         !z'3 = P'.mergeAppend x'3 y'3
+         !z'4 = P'.mergeAppend x'4 y'4
+         !z'5 = P'.mergeAppend x'5 y'5
+         !z'6 = P'.mergeAppend x'6 y'6
+         !z'7 = P'.mergeAppend x'7 y'7
+         !z'8 = P'.mergeAppend x'8 y'8
+         !z'9 = P'.mergeAppend x'9 y'9
+         !z'10 = P'.mergeAppend x'10 y'10
+         !z'11 = P'.mergeAppend x'11 y'11
+         !z'12 = P'.mergeAppend x'12 y'12
+         !z'13 = P'.mergeAppend x'13 y'13
+         !z'14 = P'.mergeAppend x'14 y'14
+         !z'15 = P'.mergeAppend x'15 y'15
+         !z'16 = P'.mergeAppend x'16 y'16
+         !z'17 = P'.mergeAppend x'17 y'17
+         !z'18 = P'.mergeAppend x'18 y'18
+      in FileOptions z'1 z'2 z'3 z'4 z'5 z'6 z'7 z'8 z'9 z'10 z'11 z'12 z'13 z'14 z'15 z'16 z'17 z'18
 
 instance P'.Default FileOptions where
   defaultValue

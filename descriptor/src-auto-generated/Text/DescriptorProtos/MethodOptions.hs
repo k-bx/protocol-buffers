@@ -25,7 +25,11 @@ instance P'.UnknownMessage MethodOptions where
 
 instance P'.Mergeable MethodOptions where
   mergeAppend (MethodOptions x'1 x'2 x'3 x'4) (MethodOptions y'1 y'2 y'3 y'4)
-   = MethodOptions (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3) (P'.mergeAppend x'4 y'4)
+   = let !z'1 = P'.mergeAppend x'1 y'1
+         !z'2 = P'.mergeAppend x'2 y'2
+         !z'3 = P'.mergeAppend x'3 y'3
+         !z'4 = P'.mergeAppend x'4 y'4
+      in MethodOptions z'1 z'2 z'3 z'4
 
 instance P'.Default MethodOptions where
   defaultValue = MethodOptions (Prelude'.Just Prelude'.False) P'.defaultValue P'.defaultValue P'.defaultValue

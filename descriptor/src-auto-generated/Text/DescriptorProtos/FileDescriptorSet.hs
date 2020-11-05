@@ -19,7 +19,9 @@ instance P'.UnknownMessage FileDescriptorSet where
 
 instance P'.Mergeable FileDescriptorSet where
   mergeAppend (FileDescriptorSet x'1 x'2) (FileDescriptorSet y'1 y'2)
-   = FileDescriptorSet (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2)
+   = let !z'1 = P'.mergeAppend x'1 y'1
+         !z'2 = P'.mergeAppend x'2 y'2
+      in FileDescriptorSet z'1 z'2
 
 instance P'.Default FileDescriptorSet where
   defaultValue = FileDescriptorSet P'.defaultValue P'.defaultValue

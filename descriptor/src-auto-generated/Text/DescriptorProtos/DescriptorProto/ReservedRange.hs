@@ -17,7 +17,10 @@ instance P'.UnknownMessage ReservedRange where
 
 instance P'.Mergeable ReservedRange where
   mergeAppend (ReservedRange x'1 x'2 x'3) (ReservedRange y'1 y'2 y'3)
-   = ReservedRange (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3)
+   = let !z'1 = P'.mergeAppend x'1 y'1
+         !z'2 = P'.mergeAppend x'2 y'2
+         !z'3 = P'.mergeAppend x'3 y'3
+      in ReservedRange z'1 z'2 z'3
 
 instance P'.Default ReservedRange where
   defaultValue = ReservedRange P'.defaultValue P'.defaultValue P'.defaultValue

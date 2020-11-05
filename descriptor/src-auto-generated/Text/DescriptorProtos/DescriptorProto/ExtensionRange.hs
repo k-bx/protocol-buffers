@@ -18,7 +18,10 @@ instance P'.UnknownMessage ExtensionRange where
 
 instance P'.Mergeable ExtensionRange where
   mergeAppend (ExtensionRange x'1 x'2 x'3) (ExtensionRange y'1 y'2 y'3)
-   = ExtensionRange (P'.mergeAppend x'1 y'1) (P'.mergeAppend x'2 y'2) (P'.mergeAppend x'3 y'3)
+   = let !z'1 = P'.mergeAppend x'1 y'1
+         !z'2 = P'.mergeAppend x'2 y'2
+         !z'3 = P'.mergeAppend x'3 y'3
+      in ExtensionRange z'1 z'2 z'3
 
 instance P'.Default ExtensionRange where
   defaultValue = ExtensionRange P'.defaultValue P'.defaultValue P'.defaultValue
