@@ -1,8 +1,9 @@
-{-# LANGUAGE BangPatterns, DeriveDataTypeable, DeriveGeneric, FlexibleInstances, MultiParamTypeClasses #-}
-{-# OPTIONS_GHC  -fno-warn-unused-imports #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, DeriveGeneric, FlexibleInstances, MultiParamTypeClasses, OverloadedStrings #-}
+{-# OPTIONS_GHC  -w #-}
 module Text.DescriptorProtos.FieldOptions.JSType (JSType(..)) where
 import Prelude ((+), (/), (.))
 import qualified Prelude as Prelude'
+import qualified Data.List as Prelude'
 import qualified Data.Typeable as Prelude'
 import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
@@ -62,7 +63,7 @@ instance P'.ReflectEnum JSType where
       (P'.makePNF (P'.pack ".google.protobuf.FieldOptions.JSType") ["Text"] ["DescriptorProtos", "FieldOptions"] "JSType")
       ["Text", "DescriptorProtos", "FieldOptions", "JSType.hs"]
       [(0, "JS_NORMAL"), (1, "JS_STRING"), (2, "JS_NUMBER")]
-      Prelude'.True
+      Prelude'.False
 
 instance P'.TextType JSType where
   tellT = P'.tellShow

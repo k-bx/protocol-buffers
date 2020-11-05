@@ -695,6 +695,7 @@ exportLenses di =
 minimalImports :: [ImportDecl ()]
 minimalImports =
   [ ImportDecl () (ModuleName () "Prelude") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
+  , ImportDecl () (ModuleName () "Data.List") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Data.Typeable") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Data.Data") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "GHC.Generics") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
@@ -704,6 +705,7 @@ standardImports :: Bool -> Bool -> Bool -> [ImportDecl ()]
 standardImports isEnumMod ext lenses =
   [ ImportDecl () (ModuleName () "Prelude") False False False Nothing Nothing (Just (ImportSpecList () False ops))
   , ImportDecl () (ModuleName () "Prelude") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
+  , ImportDecl () (ModuleName () "Data.List") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Data.Typeable") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "GHC.Generics") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Data.Data") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
@@ -975,7 +977,7 @@ instanceTextMsg di
                         $$ Paren () (pvar "choice" $$ List () (map (lvar . parserName) flds ++ map (lvar . parserNameO) os))
                         $$ pvar "spaces",
                 Qualifier () $ (preludevar "return")
-                    $$ Paren () (preludevar "foldl"
+                    $$ Paren () (preludevar "foldl'"
                         $$ Lambda () [patvar "v", patvar "f"] (lvar "f" $$ lvar "v")
                         $$ pvar "defaultValue"
                         $$ lvar "mods")
@@ -983,15 +985,13 @@ instanceTextMsg di
         parserName f = let Ident () fname = baseIdent' (fieldName f) in "parse'" ++ fname
         parserNameO o = let Ident () oname = baseIdent' (oneofFName o) in "parse'" ++ oname
         subparsers = map (\f -> defun (parserName f) [] (getField f)) flds
-        getField fi = let printname = toPrintName fi
-                          Ident () funcname = baseIdent' (fieldName fi)
-                          update = if canRepeat fi then pvar "append" $$ Paren () (lvar funcname $$ lvar "o") $$ lvar "v" else lvar "v"
-            in pvar "try" $$ Do () [
-                Generator () (patvar "v") $ pvar "getT" $$ litStr printname,
-                Qualifier () $ (preludevar "return")
-                    $$ Paren () (Lambda () [patvar "o"]
-                        (RecUpdate () (lvar "o") [ FieldUpdate () (local funcname) update]))
-            ]
+        getField fi =
+            let printname = toPrintName fi
+                Ident () funcname = baseIdent' (fieldName fi)
+                update = if canRepeat fi then pvar "append" $$ Paren () (lvar funcname $$ lvar "o") $$ lvar "v" else lvar "v"
+            in preludevar "fmap" $$
+                Paren () (Lambda () [patvar "v", patvar "o"] (RecUpdate () (lvar "o") [ FieldUpdate () (local funcname) update])) $$
+                Paren () (pvar "try" $$ Paren () (pvar "getT" $$ litStr printname))
 
         subparsersO = map funbind os
         funbind o = FunBind () [Match () (Ident () (parserNameO o)) [] (UnGuardedRhs () (getOneof)) whereParse]
@@ -1041,8 +1041,10 @@ instanceMergeable :: DescriptorInfo -> Decl ()
 instanceMergeable di
     = InstDecl () Nothing (mkSimpleIRule (private "Mergeable") [TyCon () un]) . Just $
         [ -- inst "mergeEmpty" [] (foldl' App (Con un) (replicate len (pvar "mergeEmpty"))),
-          inst "mergeAppend" [PApp () un patternVars1, PApp () un patternVars2]
-                             (foldl' (App ()) (Con () un) (zipWith append vars1 vars2))
+          inst "mergeAppend" [PApp () un patternVars1, PApp () un patternVars2] $
+              Let ()
+                (BDecls () (zipWith3 append vars1 vars2 varNames3))
+                (foldl' (App ()) (Con () un) vars3)
         ]
   where un = unqualName (descName di)
         len = (if hasExt di then succ else id)
@@ -1058,7 +1060,10 @@ instanceMergeable di
             where inf = map (\ n -> lvar ("x'" ++ show n)) [(1::Int)..]
         vars2 = take len inf
             where inf = map (\ n -> lvar ("y'" ++ show n)) [(1::Int)..]
-        append x y = Paren () $ pvar "mergeAppend" $$ x $$ y
+        vars3 = map lvar varNames3
+        varNames3 = take len inf
+            where inf = map (\ n -> "z'" ++ show n) [(1::Int)..]
+        append x y z = defun ("!" ++ z) [] $ pvar "mergeAppend" $$ x $$ y
 
 instanceDefault :: DescriptorInfo -> Decl ()
 instanceDefault di
