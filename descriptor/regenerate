@@ -1,0 +1,3 @@
+#!/bin/bash
+stack build hprotoc
+stack exec hprotoc -- --unknown_fields --as descriptor.proto=Text --haskell_out=src-auto-generated descriptor.proto

@@ -1,5 +1,5 @@
-{-# LANGUAGE BangPatterns, DeriveDataTypeable, DeriveGeneric, FlexibleInstances, MultiParamTypeClasses #-}
-{-# OPTIONS_GHC  -fno-warn-unused-imports #-}
+{-# LANGUAGE BangPatterns, DeriveDataTypeable, DeriveGeneric, FlexibleInstances, MultiParamTypeClasses, OverloadedStrings #-}
+{-# OPTIONS_GHC  -w #-}
 module Text.DescriptorProtos.FieldOptions.CType (CType(..)) where
 import Prelude ((+), (/), (.))
 import qualified Prelude as Prelude'
@@ -61,7 +61,7 @@ instance P'.ReflectEnum CType where
    = P'.EnumInfo (P'.makePNF (P'.pack ".google.protobuf.FieldOptions.CType") ["Text"] ["DescriptorProtos", "FieldOptions"] "CType")
       ["Text", "DescriptorProtos", "FieldOptions", "CType.hs"]
       [(0, "STRING"), (1, "CORD"), (2, "STRING_PIECE")]
-      Prelude'.True
+      Prelude'.False
 
 instance P'.TextType CType where
   tellT = P'.tellShow
