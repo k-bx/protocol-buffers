@@ -101,13 +101,7 @@ instance P'.TextMsg ServiceOptions where
        mods <- P'.sepEndBy (P'.choice [parse'deprecated, parse'uninterpreted_option]) P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'deprecated
-         = P'.try
-            (do
-               v <- P'.getT "deprecated"
-               Prelude'.return (\ o -> o{deprecated = v}))
+        parse'deprecated = Prelude'.fmap (\ v o -> o{deprecated = v}) (P'.try (P'.getT "deprecated"))
         parse'uninterpreted_option
-         = P'.try
-            (do
-               v <- P'.getT "uninterpreted_option"
-               Prelude'.return (\ o -> o{uninterpreted_option = P'.append (uninterpreted_option o) v}))
+         = Prelude'.fmap (\ v o -> o{uninterpreted_option = P'.append (uninterpreted_option o) v})
+            (P'.try (P'.getT "uninterpreted_option"))

@@ -106,18 +106,8 @@ instance P'.TextMsg EnumOptions where
        mods <- P'.sepEndBy (P'.choice [parse'allow_alias, parse'deprecated, parse'uninterpreted_option]) P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'allow_alias
-         = P'.try
-            (do
-               v <- P'.getT "allow_alias"
-               Prelude'.return (\ o -> o{allow_alias = v}))
-        parse'deprecated
-         = P'.try
-            (do
-               v <- P'.getT "deprecated"
-               Prelude'.return (\ o -> o{deprecated = v}))
+        parse'allow_alias = Prelude'.fmap (\ v o -> o{allow_alias = v}) (P'.try (P'.getT "allow_alias"))
+        parse'deprecated = Prelude'.fmap (\ v o -> o{deprecated = v}) (P'.try (P'.getT "deprecated"))
         parse'uninterpreted_option
-         = P'.try
-            (do
-               v <- P'.getT "uninterpreted_option"
-               Prelude'.return (\ o -> o{uninterpreted_option = P'.append (uninterpreted_option o) v}))
+         = Prelude'.fmap (\ v o -> o{uninterpreted_option = P'.append (uninterpreted_option o) v})
+            (P'.try (P'.getT "uninterpreted_option"))

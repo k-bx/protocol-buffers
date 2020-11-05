@@ -82,8 +82,4 @@ instance P'.TextMsg OneofDescriptorProto where
        mods <- P'.sepEndBy (P'.choice [parse'name]) P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'name
-         = P'.try
-            (do
-               v <- P'.getT "name"
-               Prelude'.return (\ o -> o{name = v}))
+        parse'name = Prelude'.fmap (\ v o -> o{name = v}) (P'.try (P'.getT "name"))

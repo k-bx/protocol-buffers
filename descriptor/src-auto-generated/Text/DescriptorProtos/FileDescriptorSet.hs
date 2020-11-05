@@ -84,8 +84,4 @@ instance P'.TextMsg FileDescriptorSet where
        mods <- P'.sepEndBy (P'.choice [parse'file]) P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'file
-         = P'.try
-            (do
-               v <- P'.getT "file"
-               Prelude'.return (\ o -> o{file = P'.append (file o) v}))
+        parse'file = Prelude'.fmap (\ v o -> o{file = P'.append (file o) v}) (P'.try (P'.getT "file"))

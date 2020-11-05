@@ -88,13 +88,5 @@ instance P'.TextMsg ExtensionRange where
        mods <- P'.sepEndBy (P'.choice [parse'start, parse'end]) P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'start
-         = P'.try
-            (do
-               v <- P'.getT "start"
-               Prelude'.return (\ o -> o{start = v}))
-        parse'end
-         = P'.try
-            (do
-               v <- P'.getT "end"
-               Prelude'.return (\ o -> o{end = v}))
+        parse'start = Prelude'.fmap (\ v o -> o{start = v}) (P'.try (P'.getT "start"))
+        parse'end = Prelude'.fmap (\ v o -> o{end = v}) (P'.try (P'.getT "end"))

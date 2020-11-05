@@ -985,15 +985,13 @@ instanceTextMsg di
         parserName f = let Ident () fname = baseIdent' (fieldName f) in "parse'" ++ fname
         parserNameO o = let Ident () oname = baseIdent' (oneofFName o) in "parse'" ++ oname
         subparsers = map (\f -> defun (parserName f) [] (getField f)) flds
-        getField fi = let printname = toPrintName fi
-                          Ident () funcname = baseIdent' (fieldName fi)
-                          update = if canRepeat fi then pvar "append" $$ Paren () (lvar funcname $$ lvar "o") $$ lvar "v" else lvar "v"
-            in pvar "try" $$ Do () [
-                Generator () (patvar "v") $ pvar "getT" $$ litStr printname,
-                Qualifier () $ (preludevar "return")
-                    $$ Paren () (Lambda () [patvar "o"]
-                        (RecUpdate () (lvar "o") [ FieldUpdate () (local funcname) update]))
-            ]
+        getField fi =
+            let printname = toPrintName fi
+                Ident () funcname = baseIdent' (fieldName fi)
+                update = if canRepeat fi then pvar "append" $$ Paren () (lvar funcname $$ lvar "o") $$ lvar "v" else lvar "v"
+            in preludevar "fmap" $$
+                Paren () (Lambda () [patvar "v", patvar "o"] (RecUpdate () (lvar "o") [ FieldUpdate () (local funcname) update])) $$
+                Paren () (pvar "try" $$ Paren () (pvar "getT" $$ litStr printname))
 
         subparsersO = map funbind os
         funbind o = FunBind () [Match () (Ident () (parserNameO o)) [] (UnGuardedRhs () (getOneof)) whereParse]

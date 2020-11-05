@@ -84,8 +84,4 @@ instance P'.TextMsg SourceCodeInfo where
        mods <- P'.sepEndBy (P'.choice [parse'location]) P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'location
-         = P'.try
-            (do
-               v <- P'.getT "location"
-               Prelude'.return (\ o -> o{location = P'.append (location o) v}))
+        parse'location = Prelude'.fmap (\ v o -> o{location = P'.append (location o) v}) (P'.try (P'.getT "location"))

@@ -121,38 +121,10 @@ instance P'.TextMsg UninterpretedOption where
                 P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'name
-         = P'.try
-            (do
-               v <- P'.getT "name"
-               Prelude'.return (\ o -> o{name = P'.append (name o) v}))
-        parse'identifier_value
-         = P'.try
-            (do
-               v <- P'.getT "identifier_value"
-               Prelude'.return (\ o -> o{identifier_value = v}))
-        parse'positive_int_value
-         = P'.try
-            (do
-               v <- P'.getT "positive_int_value"
-               Prelude'.return (\ o -> o{positive_int_value = v}))
-        parse'negative_int_value
-         = P'.try
-            (do
-               v <- P'.getT "negative_int_value"
-               Prelude'.return (\ o -> o{negative_int_value = v}))
-        parse'double_value
-         = P'.try
-            (do
-               v <- P'.getT "double_value"
-               Prelude'.return (\ o -> o{double_value = v}))
-        parse'string_value
-         = P'.try
-            (do
-               v <- P'.getT "string_value"
-               Prelude'.return (\ o -> o{string_value = v}))
-        parse'aggregate_value
-         = P'.try
-            (do
-               v <- P'.getT "aggregate_value"
-               Prelude'.return (\ o -> o{aggregate_value = v}))
+        parse'name = Prelude'.fmap (\ v o -> o{name = P'.append (name o) v}) (P'.try (P'.getT "name"))
+        parse'identifier_value = Prelude'.fmap (\ v o -> o{identifier_value = v}) (P'.try (P'.getT "identifier_value"))
+        parse'positive_int_value = Prelude'.fmap (\ v o -> o{positive_int_value = v}) (P'.try (P'.getT "positive_int_value"))
+        parse'negative_int_value = Prelude'.fmap (\ v o -> o{negative_int_value = v}) (P'.try (P'.getT "negative_int_value"))
+        parse'double_value = Prelude'.fmap (\ v o -> o{double_value = v}) (P'.try (P'.getT "double_value"))
+        parse'string_value = Prelude'.fmap (\ v o -> o{string_value = v}) (P'.try (P'.getT "string_value"))
+        parse'aggregate_value = Prelude'.fmap (\ v o -> o{aggregate_value = v}) (P'.try (P'.getT "aggregate_value"))

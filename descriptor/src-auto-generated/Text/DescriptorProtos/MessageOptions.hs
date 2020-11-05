@@ -127,27 +127,11 @@ instance P'.TextMsg MessageOptions where
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
         parse'message_set_wire_format
-         = P'.try
-            (do
-               v <- P'.getT "message_set_wire_format"
-               Prelude'.return (\ o -> o{message_set_wire_format = v}))
+         = Prelude'.fmap (\ v o -> o{message_set_wire_format = v}) (P'.try (P'.getT "message_set_wire_format"))
         parse'no_standard_descriptor_accessor
-         = P'.try
-            (do
-               v <- P'.getT "no_standard_descriptor_accessor"
-               Prelude'.return (\ o -> o{no_standard_descriptor_accessor = v}))
-        parse'deprecated
-         = P'.try
-            (do
-               v <- P'.getT "deprecated"
-               Prelude'.return (\ o -> o{deprecated = v}))
-        parse'map_entry
-         = P'.try
-            (do
-               v <- P'.getT "map_entry"
-               Prelude'.return (\ o -> o{map_entry = v}))
+         = Prelude'.fmap (\ v o -> o{no_standard_descriptor_accessor = v}) (P'.try (P'.getT "no_standard_descriptor_accessor"))
+        parse'deprecated = Prelude'.fmap (\ v o -> o{deprecated = v}) (P'.try (P'.getT "deprecated"))
+        parse'map_entry = Prelude'.fmap (\ v o -> o{map_entry = v}) (P'.try (P'.getT "map_entry"))
         parse'uninterpreted_option
-         = P'.try
-            (do
-               v <- P'.getT "uninterpreted_option"
-               Prelude'.return (\ o -> o{uninterpreted_option = P'.append (uninterpreted_option o) v}))
+         = Prelude'.fmap (\ v o -> o{uninterpreted_option = P'.append (uninterpreted_option o) v})
+            (P'.try (P'.getT "uninterpreted_option"))

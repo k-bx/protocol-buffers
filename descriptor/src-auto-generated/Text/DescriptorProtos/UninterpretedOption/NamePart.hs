@@ -87,13 +87,5 @@ instance P'.TextMsg NamePart where
        mods <- P'.sepEndBy (P'.choice [parse'name_part, parse'is_extension]) P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'name_part
-         = P'.try
-            (do
-               v <- P'.getT "name_part"
-               Prelude'.return (\ o -> o{name_part = v}))
-        parse'is_extension
-         = P'.try
-            (do
-               v <- P'.getT "is_extension"
-               Prelude'.return (\ o -> o{is_extension = v}))
+        parse'name_part = Prelude'.fmap (\ v o -> o{name_part = v}) (P'.try (P'.getT "name_part"))
+        parse'is_extension = Prelude'.fmap (\ v o -> o{is_extension = v}) (P'.try (P'.getT "is_extension"))

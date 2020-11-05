@@ -109,28 +109,10 @@ instance P'.TextMsg Location where
                 P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'path
-         = P'.try
-            (do
-               v <- P'.getT "path"
-               Prelude'.return (\ o -> o{path = P'.append (path o) v}))
-        parse'span
-         = P'.try
-            (do
-               v <- P'.getT "span"
-               Prelude'.return (\ o -> o{span = P'.append (span o) v}))
-        parse'leading_comments
-         = P'.try
-            (do
-               v <- P'.getT "leading_comments"
-               Prelude'.return (\ o -> o{leading_comments = v}))
-        parse'trailing_comments
-         = P'.try
-            (do
-               v <- P'.getT "trailing_comments"
-               Prelude'.return (\ o -> o{trailing_comments = v}))
+        parse'path = Prelude'.fmap (\ v o -> o{path = P'.append (path o) v}) (P'.try (P'.getT "path"))
+        parse'span = Prelude'.fmap (\ v o -> o{span = P'.append (span o) v}) (P'.try (P'.getT "span"))
+        parse'leading_comments = Prelude'.fmap (\ v o -> o{leading_comments = v}) (P'.try (P'.getT "leading_comments"))
+        parse'trailing_comments = Prelude'.fmap (\ v o -> o{trailing_comments = v}) (P'.try (P'.getT "trailing_comments"))
         parse'leading_detached_comments
-         = P'.try
-            (do
-               v <- P'.getT "leading_detached_comments"
-               Prelude'.return (\ o -> o{leading_detached_comments = P'.append (leading_detached_comments o) v}))
+         = Prelude'.fmap (\ v o -> o{leading_detached_comments = P'.append (leading_detached_comments o) v})
+            (P'.try (P'.getT "leading_detached_comments"))

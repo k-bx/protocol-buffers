@@ -151,53 +151,16 @@ instance P'.TextMsg DescriptorProto where
                 P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'name
-         = P'.try
-            (do
-               v <- P'.getT "name"
-               Prelude'.return (\ o -> o{name = v}))
-        parse'field
-         = P'.try
-            (do
-               v <- P'.getT "field"
-               Prelude'.return (\ o -> o{field = P'.append (field o) v}))
-        parse'extension
-         = P'.try
-            (do
-               v <- P'.getT "extension"
-               Prelude'.return (\ o -> o{extension = P'.append (extension o) v}))
-        parse'nested_type
-         = P'.try
-            (do
-               v <- P'.getT "nested_type"
-               Prelude'.return (\ o -> o{nested_type = P'.append (nested_type o) v}))
-        parse'enum_type
-         = P'.try
-            (do
-               v <- P'.getT "enum_type"
-               Prelude'.return (\ o -> o{enum_type = P'.append (enum_type o) v}))
+        parse'name = Prelude'.fmap (\ v o -> o{name = v}) (P'.try (P'.getT "name"))
+        parse'field = Prelude'.fmap (\ v o -> o{field = P'.append (field o) v}) (P'.try (P'.getT "field"))
+        parse'extension = Prelude'.fmap (\ v o -> o{extension = P'.append (extension o) v}) (P'.try (P'.getT "extension"))
+        parse'nested_type = Prelude'.fmap (\ v o -> o{nested_type = P'.append (nested_type o) v}) (P'.try (P'.getT "nested_type"))
+        parse'enum_type = Prelude'.fmap (\ v o -> o{enum_type = P'.append (enum_type o) v}) (P'.try (P'.getT "enum_type"))
         parse'extension_range
-         = P'.try
-            (do
-               v <- P'.getT "extension_range"
-               Prelude'.return (\ o -> o{extension_range = P'.append (extension_range o) v}))
-        parse'oneof_decl
-         = P'.try
-            (do
-               v <- P'.getT "oneof_decl"
-               Prelude'.return (\ o -> o{oneof_decl = P'.append (oneof_decl o) v}))
-        parse'options
-         = P'.try
-            (do
-               v <- P'.getT "options"
-               Prelude'.return (\ o -> o{options = v}))
+         = Prelude'.fmap (\ v o -> o{extension_range = P'.append (extension_range o) v}) (P'.try (P'.getT "extension_range"))
+        parse'oneof_decl = Prelude'.fmap (\ v o -> o{oneof_decl = P'.append (oneof_decl o) v}) (P'.try (P'.getT "oneof_decl"))
+        parse'options = Prelude'.fmap (\ v o -> o{options = v}) (P'.try (P'.getT "options"))
         parse'reserved_range
-         = P'.try
-            (do
-               v <- P'.getT "reserved_range"
-               Prelude'.return (\ o -> o{reserved_range = P'.append (reserved_range o) v}))
+         = Prelude'.fmap (\ v o -> o{reserved_range = P'.append (reserved_range o) v}) (P'.try (P'.getT "reserved_range"))
         parse'reserved_name
-         = P'.try
-            (do
-               v <- P'.getT "reserved_name"
-               Prelude'.return (\ o -> o{reserved_name = P'.append (reserved_name o) v}))
+         = Prelude'.fmap (\ v o -> o{reserved_name = P'.append (reserved_name o) v}) (P'.try (P'.getT "reserved_name"))

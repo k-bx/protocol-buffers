@@ -137,38 +137,12 @@ instance P'.TextMsg FieldOptions where
                 P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'ctype
-         = P'.try
-            (do
-               v <- P'.getT "ctype"
-               Prelude'.return (\ o -> o{ctype = v}))
-        parse'packed
-         = P'.try
-            (do
-               v <- P'.getT "packed"
-               Prelude'.return (\ o -> o{packed = v}))
-        parse'jstype
-         = P'.try
-            (do
-               v <- P'.getT "jstype"
-               Prelude'.return (\ o -> o{jstype = v}))
-        parse'lazy
-         = P'.try
-            (do
-               v <- P'.getT "lazy"
-               Prelude'.return (\ o -> o{lazy = v}))
-        parse'deprecated
-         = P'.try
-            (do
-               v <- P'.getT "deprecated"
-               Prelude'.return (\ o -> o{deprecated = v}))
-        parse'weak
-         = P'.try
-            (do
-               v <- P'.getT "weak"
-               Prelude'.return (\ o -> o{weak = v}))
+        parse'ctype = Prelude'.fmap (\ v o -> o{ctype = v}) (P'.try (P'.getT "ctype"))
+        parse'packed = Prelude'.fmap (\ v o -> o{packed = v}) (P'.try (P'.getT "packed"))
+        parse'jstype = Prelude'.fmap (\ v o -> o{jstype = v}) (P'.try (P'.getT "jstype"))
+        parse'lazy = Prelude'.fmap (\ v o -> o{lazy = v}) (P'.try (P'.getT "lazy"))
+        parse'deprecated = Prelude'.fmap (\ v o -> o{deprecated = v}) (P'.try (P'.getT "deprecated"))
+        parse'weak = Prelude'.fmap (\ v o -> o{weak = v}) (P'.try (P'.getT "weak"))
         parse'uninterpreted_option
-         = P'.try
-            (do
-               v <- P'.getT "uninterpreted_option"
-               Prelude'.return (\ o -> o{uninterpreted_option = P'.append (uninterpreted_option o) v}))
+         = Prelude'.fmap (\ v o -> o{uninterpreted_option = P'.append (uninterpreted_option o) v})
+            (P'.try (P'.getT "uninterpreted_option"))

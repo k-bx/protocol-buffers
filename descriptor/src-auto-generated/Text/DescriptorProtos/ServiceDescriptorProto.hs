@@ -98,18 +98,6 @@ instance P'.TextMsg ServiceDescriptorProto where
        mods <- P'.sepEndBy (P'.choice [parse'name, parse'method, parse'options]) P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'name
-         = P'.try
-            (do
-               v <- P'.getT "name"
-               Prelude'.return (\ o -> o{name = v}))
-        parse'method
-         = P'.try
-            (do
-               v <- P'.getT "method"
-               Prelude'.return (\ o -> o{method = P'.append (method o) v}))
-        parse'options
-         = P'.try
-            (do
-               v <- P'.getT "options"
-               Prelude'.return (\ o -> o{options = v}))
+        parse'name = Prelude'.fmap (\ v o -> o{name = v}) (P'.try (P'.getT "name"))
+        parse'method = Prelude'.fmap (\ v o -> o{method = P'.append (method o) v}) (P'.try (P'.getT "method"))
+        parse'options = Prelude'.fmap (\ v o -> o{options = v}) (P'.try (P'.getT "options"))

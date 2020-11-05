@@ -144,53 +144,13 @@ instance P'.TextMsg FieldDescriptorProto where
                 P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'name
-         = P'.try
-            (do
-               v <- P'.getT "name"
-               Prelude'.return (\ o -> o{name = v}))
-        parse'number
-         = P'.try
-            (do
-               v <- P'.getT "number"
-               Prelude'.return (\ o -> o{number = v}))
-        parse'label
-         = P'.try
-            (do
-               v <- P'.getT "label"
-               Prelude'.return (\ o -> o{label = v}))
-        parse'type'
-         = P'.try
-            (do
-               v <- P'.getT "type"
-               Prelude'.return (\ o -> o{type' = v}))
-        parse'type_name
-         = P'.try
-            (do
-               v <- P'.getT "type_name"
-               Prelude'.return (\ o -> o{type_name = v}))
-        parse'extendee
-         = P'.try
-            (do
-               v <- P'.getT "extendee"
-               Prelude'.return (\ o -> o{extendee = v}))
-        parse'default_value
-         = P'.try
-            (do
-               v <- P'.getT "default_value"
-               Prelude'.return (\ o -> o{default_value = v}))
-        parse'oneof_index
-         = P'.try
-            (do
-               v <- P'.getT "oneof_index"
-               Prelude'.return (\ o -> o{oneof_index = v}))
-        parse'json_name
-         = P'.try
-            (do
-               v <- P'.getT "json_name"
-               Prelude'.return (\ o -> o{json_name = v}))
-        parse'options
-         = P'.try
-            (do
-               v <- P'.getT "options"
-               Prelude'.return (\ o -> o{options = v}))
+        parse'name = Prelude'.fmap (\ v o -> o{name = v}) (P'.try (P'.getT "name"))
+        parse'number = Prelude'.fmap (\ v o -> o{number = v}) (P'.try (P'.getT "number"))
+        parse'label = Prelude'.fmap (\ v o -> o{label = v}) (P'.try (P'.getT "label"))
+        parse'type' = Prelude'.fmap (\ v o -> o{type' = v}) (P'.try (P'.getT "type"))
+        parse'type_name = Prelude'.fmap (\ v o -> o{type_name = v}) (P'.try (P'.getT "type_name"))
+        parse'extendee = Prelude'.fmap (\ v o -> o{extendee = v}) (P'.try (P'.getT "extendee"))
+        parse'default_value = Prelude'.fmap (\ v o -> o{default_value = v}) (P'.try (P'.getT "default_value"))
+        parse'oneof_index = Prelude'.fmap (\ v o -> o{oneof_index = v}) (P'.try (P'.getT "oneof_index"))
+        parse'json_name = Prelude'.fmap (\ v o -> o{json_name = v}) (P'.try (P'.getT "json_name"))
+        parse'options = Prelude'.fmap (\ v o -> o{options = v}) (P'.try (P'.getT "options"))

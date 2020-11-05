@@ -117,33 +117,9 @@ instance P'.TextMsg MethodDescriptorProto where
                 P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'name
-         = P'.try
-            (do
-               v <- P'.getT "name"
-               Prelude'.return (\ o -> o{name = v}))
-        parse'input_type
-         = P'.try
-            (do
-               v <- P'.getT "input_type"
-               Prelude'.return (\ o -> o{input_type = v}))
-        parse'output_type
-         = P'.try
-            (do
-               v <- P'.getT "output_type"
-               Prelude'.return (\ o -> o{output_type = v}))
-        parse'options
-         = P'.try
-            (do
-               v <- P'.getT "options"
-               Prelude'.return (\ o -> o{options = v}))
-        parse'client_streaming
-         = P'.try
-            (do
-               v <- P'.getT "client_streaming"
-               Prelude'.return (\ o -> o{client_streaming = v}))
-        parse'server_streaming
-         = P'.try
-            (do
-               v <- P'.getT "server_streaming"
-               Prelude'.return (\ o -> o{server_streaming = v}))
+        parse'name = Prelude'.fmap (\ v o -> o{name = v}) (P'.try (P'.getT "name"))
+        parse'input_type = Prelude'.fmap (\ v o -> o{input_type = v}) (P'.try (P'.getT "input_type"))
+        parse'output_type = Prelude'.fmap (\ v o -> o{output_type = v}) (P'.try (P'.getT "output_type"))
+        parse'options = Prelude'.fmap (\ v o -> o{options = v}) (P'.try (P'.getT "options"))
+        parse'client_streaming = Prelude'.fmap (\ v o -> o{client_streaming = v}) (P'.try (P'.getT "client_streaming"))
+        parse'server_streaming = Prelude'.fmap (\ v o -> o{server_streaming = v}) (P'.try (P'.getT "server_streaming"))

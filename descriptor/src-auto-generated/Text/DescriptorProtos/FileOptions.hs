@@ -197,83 +197,25 @@ instance P'.TextMsg FileOptions where
                 P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'java_package
-         = P'.try
-            (do
-               v <- P'.getT "java_package"
-               Prelude'.return (\ o -> o{java_package = v}))
-        parse'java_outer_classname
-         = P'.try
-            (do
-               v <- P'.getT "java_outer_classname"
-               Prelude'.return (\ o -> o{java_outer_classname = v}))
-        parse'java_multiple_files
-         = P'.try
-            (do
-               v <- P'.getT "java_multiple_files"
-               Prelude'.return (\ o -> o{java_multiple_files = v}))
+        parse'java_package = Prelude'.fmap (\ v o -> o{java_package = v}) (P'.try (P'.getT "java_package"))
+        parse'java_outer_classname = Prelude'.fmap (\ v o -> o{java_outer_classname = v}) (P'.try (P'.getT "java_outer_classname"))
+        parse'java_multiple_files = Prelude'.fmap (\ v o -> o{java_multiple_files = v}) (P'.try (P'.getT "java_multiple_files"))
         parse'java_generate_equals_and_hash
-         = P'.try
-            (do
-               v <- P'.getT "java_generate_equals_and_hash"
-               Prelude'.return (\ o -> o{java_generate_equals_and_hash = v}))
+         = Prelude'.fmap (\ v o -> o{java_generate_equals_and_hash = v}) (P'.try (P'.getT "java_generate_equals_and_hash"))
         parse'java_string_check_utf8
-         = P'.try
-            (do
-               v <- P'.getT "java_string_check_utf8"
-               Prelude'.return (\ o -> o{java_string_check_utf8 = v}))
-        parse'optimize_for
-         = P'.try
-            (do
-               v <- P'.getT "optimize_for"
-               Prelude'.return (\ o -> o{optimize_for = v}))
-        parse'go_package
-         = P'.try
-            (do
-               v <- P'.getT "go_package"
-               Prelude'.return (\ o -> o{go_package = v}))
-        parse'cc_generic_services
-         = P'.try
-            (do
-               v <- P'.getT "cc_generic_services"
-               Prelude'.return (\ o -> o{cc_generic_services = v}))
+         = Prelude'.fmap (\ v o -> o{java_string_check_utf8 = v}) (P'.try (P'.getT "java_string_check_utf8"))
+        parse'optimize_for = Prelude'.fmap (\ v o -> o{optimize_for = v}) (P'.try (P'.getT "optimize_for"))
+        parse'go_package = Prelude'.fmap (\ v o -> o{go_package = v}) (P'.try (P'.getT "go_package"))
+        parse'cc_generic_services = Prelude'.fmap (\ v o -> o{cc_generic_services = v}) (P'.try (P'.getT "cc_generic_services"))
         parse'java_generic_services
-         = P'.try
-            (do
-               v <- P'.getT "java_generic_services"
-               Prelude'.return (\ o -> o{java_generic_services = v}))
-        parse'py_generic_services
-         = P'.try
-            (do
-               v <- P'.getT "py_generic_services"
-               Prelude'.return (\ o -> o{py_generic_services = v}))
-        parse'deprecated
-         = P'.try
-            (do
-               v <- P'.getT "deprecated"
-               Prelude'.return (\ o -> o{deprecated = v}))
-        parse'cc_enable_arenas
-         = P'.try
-            (do
-               v <- P'.getT "cc_enable_arenas"
-               Prelude'.return (\ o -> o{cc_enable_arenas = v}))
-        parse'objc_class_prefix
-         = P'.try
-            (do
-               v <- P'.getT "objc_class_prefix"
-               Prelude'.return (\ o -> o{objc_class_prefix = v}))
-        parse'csharp_namespace
-         = P'.try
-            (do
-               v <- P'.getT "csharp_namespace"
-               Prelude'.return (\ o -> o{csharp_namespace = v}))
+         = Prelude'.fmap (\ v o -> o{java_generic_services = v}) (P'.try (P'.getT "java_generic_services"))
+        parse'py_generic_services = Prelude'.fmap (\ v o -> o{py_generic_services = v}) (P'.try (P'.getT "py_generic_services"))
+        parse'deprecated = Prelude'.fmap (\ v o -> o{deprecated = v}) (P'.try (P'.getT "deprecated"))
+        parse'cc_enable_arenas = Prelude'.fmap (\ v o -> o{cc_enable_arenas = v}) (P'.try (P'.getT "cc_enable_arenas"))
+        parse'objc_class_prefix = Prelude'.fmap (\ v o -> o{objc_class_prefix = v}) (P'.try (P'.getT "objc_class_prefix"))
+        parse'csharp_namespace = Prelude'.fmap (\ v o -> o{csharp_namespace = v}) (P'.try (P'.getT "csharp_namespace"))
         parse'javanano_use_deprecated_package
-         = P'.try
-            (do
-               v <- P'.getT "javanano_use_deprecated_package"
-               Prelude'.return (\ o -> o{javanano_use_deprecated_package = v}))
+         = Prelude'.fmap (\ v o -> o{javanano_use_deprecated_package = v}) (P'.try (P'.getT "javanano_use_deprecated_package"))
         parse'uninterpreted_option
-         = P'.try
-            (do
-               v <- P'.getT "uninterpreted_option"
-               Prelude'.return (\ o -> o{uninterpreted_option = P'.append (uninterpreted_option o) v}))
+         = Prelude'.fmap (\ v o -> o{uninterpreted_option = P'.append (uninterpreted_option o) v})
+            (P'.try (P'.getT "uninterpreted_option"))

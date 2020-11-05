@@ -96,18 +96,6 @@ instance P'.TextMsg EnumValueDescriptorProto where
        mods <- P'.sepEndBy (P'.choice [parse'name, parse'number, parse'options]) P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'name
-         = P'.try
-            (do
-               v <- P'.getT "name"
-               Prelude'.return (\ o -> o{name = v}))
-        parse'number
-         = P'.try
-            (do
-               v <- P'.getT "number"
-               Prelude'.return (\ o -> o{number = v}))
-        parse'options
-         = P'.try
-            (do
-               v <- P'.getT "options"
-               Prelude'.return (\ o -> o{options = v}))
+        parse'name = Prelude'.fmap (\ v o -> o{name = v}) (P'.try (P'.getT "name"))
+        parse'number = Prelude'.fmap (\ v o -> o{number = v}) (P'.try (P'.getT "number"))
+        parse'options = Prelude'.fmap (\ v o -> o{options = v}) (P'.try (P'.getT "options"))

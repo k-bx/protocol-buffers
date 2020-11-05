@@ -172,63 +172,18 @@ instance P'.TextMsg FileDescriptorProto where
                 P'.spaces
        Prelude'.return (Prelude'.foldl' (\ v f -> f v) P'.defaultValue mods)
     where
-        parse'name
-         = P'.try
-            (do
-               v <- P'.getT "name"
-               Prelude'.return (\ o -> o{name = v}))
-        parse'package
-         = P'.try
-            (do
-               v <- P'.getT "package"
-               Prelude'.return (\ o -> o{package = v}))
-        parse'dependency
-         = P'.try
-            (do
-               v <- P'.getT "dependency"
-               Prelude'.return (\ o -> o{dependency = P'.append (dependency o) v}))
+        parse'name = Prelude'.fmap (\ v o -> o{name = v}) (P'.try (P'.getT "name"))
+        parse'package = Prelude'.fmap (\ v o -> o{package = v}) (P'.try (P'.getT "package"))
+        parse'dependency = Prelude'.fmap (\ v o -> o{dependency = P'.append (dependency o) v}) (P'.try (P'.getT "dependency"))
         parse'public_dependency
-         = P'.try
-            (do
-               v <- P'.getT "public_dependency"
-               Prelude'.return (\ o -> o{public_dependency = P'.append (public_dependency o) v}))
+         = Prelude'.fmap (\ v o -> o{public_dependency = P'.append (public_dependency o) v}) (P'.try (P'.getT "public_dependency"))
         parse'weak_dependency
-         = P'.try
-            (do
-               v <- P'.getT "weak_dependency"
-               Prelude'.return (\ o -> o{weak_dependency = P'.append (weak_dependency o) v}))
+         = Prelude'.fmap (\ v o -> o{weak_dependency = P'.append (weak_dependency o) v}) (P'.try (P'.getT "weak_dependency"))
         parse'message_type
-         = P'.try
-            (do
-               v <- P'.getT "message_type"
-               Prelude'.return (\ o -> o{message_type = P'.append (message_type o) v}))
-        parse'enum_type
-         = P'.try
-            (do
-               v <- P'.getT "enum_type"
-               Prelude'.return (\ o -> o{enum_type = P'.append (enum_type o) v}))
-        parse'service
-         = P'.try
-            (do
-               v <- P'.getT "service"
-               Prelude'.return (\ o -> o{service = P'.append (service o) v}))
-        parse'extension
-         = P'.try
-            (do
-               v <- P'.getT "extension"
-               Prelude'.return (\ o -> o{extension = P'.append (extension o) v}))
-        parse'options
-         = P'.try
-            (do
-               v <- P'.getT "options"
-               Prelude'.return (\ o -> o{options = v}))
-        parse'source_code_info
-         = P'.try
-            (do
-               v <- P'.getT "source_code_info"
-               Prelude'.return (\ o -> o{source_code_info = v}))
-        parse'syntax
-         = P'.try
-            (do
-               v <- P'.getT "syntax"
-               Prelude'.return (\ o -> o{syntax = v}))
+         = Prelude'.fmap (\ v o -> o{message_type = P'.append (message_type o) v}) (P'.try (P'.getT "message_type"))
+        parse'enum_type = Prelude'.fmap (\ v o -> o{enum_type = P'.append (enum_type o) v}) (P'.try (P'.getT "enum_type"))
+        parse'service = Prelude'.fmap (\ v o -> o{service = P'.append (service o) v}) (P'.try (P'.getT "service"))
+        parse'extension = Prelude'.fmap (\ v o -> o{extension = P'.append (extension o) v}) (P'.try (P'.getT "extension"))
+        parse'options = Prelude'.fmap (\ v o -> o{options = v}) (P'.try (P'.getT "options"))
+        parse'source_code_info = Prelude'.fmap (\ v o -> o{source_code_info = v}) (P'.try (P'.getT "source_code_info"))
+        parse'syntax = Prelude'.fmap (\ v o -> o{syntax = v}) (P'.try (P'.getT "syntax"))
