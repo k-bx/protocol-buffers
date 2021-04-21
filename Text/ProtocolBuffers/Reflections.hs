@@ -14,6 +14,7 @@
 module Text.ProtocolBuffers.Reflections
   ( ProtoName(..),ProtoFName(..),ProtoInfo(..),DescriptorInfo(..),FieldInfo(..),KeyInfo
   , HsDefault(..),SomeRealFloat(..),EnumInfo(..),EnumInfoApp
+  , ServiceInfo(..), MethodInfo(..)
   , ReflectDescriptor(..),ReflectEnum(..),GetMessageInfo(..)
   , OneofInfo(..)
   , makePNF, toRF, fromRF
@@ -67,6 +68,7 @@ data ProtoInfo = ProtoInfo { protoMod :: ProtoName        -- ^ blank protobufNam
                            , messages :: [DescriptorInfo] -- ^ all messages and groups
                            , enums :: [EnumInfo]          -- ^ all enums
                            , oneofs :: [OneofInfo]
+                           , services :: [ServiceInfo]    -- ^ all services
                            , knownKeyMap :: Map ProtoName (Seq FieldInfo) -- all keys in namespace
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
@@ -74,7 +76,7 @@ data ProtoInfo = ProtoInfo { protoMod :: ProtoName        -- ^ blank protobufNam
 data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , descFilePath :: [FilePath]
                                      , isGroup :: Bool
-                                     , fields :: Seq FieldInfo
+                                     , fields :: Seq FieldInfo 
                                      , descOneofs :: Seq OneofInfo 
                                      , keys :: Seq KeyInfo
                                      , extRanges :: [(FieldId,FieldId)]
@@ -190,3 +192,15 @@ class ReflectDescriptor m where
                                                   [ wireTag f | f <- F.toList (knownKeys di)]
                                               }
   reflectDescriptorInfo :: m -> DescriptorInfo    -- ^ Must not inspect argument
+
+data ServiceInfo =
+  ServiceInfo { serviceName     :: ProtoName
+              , serviceMethods  :: [MethodInfo]
+              , serviceFilePath :: [FilePath]
+              } deriving (Show,Read,Eq,Ord,Data,Typeable)
+
+data MethodInfo =
+  MethodInfo { methodName   :: ProtoName
+             , methodInput  :: ProtoName
+             , methodOutput :: ProtoName
+             } deriving (Show,Read,Eq,Ord,Data,Typeable)

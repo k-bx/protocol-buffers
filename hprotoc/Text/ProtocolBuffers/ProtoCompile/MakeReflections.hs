@@ -25,6 +25,10 @@ import qualified Text.DescriptorProtos.EnumDescriptorProto            as D(EnumD
 import qualified Text.DescriptorProtos.EnumDescriptorProto            as D.EnumDescriptorProto(EnumDescriptorProto(..))
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D(EnumValueDescriptorProto)
 import qualified Text.DescriptorProtos.EnumValueDescriptorProto       as D.EnumValueDescriptorProto(EnumValueDescriptorProto(..))
+import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D(ServiceDescriptorProto)
+import qualified Text.DescriptorProtos.ServiceDescriptorProto         as D.ServiceDescriptorProto(ServiceDescriptorProto(..))
+import qualified Text.DescriptorProtos.MethodDescriptorProto          as D(MethodDescriptorProto)
+import qualified Text.DescriptorProtos.MethodDescriptorProto          as D.MethodDescriptorProto(MethodDescriptorProto(..))
 import qualified Text.DescriptorProtos.FieldDescriptorProto           as D(FieldDescriptorProto)
 import qualified Text.DescriptorProtos.FieldDescriptorProto           as D.FieldDescriptorProto(FieldDescriptorProto(..))
 -- import qualified Text.DescriptorProtos.FieldDescriptorProto.Label     as D.FieldDescriptorProto(Label)
@@ -77,7 +81,7 @@ makeProtoInfo :: (Bool,Bool,Bool,Bool) -- unknownField, lazyFields, lenses and j
               -> ProtoInfo
 makeProtoInfo (unknownField,lazyFieldsOpt,lenses,json) (NameMap (packageID,hPrefix,hParent) reMap)
               fdp@(D.FileDescriptorProto { D.FileDescriptorProto.name = Just rawName })
-     = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allOneofs allKeys where
+     = ProtoInfo protoName (pnPath protoName) (toString rawName) keyInfos allMessages allEnums allOneofs allServices allKeys where
   packageName = getPackageID packageID :: FIName (Utf8)
   protoName = case hParent of
                 [] -> case hPrefix of
@@ -90,6 +94,7 @@ makeProtoInfo (unknownField,lazyFieldsOpt,lenses,json) (NameMap (packageID,hPref
   allEnums = map (makeEnumInfo' reMap packageName json) (F.toList $ D.FileDescriptorProto.enum_type fdp)
              ++ concatMap (processENM packageName) (F.toList $ D.FileDescriptorProto.message_type fdp)
   allOneofs = concatMap (processONO packageName) (F.toList $ D.FileDescriptorProto.message_type fdp)
+  allServices = fmap (makeServiceInfo' reMap packageName) (F.toList $ D.FileDescriptorProto.service fdp)
   allKeys = M.fromListWith mappend . map (\(k,a) -> (k,Seq.singleton a))
             . F.toList . mconcat $ keyInfos : map keys allMessages
   processMSG parent msgIsGroup msg =
@@ -149,6 +154,34 @@ makeOneofInfo' reMap parent lenses parentProto
         fieldInfos = fmap (\x->(getFieldProtoName x,getFieldInfo x)) rawFieldsOneof
 makeOneofInfo' _ _ _ _ _ = imp "makeOneofInfo: missing name"
 
+
+makeServiceInfo' :: ReMap -> FIName Utf8 -> D.ServiceDescriptorProto -> ServiceInfo
+makeServiceInfo' reMap parent msg =
+  ServiceInfo { serviceName     = serviceName
+              , serviceMethods  = fmap (makeMethodInfo' reMap (protobufName serviceName)  parent) (F.toList methods)
+              , serviceFilePath = pnPath serviceName
+              }
+  where
+    serviceName = toHaskell reMap $ fqAppend parent [IName rawServiceName]
+    D.ServiceDescriptorProto.ServiceDescriptorProto
+      { D.ServiceDescriptorProto.name    = Just rawServiceName
+      , D.ServiceDescriptorProto.method  = methods
+      , D.ServiceDescriptorProto.options = options
+      } = msg
+
+makeMethodInfo' :: ReMap -> FIName Utf8 -> FIName Utf8 -> D.MethodDescriptorProto -> MethodInfo
+makeMethodInfo' reMap service packageName msg =
+  MethodInfo { methodName   = protoName
+             , methodInput  = toHaskell reMap . FIName $ rawInput
+             , methodOutput = toHaskell reMap . FIName $ rawOutput
+             }
+  where
+    protoName = toHaskell reMap $ fqAppend service [IName rawMethodName]
+    D.MethodDescriptorProto.MethodDescriptorProto
+      { D.MethodDescriptorProto.name        = Just rawMethodName
+      , D.MethodDescriptorProto.input_type  = Just rawInput
+      , D.MethodDescriptorProto.output_type = Just rawOutput
+      } = msg
 
 keyExtendee' :: ReMap -> D.FieldDescriptorProto.FieldDescriptorProto -> ProtoName
 keyExtendee' reMap f = case D.FieldDescriptorProto.extendee f of

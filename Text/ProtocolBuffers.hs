@@ -1,4 +1,4 @@
-{- | 
+{- |
 
 "Text.ProtocolBuffers" exposes the client API.  This merely re-exports parts of the
 other modules in protocol-buffers.  The exposed parts are:
@@ -45,6 +45,7 @@ module Text.ProtocolBuffers(
   , module Text.ProtocolBuffers.Extensions
   , module Text.ProtocolBuffers.Identifiers
   , module Text.ProtocolBuffers.Reflections
+  , module Text.ProtocolBuffers.Services
   , module Text.ProtocolBuffers.TextMessage
   , module Text.ProtocolBuffers.WireMessage
   , module Text.ProtocolBuffers.ProtoJSON
@@ -61,6 +62,8 @@ import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections
   ( ReflectDescriptor(..),ReflectEnum(..),ProtoName(..),HsDefault(..),EnumInfoApp
   , KeyInfo,FieldInfo(..),DescriptorInfo(..),EnumInfo(..),ProtoInfo(..),makePNF )
+import Text.ProtocolBuffers.Services
+  (MethodCxt, MethodHandler(..), methodName, serviceName, packageName, reifyMethods)
 import Text.ProtocolBuffers.TextMessage
   ( messagePutText, messageGetText )
 import Text.ProtocolBuffers.ProtoJSON
