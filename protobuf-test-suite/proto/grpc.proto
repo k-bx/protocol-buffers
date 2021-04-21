@@ -2,6 +2,9 @@ syntax = "proto2";
 
 service HelloService {
   rpc SayHello (HelloRequest) returns (HelloResponse);
+  rpc LotsOfReplies(HelloRequest) returns (stream HelloResponse);
+  rpc LotsOfGreetings(stream HelloRequest) returns (HelloResponse);
+  rpc BidiHello(stream HelloRequest) returns (stream HelloResponse);
 }
 
 message HelloRequest {
