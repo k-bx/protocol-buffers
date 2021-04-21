@@ -32,7 +32,6 @@ Library
                    Text.ProtocolBuffers.Header
                    Text.ProtocolBuffers.Identifiers
                    Text.ProtocolBuffers.Reflections
-                   Text.ProtocolBuffers.Services
                    Text.ProtocolBuffers.TextMessage
                    Text.ProtocolBuffers.Unknown
                    Text.ProtocolBuffers.WireMessage

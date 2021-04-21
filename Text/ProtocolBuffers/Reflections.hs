@@ -201,6 +201,8 @@ data ServiceInfo =
 
 data MethodInfo =
   MethodInfo { methodName   :: ProtoName
+             , methodClientStream :: Bool
              , methodInput  :: ProtoName
+             , methodServerStream  :: Bool
              , methodOutput :: ProtoName
              } deriving (Show,Read,Eq,Ord,Data,Typeable)

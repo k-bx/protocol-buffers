@@ -614,16 +614,17 @@ serviceDecls si' =
       ]
 
     methodDecl _si mi =
-      TypeDecl () (DHead () (methodTypeName mi))
-      ( TyApp ()
-        ( TyApp ()
-          ( TyApp () ( TyCon () (private "Method")) (
-              let s = toString (fiName (protobufName (methodName mi)))
-              in TyPromoted () (PromotedString () s (show s))))
-          ( TyCon () ( qualName (methodInput mi) ) )
-        )
-        ( TyCon () ( qualName (methodOutput mi)) )
-      )
+      TypeDecl () (DHead () (methodTypeName mi)) $
+      foldl' (TyApp ()) (TyCon () (private "Method"))
+        [ let s = toString (fiName (protobufName (methodName mi))) in TyPromoted () (PromotedString () s (show s))
+        , mkStreaming (methodClientStream mi) (methodInput mi)
+        , mkStreaming (methodServerStream mi) (methodOutput mi)
+        ]
+
+    mkStreaming streamFlag ty =
+      let streamTy = TyPromoted () (PromotedCon () False (private (if streamFlag then "StreamOf" else "Single")))
+          ty' = TyCon () (qualName ty)
+      in TyParen () (TyApp () streamTy ty')
 
     methodProxy _si mi =
       [ TypeSig () [methodProxyName mi] (TyCon () (UnQual () (methodTypeName mi)))

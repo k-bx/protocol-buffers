@@ -11,7 +11,7 @@ module Text.ProtocolBuffers.Basic
     -- * Some of the type classes implemented messages and fields
   , Mergeable(..),Default(..) -- ,Wire(..)
   , isValidUTF8, toUtf8, utf8, uToString, uFromString
-  , Service(..), Method(..)
+  , Service(..), Method(..), Streaming(..)
   ) where
 
 import Data.Aeson
@@ -242,8 +242,11 @@ uToString (Utf8 bs) = U.toString bs
 uFromString :: String -> Utf8
 uFromString s = Utf8 (U.fromString s)
 
+data Streaming a = StreamOf a | Single a
+  deriving (Typeable)
+
 -- | A descriptor for service methods.
-data Method (name :: Symbol) request response = Method
+data Method (name :: Symbol) (request :: Streaming *) (response :: Streaming *) = Method
                                               deriving (Typeable)
 
 -- | A proxy for services.

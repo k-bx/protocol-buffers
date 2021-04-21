@@ -172,14 +172,18 @@ makeServiceInfo' reMap parent msg =
 makeMethodInfo' :: ReMap -> FIName Utf8 -> FIName Utf8 -> D.MethodDescriptorProto -> MethodInfo
 makeMethodInfo' reMap service packageName msg =
   MethodInfo { methodName   = protoName
+             , methodClientStream = clientStream
              , methodInput  = toHaskell reMap . FIName $ rawInput
+             , methodServerStream = serverStream
              , methodOutput = toHaskell reMap . FIName $ rawOutput
              }
   where
     protoName = toHaskell reMap $ fqAppend service [IName rawMethodName]
     D.MethodDescriptorProto.MethodDescriptorProto
       { D.MethodDescriptorProto.name        = Just rawMethodName
+      , D.MethodDescriptorProto.client_streaming  = Just clientStream
       , D.MethodDescriptorProto.input_type  = Just rawInput
+      , D.MethodDescriptorProto.server_streaming  = Just serverStream
       , D.MethodDescriptorProto.output_type = Just rawOutput
       } = msg
 

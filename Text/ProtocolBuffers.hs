@@ -45,7 +45,6 @@ module Text.ProtocolBuffers(
   , module Text.ProtocolBuffers.Extensions
   , module Text.ProtocolBuffers.Identifiers
   , module Text.ProtocolBuffers.Reflections
-  , module Text.ProtocolBuffers.Services
   , module Text.ProtocolBuffers.TextMessage
   , module Text.ProtocolBuffers.WireMessage
   , module Text.ProtocolBuffers.ProtoJSON
@@ -54,7 +53,8 @@ module Text.ProtocolBuffers(
 import Text.ProtocolBuffers.Basic
   ( Seq,isValidUTF8,toUtf8,utf8,Utf8(Utf8),Int32,Int64,Word32,Word64
   , WireTag,FieldId,WireType,FieldType,EnumCode,WireSize
-  , Mergeable(mergeAppend,mergeConcat),Default(defaultValue))
+  , Mergeable(mergeAppend,mergeConcat),Default(defaultValue)
+  , Method(..), Service(..), Streaming(..))
 import Text.ProtocolBuffers.Extensions
   ( Key,ExtKey(getExt,putExt,clearExt),MessageAPI(getVal,isSet)
   , getKeyFieldId,getKeyFieldType,getKeyDefaultValue)
@@ -62,8 +62,6 @@ import Text.ProtocolBuffers.Identifiers
 import Text.ProtocolBuffers.Reflections
   ( ReflectDescriptor(..),ReflectEnum(..),ProtoName(..),HsDefault(..),EnumInfoApp
   , KeyInfo,FieldInfo(..),DescriptorInfo(..),EnumInfo(..),ProtoInfo(..),makePNF )
-import Text.ProtocolBuffers.Services
-  (MethodCxt, MethodHandler(..), methodName, serviceName, packageName, reifyMethods)
 import Text.ProtocolBuffers.TextMessage
   ( messagePutText, messageGetText )
 import Text.ProtocolBuffers.ProtoJSON
