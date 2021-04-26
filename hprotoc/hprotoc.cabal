@@ -49,7 +49,6 @@ Executable hprotoc
                    Text.Google.Protobuf.Compiler.CodeGeneratorResponse.File
                    Text.ProtocolBuffers.ProtoCompile.BreakRecursion
                    Text.ProtocolBuffers.ProtoCompile.Gen
-                   Text.ProtocolBuffers.ProtoCompile.Identifiers
                    Text.ProtocolBuffers.ProtoCompile.Instances
                    Text.ProtocolBuffers.ProtoCompile.Lexer
                    Text.ProtocolBuffers.ProtoCompile.MakeReflections
@@ -102,7 +101,6 @@ Library
                    Text.Google.Protobuf.Compiler.CodeGeneratorResponse.File
                    Text.ProtocolBuffers.ProtoCompile.BreakRecursion
                    Text.ProtocolBuffers.ProtoCompile.Gen
-                   Text.ProtocolBuffers.ProtoCompile.Identifiers
                    Text.ProtocolBuffers.ProtoCompile.Instances
                    Text.ProtocolBuffers.ProtoCompile.Lexer
   default-extensions:  DeriveDataTypeable,
