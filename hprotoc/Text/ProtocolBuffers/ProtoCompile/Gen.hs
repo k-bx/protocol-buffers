@@ -35,7 +35,7 @@ import Language.Haskell.Exts.Syntax as Hse
 import Data.Char(isLower,isUpper)
 import qualified Data.Map as M
 import Data.Maybe(mapMaybe)
-import Data.List (dropWhileEnd)
+import Data.List (dropWhileEnd, nub)
 import           Data.Sequence (ViewL(..),(><))
 import qualified Data.Sequence as Seq(null,length,viewl)
 import qualified Data.Set as S
@@ -557,13 +557,14 @@ hasExt di = not (null (extRanges di))
 serviceModule :: Result -> ServiceInfo -> Module ()
 serviceModule result si =
   Module () (Just (ModuleHead () moduleName Nothing (Just exports))) (modulePragmas False)
-    ( standardImports True False False ++
-      mapMaybe (importPN result moduleName Normal) (fmap methodInput (serviceMethods si)) ++
-      mapMaybe (importPN result moduleName Normal) (fmap methodOutput (serviceMethods si))
-    )
+    (nub imports)
     (serviceDecls si)
   where
     moduleName = ModuleName () (fqMod (serviceName si))
+    imports =
+      standardImports True False False ++
+      mapMaybe (importPN result moduleName Normal) (fmap methodInput (serviceMethods si)) ++
+      mapMaybe (importPN result moduleName Normal) (fmap methodOutput (serviceMethods si))
 
     exports :: ExportSpecList ()
     exports =
