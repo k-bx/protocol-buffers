@@ -1,4 +1,4 @@
-{-# LANGUAGE NamedFieldPuns, RecordWildCards, ViewPatterns, CPP #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, CPP #-}
 -- This module uses the Reflection data structures (ProtoInfo,EnumInfo,DescriptorInfo) to
 -- build an AST using Language.Haskell.Syntax.  This get quite verbose, so a large number
 -- of helper functions (and operators) are defined to aid in specifying the output code.
@@ -14,13 +14,13 @@
 -- The names are also assumed to have become fully-qualified, and all
 -- the optional type codes have been set.
 --
-module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,oneofModule,prettyPrint) where
+module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,oneofModule,serviceModule,prettyPrint) where
 
 import Text.DescriptorProtos.FieldDescriptorProto.Type hiding (Type)
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
-import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),DescriptorInfo(..),ProtoInfo(..),OneofInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..))
+import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),DescriptorInfo(..),ProtoInfo(..),OneofInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..),ServiceInfo(..),MethodInfo(..))
 
 import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(Result(..),VertexKind(..),pKey,pfKey,getKind,Part(..))
 
@@ -35,11 +35,12 @@ import Language.Haskell.Exts.Syntax as Hse
 import Data.Char(isLower,isUpper)
 import qualified Data.Map as M
 import Data.Maybe(mapMaybe)
-import Data.List (dropWhileEnd)
+import Data.List (dropWhileEnd, nub)
 import           Data.Sequence (ViewL(..),(><))
 import qualified Data.Sequence as Seq(null,length,viewl)
 import qualified Data.Set as S
 import System.FilePath(joinPath)
+import Data.Char (toLower)
 
 ecart :: String -> a -> a
 ecart _ x = x
@@ -309,7 +310,7 @@ oneofGet (p,fi) =
 modulePragmas :: Bool -> [ModulePragma ()]
 modulePragmas templateHaskell =
   [ LanguagePragma () (map (Ident ()) $
-      thPragma ++ ["BangPatterns","DeriveDataTypeable","DeriveGeneric","FlexibleInstances","MultiParamTypeClasses","OverloadedStrings"]
+      thPragma ++ ["BangPatterns", "DataKinds","DeriveDataTypeable","DeriveGeneric","FlexibleInstances","MultiParamTypeClasses","OverloadedStrings"]
     )
   , OptionsPragma () (Just GHC) " -w "
   ]
@@ -548,6 +549,88 @@ instanceReflectEnum ei
 
 hasExt :: DescriptorInfo -> Bool
 hasExt di = not (null (extRanges di))
+
+--------------------------------------------
+-- ServiceDescriptor module creation
+--------------------------------------------
+
+serviceModule :: Result -> ServiceInfo -> Module ()
+serviceModule result si =
+  Module () (Just (ModuleHead () moduleName Nothing (Just exports))) (modulePragmas False)
+    (nub imports)
+    (serviceDecls si)
+  where
+    moduleName = ModuleName () (fqMod (serviceName si))
+    imports =
+      standardImports True False False ++
+      mapMaybe (importPN result moduleName Normal) (fmap methodInput (serviceMethods si)) ++
+      mapMaybe (importPN result moduleName Normal) (fmap methodOutput (serviceMethods si))
+
+    exports :: ExportSpecList ()
+    exports =
+      ExportSpecList () (
+         [ mkAbs (UnQual () (serviceTypeName si))
+         , mkEvar (UnQual () (serviceProxyName si))
+         ]
+         ++ fmap (\mi -> mkAbs (UnQual () (methodTypeName mi))) (serviceMethods si)
+         ++ fmap (\mi -> mkEvar (UnQual () (methodProxyName mi))) (serviceMethods si)
+        )
+
+    mkAbs = EAbs () (NoNamespace ())
+    mkEvar = EVar ()
+
+
+serviceTypeName :: ServiceInfo -> Name ()
+serviceTypeName si = baseIdent (serviceName si)
+
+serviceProxyName :: ServiceInfo -> Name ()
+serviceProxyName si = Ident () (toLower s : sx)
+  where Ident () (s:sx) = baseIdent (serviceName si)
+
+methodProxyName :: MethodInfo -> Name ()
+methodProxyName mi = Ident () (toLower s : sx)
+  where Ident () (s:sx) = baseIdent (methodName mi)
+
+methodTypeName :: MethodInfo -> Name ()
+methodTypeName mi = Ident () s
+  where Ident _ s = baseIdent (methodName mi)
+
+serviceDecls :: ServiceInfo -> [Decl ()]
+serviceDecls si' =
+  [ serviceDecl si']
+  ++ serviceProxy si'
+  ++ fmap (methodDecl si') (serviceMethods si')
+  ++ concatMap (methodProxy si') (serviceMethods si')
+  where
+    serviceDecl si =
+      TypeDecl () (DHead () (serviceTypeName si)) (TyApp () (TyCon () (private "Service")) (
+        TyPromoted () (
+            PromotedList () True (fmap (\mx -> TyPromoted () (PromotedCon () False (UnQual () (methodTypeName mx)))) (serviceMethods si))
+                   )
+        ))
+
+    serviceProxy si =
+      [ TypeSig () [serviceProxyName si] (TyCon () (UnQual () (serviceTypeName si)))
+      , PatBind () (PVar () (serviceProxyName si)) (UnGuardedRhs () (Con () (private "Service"))) Nothing
+      ]
+
+    methodDecl _si mi =
+      TypeDecl () (DHead () (methodTypeName mi)) $
+      foldl' (TyApp ()) (TyCon () (private "Method"))
+        [ let s = toString (fiName (protobufName (methodName mi))) in TyPromoted () (PromotedString () s (show s))
+        , mkStreaming (methodClientStream mi) (methodInput mi)
+        , mkStreaming (methodServerStream mi) (methodOutput mi)
+        ]
+
+    mkStreaming streamFlag ty =
+      let streamTy = TyPromoted () (PromotedCon () False (private (if streamFlag then "StreamOf" else "Single")))
+          ty' = TyCon () (qualName ty)
+      in TyParen () (TyApp () streamTy ty')
+
+    methodProxy _si mi =
+      [ TypeSig () [methodProxyName mi] (TyCon () (UnQual () (methodTypeName mi)))
+      , PatBind () (PVar () (methodProxyName mi)) (UnGuardedRhs () (Con () (private "Method"))) Nothing -- (BDecls [])
+      ]
 
 --------------------------------------------
 -- FileDescriptorProto module creation

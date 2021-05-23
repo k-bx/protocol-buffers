@@ -32,6 +32,7 @@ tests:
       - Text.ProtocolBuffers.Test.QuickCheck
       - Text.ProtocolBuffers.Test.Tests
       - Text.ProtocolBuffers.Test.Tests.AddressBook
+      - Text.ProtocolBuffers.Test.Tests.Grpc
       - Text.ProtocolBuffers.Test.Tests.School
       - Text.ProtocolBuffers.Test.Tests.Films
 

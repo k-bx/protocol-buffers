@@ -307,7 +307,7 @@ instance Dotted String where
   validDI = validDIString
 
 err :: String -> a
-err s = error ("Text.ProtocolBuffers.ProtoCompile.Identifiers: "++s)
+err s = error ("Text.ProtocolBuffers.Identifiers: "++s)
 
 -- make leading upper case letter, and leanding "_" becomes "U'_"
 fixUp :: String -> String
