@@ -1309,10 +1309,10 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                 putStmtsList = concat . zipWith toPut vars . F.toList $
                                  fmap Left fieldInfos >< fmap Right oneofInfos
         toPut var0 (Left fi)
-          = let f = if | isPacked   fi -> "wirePutPacked"
-                       | isRequired fi -> "wirePutReq"
-                       | canRepeat  fi -> "wirePutRep"
-                       | otherwise     -> "wirePutOpt"
+          = let f = if | isPacked   fi -> "wirePutPackedWithSize"
+                       | isRequired fi -> "wirePutReqWithSize"
+                       | canRepeat  fi -> "wirePutRepWithSize"
+                       | otherwise     -> "wirePutOptWithSize"
             in
             -- Map -> Seq
             let fn = mapFieldHelperFn (fromJust $ typeName fi) "ToSeq" True in
