@@ -11,6 +11,7 @@ import qualified Data.Sequence as Seq
 import Data.Sequence (Seq)
 import qualified Data.ByteString.Lazy.Char8 as LB
 import Control.Applicative (liftA)
+import Data.Proxy
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Header
@@ -30,26 +31,7 @@ import HSCodeGen.Films.Talent (Talent(..))
 import HSCodeGen.Films.Talent.Person (Person(..))
 
 playlistQuickChecks :: TestTree
-playlistQuickChecks = testGroup "Film playlist QuickChecks"
-  [ QC.testProperty "Film playlist wire-encoded then decoded identity" $
-      \films -> maybe False (films ==) (roundTripWireEncodeDecode films)
-  , QC.testProperty "Film playlist json-encoded then decoded identity" $
-      \films -> maybe False (films ==) (roundTripJsonEncodeDecode films)
-  ]
-
-roundTripWireEncodeDecode :: Playlist -> Maybe Playlist
-roundTripWireEncodeDecode playlist =
-  let encoded = messagePut playlist
-  in case messageGet encoded of
-       Right (result, "") -> Just result
-       _ -> Nothing
-
-roundTripJsonEncodeDecode :: Playlist -> Maybe Playlist
-roundTripJsonEncodeDecode playlist =
-  let encoded = J.toJSON playlist
-  in case J.fromJSON encoded of
-       J.Success result -> Just result
-       _ -> Nothing
+playlistQuickChecks = quickCheckTests "Film" (Proxy :: Proxy Playlist)
 
 instance Arbitrary Person where
   arbitrary = Person <$> arbitrary

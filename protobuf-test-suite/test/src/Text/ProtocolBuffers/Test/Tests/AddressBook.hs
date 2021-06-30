@@ -9,6 +9,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?), (@?=))
 import Test.Tasty.QuickCheck as QC
 import Test.QuickCheck ()
+import Data.Proxy
 
 import qualified Data.Aeson as J
 import qualified Data.Sequence as Seq
@@ -28,6 +29,7 @@ import HSCodeGen.AddressBookProtos.AddressBook        (AddressBook(..))
 import HSCodeGen.AddressBookProtos.Person             (Person(..))
 import HSCodeGen.AddressBookProtos.Person.PhoneNumber (PhoneNumber(..))
 import HSCodeGen.AddressBookProtos.Person.PhoneType   (PhoneType(..))
+import Text.ProtocolBuffers.Test.QuickCheck (quickCheckTests)
 
 addressBookTests :: TestTree
 addressBookTests = testGroup "Address book tests"

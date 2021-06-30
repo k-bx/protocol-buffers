@@ -1,0 +1,16 @@
+syntax = "proto2";
+
+message value_type {
+    required string content = 1;
+}
+
+message WithMap {
+    map<string, value_type> map_field = 1;
+    map<int32, int32> another_map_field = 2;
+    optional string string_field = 3;
+    required int32 required_int_field = 4;
+}
+
+message WrappedMap {
+    required WithMap fullOfMaps = 1;
+}
