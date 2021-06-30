@@ -14,6 +14,7 @@ module Text.ProtocolBuffers.Basic
   ) where
 
 import Data.Aeson
+import Data.Aeson.Types
 import Data.Bits(Bits)
 import Data.ByteString.Lazy(ByteString)
 import Data.Foldable as F(Foldable(foldl))
@@ -73,6 +74,12 @@ instance FromJSON Utf8 where
         case value of
           String t -> return . Utf8 . TL.encodeUtf8 . TL.fromStrict $ t
           _ -> fail ("Value " ++ show value ++ " is not a UTF-8 string")
+
+instance ToJSONKey Utf8 where
+  toJSONKey = toJSONKeyText $ \(Utf8 t) -> TL.toStrict $ TL.decodeUtf8 t
+
+instance FromJSONKey Utf8 where
+  fromJSONKey = FromJSONKeyText $ Utf8 . TL.encodeUtf8 . TL.fromStrict
 
 -- | 'WireTag' is the 32 bit value with the upper 29 bits being the
 -- 'FieldId' and the lower 3 bits being the 'WireType'

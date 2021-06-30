@@ -325,7 +325,7 @@ oneofModule result oi
          imports (oneofDecls oi)
   where protoName = oneofName oi
         typs = mapMaybe typeName . F.toList . fmap snd . oneofFields $ oi
-        imports = (standardImports False False (oneofMakeLenses oi) False)
+        imports = (standardImports False False (oneofMakeLenses oi))
                   ++ (mergeImports (mapMaybe (importPN result (ModuleName () (fqMod protoName)) Normal) typs))
 
 
@@ -394,7 +394,7 @@ enumModule ei
           exportList =
               (Just (ExportSpecList () [EThingWith () (EWildcard () 0) (unqualName protoName) []]))
       in Module () (Just (ModuleHead () (ModuleName () (fqMod protoName)) Nothing exportList)) (modulePragmas False)
-           (standardImports True False False False) (enumDecls ei)
+           (standardImports True False False) (enumDecls ei)
 
 enumDecls :: EnumInfo -> [Decl ()]
 enumDecls ei = map ($ ei) [ enumX
@@ -565,7 +565,7 @@ protoModule result pri fdpBS
                       extendees ++ mapMaybe typeName myKeys
     in Module () (Just (ModuleHead () m Nothing (Just (ExportSpecList () (exportKeys++exportNames))))) (modulePragmas False) imports
          (keysXTypeVal protoName (extensionKeys pri) ++ embed'ProtoInfo pri ++ embed'fdpBS fdpBS)
- where protoImports = standardImports False (not . Seq.null . extensionKeys $ pri) False False ++
+ where protoImports = standardImports False (not . Seq.null . extensionKeys $ pri) False ++
          [ ImportDecl () (ModuleName () "Text.DescriptorProtos.FileDescriptorProto") False False False Nothing Nothing
                         (Just (ImportSpecList () False [IAbs () (NoNamespace ()) (Ident () "FileDescriptorProto")]))
          , ImportDecl () (ModuleName () "Text.ProtocolBuffers.Reflections") False False False Nothing Nothing
@@ -681,7 +681,7 @@ descriptorNormalModule result di
                 ]
             else
                 []
-        imports = (standardImports False (hasExt di) (makeLenses di) (mapEntry di) ++) . mergeImports . concat $
+        imports = (standardImports False (hasExt di) (makeLenses di) ++) . mergeImports . concat $
                     [ mapMaybe (importPN result m Normal) $
                         extendees' ++ mapMaybe typeName (myKeys' ++ (F.toList (fields di)))
                     , concat . mapMaybe (importO result m Normal) $ F.toList (descOneofs di)
@@ -738,11 +738,9 @@ declMapHelpers di
         toPair = FunBind ()
             [ Match ()
                 (mapFieldHelperName (descName di) "ToPair") {-name-}
-                [PApp ()                         {-patterns-}
-                    (unqualName (descName di))
-                    [PVar () (Ident () "k"), PVar () (Ident () "v")]]
+                [PVar () (Ident () "entry")]
                 (Hse.UnGuardedRhs () $           {-rhs-}
-                    Hse.Tuple () Hse.Boxed [lvar "k", lvar "v"])
+                    Hse.Tuple () Hse.Boxed [App () (lvar "key") (lvar "entry"), App () (lvar "value") (lvar "entry")])
                 Nothing                       {-binds-}
             ]
         -- toSeq :: Map.Map KEY VAL -> Seq MOD
@@ -752,19 +750,22 @@ declMapHelpers di
                 (mapFieldHelperName (descName di) "ToSeq")
                 [PVar () (Ident () "x")]
                 (Hse.UnGuardedRhs () $
-                    App () (seqMod "fromList")
+                    App () (pvar "seqFromList")
                         (App ()
                             (App ()
                                 (preludevar "map")
-                                (App ()
-                                    (preludevar "uncurry")
-                                    (Con () (unqualName (descName di)))))
-                            (App () (mapMod "toList") (lvar "x")))
+                                (Paren () (Lambda ()
+                                  [PTuple () Boxed [PVar () (Ident () "k"), PVar () (Ident () "v")]]
+                                  (RecUpdate ()
+                                    (pvar "defaultValue")
+                                    [ FieldUpdate () (local "key") (lvar "k")
+                                    , FieldUpdate () (local "value") (lvar "v")
+                                    ])
+                                )))
+                            (App () (pvar "mapToList") (lvar "x")))
                 )
                 noWhere
             ]
-        mapMod t = Var () (Qual () (ModuleName () "Map") (Ident () t))
-        seqMod t = Var () (Qual () (ModuleName () "Seq") (Ident () t))
 
 mkLenses :: Exp ()
 mkLenses = Var () (Qual () (ModuleName () "Control.Lens.TH") (Ident () "makeLenses"))
@@ -787,8 +788,8 @@ minimalImports =
   , ImportDecl () (ModuleName () "GHC.Generics") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Text.ProtocolBuffers.Header") True False False Nothing (Just (ModuleName () "P'")) Nothing ]
 
-standardImports :: Bool -> Bool -> Bool -> Bool -> [ImportDecl ()]
-standardImports isEnumMod ext lenses isMapEntry =
+standardImports :: Bool -> Bool -> Bool -> [ImportDecl ()]
+standardImports isEnumMod ext lenses =
   [ ImportDecl () (ModuleName () "Prelude") False False False Nothing Nothing (Just (ImportSpecList () False ops))
   , ImportDecl () (ModuleName () "Prelude") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Data.List") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
@@ -796,7 +797,7 @@ standardImports isEnumMod ext lenses isMapEntry =
   , ImportDecl () (ModuleName () "GHC.Generics") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Data.Data") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Text.ProtocolBuffers.Header") True False False Nothing (Just (ModuleName () "P'")) Nothing
-  ] ++ lensTH ++ mapModule
+  ] ++ lensTH
  where
        ops | ext = map (IVar () . Symbol ()) $ base ++ ["==","<=","&&"]
            | otherwise = map (IVar () . Symbol ()) base
@@ -804,12 +805,6 @@ standardImports isEnumMod ext lenses isMapEntry =
             | otherwise = ["+","/","++","."]
        lensTH | lenses = [ImportDecl () (ModuleName () "Control.Lens.TH") True False False Nothing Nothing Nothing]
               | otherwise = []
-       mapModule
-            | not isMapEntry = []
-            | otherwise =
-                [ ImportDecl () (ModuleName () "Data.Map") True False False Nothing (Just (ModuleName () "Map")) Nothing
-                , ImportDecl () (ModuleName () "Data.Sequence") True False False Nothing (Just (ModuleName () "Seq")) Nothing
-                ]
 
 keysXType :: ProtoName -> Seq KeyInfo -> [Decl ()]
 keysXType self ks = map (makeKeyType self) . F.toList $ ks
@@ -866,13 +861,14 @@ descriptorX di = DataDecl () (DataType ()) Nothing (DHead () name) [QualConDecl 
   where self = descName di
         name = baseIdent self
         (map_fields, normal_fields) = Seq.partition isMapField (fields di)
-        con = RecDecl () name (eFields ++ eMaps)
+        con = RecDecl () name eFields
                 where eFields = map (\(ns, t) -> FieldDecl () ns t) $ F.foldr ((:) . fieldX) end normal_fields
                       end = (if hasExt di then pure extfield else mempty) <>
                             eOneof <>
+                            eMaps <>
                             (if storeUnknown di then pure unknownField else mempty)
                       eOneof = F.foldr ((:) . fieldOneofX) [] (descOneofs di)
-                      eMaps  = map (\(ns, t) -> FieldDecl () ns t) $ F.foldr ((:) . fieldMapX) [] map_fields
+                      eMaps  = F.foldr ((:) . fieldMapX) [] map_fields
 
         bangType = if lazyFields di then TyParen () {- UnBangedTy -} else TyBang () (BangedTy ()) (NoUnpackPragma ()) . TyParen ()
         -- extfield :: ([Name],BangType)

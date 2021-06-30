@@ -34,4 +34,5 @@ tests:
       - Text.ProtocolBuffers.Test.Tests.AddressBook
       - Text.ProtocolBuffers.Test.Tests.School
       - Text.ProtocolBuffers.Test.Tests.Films
+      - Text.ProtocolBuffers.Test.Tests.Map
 

@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
 module Text.ProtocolBuffers.Test.Tests.School
   ( schoolQuickChecks
   ) where
@@ -13,6 +12,7 @@ import qualified Data.Sequence as Seq
 import Data.Sequence (Seq)
 import qualified Data.ByteString.Lazy.Char8 as LB
 import Control.Applicative (liftA)
+import Data.Proxy
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Header
@@ -32,16 +32,10 @@ import HSCodeGen.School.Member.Admin    (Admin (..))
 import HSCodeGen.School.Member.Faculty  (Faculty (..))
 import HSCodeGen.School.Member.Student  (Student (..))
 import HSCodeGen.School.Member.Property (Property (..))
+import Text.ProtocolBuffers.Test.QuickCheck (quickCheckTests)
 
 schoolQuickChecks :: TestTree
-schoolQuickChecks = testGroup "School QuickChecks"
-  [ QC.testProperty "School wire-encoded then decoded identity" $
-      \school -> maybe False (school ==) (roundTripWireEncodeDecode school)
-  , QC.testProperty "School json-encoded then decoded identity" $
-      \school -> maybe False (school ==) (roundTripJsonEncodeDecode school)
-  -- , QC.testProperty "School text-encoded then decoded identity" $
-  --     \school -> maybe False (school ==) (roundTripTextEncodeDecode school)
-  ]
+schoolQuickChecks = quickCheckTests "School" (Proxy :: Proxy Dormitory)
 
 instance Arbitrary Admin where
   arbitrary = Admin <$> liftA uFromString arbitrary
@@ -84,23 +78,3 @@ instance Arbitrary Dormitory where
                         <*> liftA Seq.fromList (listOf arbitrary)
                         <*> pure defaultValue
 
-roundTripTextEncodeDecode :: Dormitory -> Maybe Dormitory
-roundTripTextEncodeDecode dormitory =
-  let encoded = messagePutText dormitory
-  in case messageGetText $ LB.pack encoded of
-       Left _ -> Nothing
-       Right result -> Just result
-
-roundTripWireEncodeDecode :: Dormitory -> Maybe Dormitory
-roundTripWireEncodeDecode dormitory =
-  let encoded = messagePut dormitory
-  in case messageGet encoded of
-       Right (result, "") -> Just result
-       _ -> Nothing
-
-roundTripJsonEncodeDecode :: Dormitory -> Maybe Dormitory
-roundTripJsonEncodeDecode dormitory =
-  let encoded = J.toJSON dormitory
-  in case J.fromJSON encoded of
-       J.Success result -> Just result
-       _ -> Nothing
