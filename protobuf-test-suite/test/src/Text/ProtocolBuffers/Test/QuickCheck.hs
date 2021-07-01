@@ -107,7 +107,7 @@ wireEncodeTextDecode _ messageName x =
       case exitCode of
         ExitSuccess -> do
           case messageGetText stdout of
-            Left e -> counterexample ("=== OUTPUT ===\n" <> stdout <> "\n=== ERROR ===\n" <> e) False
+            Left e -> counterexample ("=== OUTPUT ===\n" ++ stdout ++ "\n=== ERROR ===\n" ++ e) False
             Right decoded -> counterexample stdout $ x === decoded
         ExitFailure i ->
           counterexample stderr False
