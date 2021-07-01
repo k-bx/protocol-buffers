@@ -31,9 +31,10 @@ import HSCodeGen.Films.Talent (Talent(..))
 import HSCodeGen.Films.Talent.Person (Person(..))
 
 playlistQuickChecks :: TestTree
-playlistQuickChecks = quickCheckTests "Film" (Proxy :: Proxy Playlist)
+playlistQuickChecks = quickCheckTests "Film" "playlist" (Proxy :: Proxy Playlist)
 
 instance Arbitrary Person where
+  shrink = genericShrink
   arbitrary = Person <$> arbitrary
                      <*> liftA uFromString arbitrary
                      <*> arbitraryFilmography
@@ -45,16 +46,19 @@ instance Arbitrary Person where
           scale (`div` 2) $ vector n
 
 instance Arbitrary Talent where
+  shrink = genericShrink
   arbitrary = Talent <$> liftA Seq.fromList (listOf arbitrary)
                      <*> arbitrary
 
 instance Arbitrary Film where
+  shrink = genericShrink
   arbitrary = Film <$> arbitrary
                    <*> arbitrary
                    <*> arbitrary
 
 instance Arbitrary Playlist where
+  shrink = genericShrink
   arbitrary = resize 8 $
-    Playlist <$> liftA Seq.fromList (listOf arbitrary)
+    Playlist <$> arbitrary
              <*> arbitrary
 

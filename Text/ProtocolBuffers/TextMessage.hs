@@ -52,7 +52,7 @@ tellShow :: Show a => String -> a -> Output
 tellShow name v = tells $ name ++ ": " ++ show v
 
 tellStr :: String -> ByteString -> Output
-tellStr name s = tells $ name ++ ": \"" ++ dumpDecimal s ++ "\""
+tellStr name s = tells $ name ++ ": \"" ++ dumpOctal s ++ "\""
 
 tellSubMessage :: TextMsg a => String -> a -> Output
 tellSubMessage name m = do
@@ -62,13 +62,14 @@ tellSubMessage name m = do
     where
     indent = censor (fmap (\(!n, s) -> (n + 1, s)))
 
-dumpDecimal :: ByteString -> String
-dumpDecimal = C8.foldr escape []
+dumpOctal :: ByteString -> String
+dumpOctal = C8.foldr escape []
     where
     escape '\n' str = "\\n" ++ str
     escape '\"' str = "\\\"" ++ str
+    escape '\\' str = "\\\\" ++ str
     escape c str | isAscii c && isPrint c = c : str
-    escape c str = printf "\\%03d" c ++ str
+    escape c str = printf "\\%03o" c ++ str
 
 instance TextType Int32 where
     tellT = tellShow

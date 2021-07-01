@@ -29,13 +29,14 @@ import HSCodeGen.Mymap.Value_type
 import Text.ProtocolBuffers.Test.QuickCheck (quickCheckTests)
 
 mapQuickChecks :: TestTree
-mapQuickChecks = quickCheckTests "Map" (Proxy :: Proxy WrappedMap)
+mapQuickChecks = quickCheckTests "Map" "WrappedMap" (Proxy :: Proxy WrappedMap)
 
 instance Arbitrary WrappedMap where
   arbitrary =
     WrappedMap
       <$> arbitrary
       <*> arbitrary
+  shrink = genericShrink
 
 instance Arbitrary WithMap where
   arbitrary =
@@ -45,9 +46,11 @@ instance Arbitrary WithMap where
       <*> arbitrary
       <*> arbitrary
       <*> arbitrary
+  shrink = genericShrink
 
 instance Arbitrary Value_type where
   arbitrary =
     Value_type
       <$> arbitrary
       <*> arbitrary
+  shrink = genericShrink

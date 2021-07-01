@@ -22,6 +22,7 @@ tests:
       - aeson
       - text
       - containers
+      - process-extras
       - tasty
       - tasty-hunit
       - tasty-quickcheck

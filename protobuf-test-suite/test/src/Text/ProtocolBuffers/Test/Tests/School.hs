@@ -35,46 +35,46 @@ import HSCodeGen.School.Member.Property (Property (..))
 import Text.ProtocolBuffers.Test.QuickCheck (quickCheckTests)
 
 schoolQuickChecks :: TestTree
-schoolQuickChecks = quickCheckTests "School" (Proxy :: Proxy Dormitory)
+schoolQuickChecks = quickCheckTests "School" "dormitory" (Proxy :: Proxy Dormitory)
 
 instance Arbitrary Admin where
-  arbitrary = Admin <$> liftA uFromString arbitrary
-                    <*> pure defaultValue
+  shrink = genericShrink
+  arbitrary = Admin <$> arbitrary
+                    <*> arbitrary
 
 instance Arbitrary Faculty where
-  arbitrary = Faculty <$> liftA uFromString arbitrary
-                      <*> oneof [ liftA (Just . uFromString) arbitrary
-                                , pure Nothing
-                                ]
-                      <*> liftA Seq.fromList (listOf arbitraryUtf8)
-                      <*> pure defaultValue
-    where
-      arbitraryUtf8 :: Gen Utf8
-      arbitraryUtf8 = liftA uFromString arbitrary
+  shrink = genericShrink
+  arbitrary = Faculty <$> arbitrary
+                      <*> arbitrary
+                      <*> arbitrary
+                      <*> arbitrary
 
 instance Arbitrary Student where
+  shrink = genericShrink
   arbitrary = Student <$> arbitrary
-                      <*> oneof [ liftA (Just . uFromString) arbitrary
-                                , pure Nothing
-                                ]
-                      <*> pure defaultValue
+                      <*> arbitrary
+                      <*> arbitrary
 
 instance Arbitrary Member where
+  shrink = genericShrink
   arbitrary = Member <$> arbitrary
-                     <*> liftA uFromString arbitrary
-                     <*> frequency [ (3, liftA Just arbitraryProperty)
+                     <*> arbitrary
+                     <*> frequency [ (3, liftA Just arbitrary)
                                    , (1, pure Nothing)
                                    ]
-                     <*> pure defaultValue
-    where
-      arbitraryProperty :: Gen Property'.Property
-      arbitraryProperty = oneof [ liftA Prop_student arbitrary
-                                , liftA Prop_faculty arbitrary
-                                , liftA Prop_admin arbitrary
-                                ]
+                     <*> arbitrary
+
+instance Arbitrary Property'.Property where
+  shrink = genericShrink
+  arbitrary =
+    oneof [ liftA Prop_student arbitrary
+          , liftA Prop_faculty arbitrary
+          , liftA Prop_admin arbitrary
+          ]
 
 instance Arbitrary Dormitory where
-  arbitrary = Dormitory <$> liftA uFromString arbitrary
-                        <*> liftA Seq.fromList (listOf arbitrary)
-                        <*> pure defaultValue
+  shrink = genericShrink
+  arbitrary = Dormitory <$> arbitrary
+                        <*> arbitrary
+                        <*> arbitrary
 
