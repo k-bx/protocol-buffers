@@ -46,7 +46,7 @@ quickCheckTests name messageName proxy = testGroup (name ++ " QuickChecks")
   [ QC.testProperty "wire-encoded then decoded identity" $ roundTripWireEncodeDecode proxy
   , QC.testProperty "json-encoded then decoded identity" $ roundTripJsonEncodeDecode proxy
   , QC.testProperty "text-encoded and decoded via protoc identity" $ textEncodeWireDecode proxy messageName
-  --, QC.testProperty "wire-encoded and decoded via protoc identity" $ wireEncodeTextDecode proxy messageName
+  , QC.testProperty "wire-encoded and decoded via protoc identity" $ wireEncodeTextDecode proxy messageName
   ]
 
 roundTripWireEncodeDecode :: (ReflectDescriptor a, Wire a, Eq a, Show a) => Proxy a -> a -> Property
@@ -107,7 +107,7 @@ wireEncodeTextDecode _ messageName x =
       case exitCode of
         ExitSuccess -> do
           case messageGetText stdout of
-            Left e -> counterexample e False
+            Left e -> counterexample ("=== OUTPUT ===\n" <> stdout <> "\n=== ERROR ===\n" <> e) False
             Right decoded -> counterexample stdout $ x === decoded
         ExitFailure i ->
           counterexample stderr False
