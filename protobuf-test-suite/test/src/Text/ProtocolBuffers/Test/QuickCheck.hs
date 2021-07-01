@@ -69,7 +69,7 @@ roundTripJsonEncodeDecode _ x =
 
 textEncodeWireDecode :: (TextMsg a, Wire a, ReflectDescriptor a, Eq a, Show a) => Proxy a -> String -> a -> Property
 textEncodeWireDecode _ messageName x =
-  idempotentIOProperty $ do
+  ioProperty $ do
     let textIn = messagePutText x
     (exitCode, stdout, stderr) <-
       readProcessWithExitCode
@@ -101,7 +101,7 @@ textEncodeUsingProtoc messageName x = do
 
 wireEncodeTextDecode :: (TextMsg a, Wire a, ReflectDescriptor a, Eq a, Show a) => Proxy a -> String -> a -> Property
 wireEncodeTextDecode _ messageName x =
-  idempotentIOProperty $ do
+  ioProperty $ do
     (exitCode, stdout, stderr) <- textEncodeUsingProtoc messageName x
     return $
       case exitCode of
