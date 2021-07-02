@@ -12,7 +12,7 @@ before_install:
   - mkdir -p ~/.local/bin
   - mkdir -p ~/tmp
   - travis_retry eval $"sudo apt-get update ; sleep 10"
-  - travis_retry eval $"sudo apt-get install --yes libgmp-dev haskell-stack ; sleep 10"
+  - travis_retry eval $"sudo apt-get install --yes libgmp-dev haskell-stack protobuf-compiler ; sleep 10"
   - if [ ! -d "$DIR" ]; then mkdir -p ~/.local/bin; fi
   - travis_retry eval $"stack upgrade --binary-only ; sleep 10"
   - export PATH=~/.local/bin:$PATH

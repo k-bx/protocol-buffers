@@ -9,6 +9,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?), (@?=))
 import Test.Tasty.QuickCheck as QC
 import Test.QuickCheck ()
+import Data.Proxy
 
 import qualified Data.Aeson as J
 import qualified Data.Sequence as Seq
@@ -28,6 +29,7 @@ import HSCodeGen.AddressBookProtos.AddressBook        (AddressBook(..))
 import HSCodeGen.AddressBookProtos.Person             (Person(..))
 import HSCodeGen.AddressBookProtos.Person.PhoneNumber (PhoneNumber(..))
 import HSCodeGen.AddressBookProtos.Person.PhoneType   (PhoneType(..))
+import Text.ProtocolBuffers.Test.QuickCheck (quickCheckTests)
 
 addressBookTests :: TestTree
 addressBookTests = testGroup "Address book tests"
@@ -35,22 +37,22 @@ addressBookTests = testGroup "Address book tests"
       roundTripTextEncodeDecode addressBook1 @?= Just addressBook1
   , testCase "Text-decoded empty optional value should be decoded to its default" $
       roundTripTextEncodeDecode addressBook2 @?= (Just . mapDefaultPhoneType $ addressBook2)
-  -- , testCase "Text-encode then decode identity 2" $
-  --     roundTripTextEncodeDecode addressBook3 @?= Just addressBook3
+   , testCase "Text-encode then decode identity 2" $
+       roundTripTextEncodeDecode addressBook3 @?= Just addressBook3
   , testCase "Wire-encode then decoded identity" $
       roundTripWireEncodeDecode addressBook1 @?= Just addressBook1
   , testCase "Wire-decoded empty optional value should be decoded to its default" $
       roundTripWireEncodeDecode addressBook2 @?= (Just . mapDefaultPhoneType $ addressBook2)
-  -- , testCase "Wire-encode then decoded identity 2" $
-  --     roundTripTextEncodeDecode addressBook3 @?= Just addressBook3
+   , testCase "Wire-encode then decoded identity 2" $
+       roundTripTextEncodeDecode addressBook3 @?= Just addressBook3
   ]
 
 addressBookQuickChecks :: TestTree
 addressBookQuickChecks = testGroup "Address book QuickChecks"
   [ QC.testProperty "Address book wire-encoded then decoded identity" $
       \book -> maybe False (mapDefaultPhoneType book ==) (roundTripWireEncodeDecode book)
-  -- , QC.testProperty "Address book text-encoded then decoded identity" $
-  --     \book -> maybe False (mapDefaultPhoneType book ==) (roundTripTextEncodeDecode book)
+   , QC.testProperty "Address book text-encoded then decoded identity" $
+       \book -> maybe False (mapDefaultPhoneType book ==) (roundTripTextEncodeDecode book)
   , QC.testProperty "Address book json-encoded then decoded identity" $
       \book -> maybe False (mapDefaultPhoneType book ==) (roundTripJsonEncodeDecode book)
   ]

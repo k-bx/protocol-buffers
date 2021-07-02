@@ -11,6 +11,7 @@ import qualified Data.Sequence as Seq
 import Data.Sequence (Seq)
 import qualified Data.ByteString.Lazy.Char8 as LB
 import Control.Applicative (liftA)
+import Data.Proxy
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Header
@@ -30,28 +31,10 @@ import HSCodeGen.Films.Talent (Talent(..))
 import HSCodeGen.Films.Talent.Person (Person(..))
 
 playlistQuickChecks :: TestTree
-playlistQuickChecks = testGroup "Film playlist QuickChecks"
-  [ QC.testProperty "Film playlist wire-encoded then decoded identity" $
-      \films -> maybe False (films ==) (roundTripWireEncodeDecode films)
-  , QC.testProperty "Film playlist json-encoded then decoded identity" $
-      \films -> maybe False (films ==) (roundTripJsonEncodeDecode films)
-  ]
-
-roundTripWireEncodeDecode :: Playlist -> Maybe Playlist
-roundTripWireEncodeDecode playlist =
-  let encoded = messagePut playlist
-  in case messageGet encoded of
-       Right (result, "") -> Just result
-       _ -> Nothing
-
-roundTripJsonEncodeDecode :: Playlist -> Maybe Playlist
-roundTripJsonEncodeDecode playlist =
-  let encoded = J.toJSON playlist
-  in case J.fromJSON encoded of
-       J.Success result -> Just result
-       _ -> Nothing
+playlistQuickChecks = quickCheckTests "Film" "playlist" (Proxy :: Proxy Playlist)
 
 instance Arbitrary Person where
+  shrink = genericShrink
   arbitrary = Person <$> arbitrary
                      <*> liftA uFromString arbitrary
                      <*> arbitraryFilmography
@@ -63,16 +46,19 @@ instance Arbitrary Person where
           scale (`div` 2) $ vector n
 
 instance Arbitrary Talent where
+  shrink = genericShrink
   arbitrary = Talent <$> liftA Seq.fromList (listOf arbitrary)
                      <*> arbitrary
 
 instance Arbitrary Film where
+  shrink = genericShrink
   arbitrary = Film <$> arbitrary
                    <*> arbitrary
                    <*> arbitrary
 
 instance Arbitrary Playlist where
+  shrink = genericShrink
   arbitrary = resize 8 $
-    Playlist <$> liftA Seq.fromList (listOf arbitrary)
+    Playlist <$> arbitrary
              <*> arbitrary
 

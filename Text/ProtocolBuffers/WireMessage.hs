@@ -47,7 +47,7 @@ import Data.Bits (Bits(..))
 --import qualified Data.ByteString as S(last)
 --import qualified Data.ByteString.Unsafe as S(unsafeIndex)
 import qualified Data.ByteString.Lazy as BS (length)
-import qualified Data.Foldable as F(foldl', Foldable)
+import qualified Data.Foldable as F (foldl')
 --import Data.List (genericLength)
 import Data.Maybe(fromMaybe)
 import Data.Sequence ((|>))
@@ -199,7 +199,7 @@ prependMessageSize n = n + size'WireSize n
 
 {-# INLINE sequencePutWithSize #-}
 -- | Used in generated code.
-sequencePutWithSize :: F.Foldable f => f (PutM WireSize) -> PutM WireSize
+sequencePutWithSize :: Foldable f => f (PutM WireSize) -> PutM WireSize
 sequencePutWithSize =
     let combine size act =
             do size2 <- act

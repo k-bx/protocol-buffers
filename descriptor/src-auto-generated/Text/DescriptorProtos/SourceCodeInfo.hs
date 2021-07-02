@@ -8,7 +8,7 @@ import qualified Data.Typeable as Prelude'
 import qualified GHC.Generics as Prelude'
 import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
-import qualified Text.DescriptorProtos.SourceCodeInfo.Location as DescriptorProtos.SourceCodeInfo (Location)
+import qualified Text.DescriptorProtos.SourceCodeInfo.Location as DescriptorProtos.SourceCodeInfo
 
 data SourceCodeInfo = SourceCodeInfo{location :: !(P'.Seq DescriptorProtos.SourceCodeInfo.Location),
                                      unknown'field :: !(P'.UnknownField)}
@@ -69,7 +69,7 @@ instance P'.ReflectDescriptor SourceCodeInfo where
   getMessageInfo _ = P'.GetMessageInfo (P'.fromDistinctAscList []) (P'.fromDistinctAscList [10])
   reflectDescriptorInfo _
    = Prelude'.read
-      "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.SourceCodeInfo\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"SourceCodeInfo\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"SourceCodeInfo.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.SourceCodeInfo.location\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"SourceCodeInfo\"], baseName' = FName \"location\", baseNamePrefix' = \"\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = True, mightPack = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.SourceCodeInfo.Location\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\",MName \"SourceCodeInfo\"], baseName = MName \"Location\"}), hsRawDefault = Nothing, hsDefault = Nothing}], descOneofs = fromList [], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True, lazyFields = False, makeLenses = False, jsonInstances = False}"
+      "DescriptorInfo {descName = ProtoName {protobufName = FIName \".google.protobuf.SourceCodeInfo\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\"], baseName = MName \"SourceCodeInfo\"}, descFilePath = [\"Text\",\"DescriptorProtos\",\"SourceCodeInfo.hs\"], isGroup = False, fields = fromList [FieldInfo {fieldName = ProtoFName {protobufName' = FIName \".google.protobuf.SourceCodeInfo.location\", haskellPrefix' = [MName \"Text\"], parentModule' = [MName \"DescriptorProtos\",MName \"SourceCodeInfo\"], baseName' = FName \"location\", baseNamePrefix' = \"\"}, fieldNumber = FieldId {getFieldId = 1}, wireTag = WireTag {getWireTag = 10}, packedTag = Nothing, wireTagLength = 1, isPacked = False, isRequired = False, canRepeat = True, mightPack = False, typeCode = FieldType {getFieldType = 11}, typeName = Just (ProtoName {protobufName = FIName \".google.protobuf.SourceCodeInfo.Location\", haskellPrefix = [MName \"Text\"], parentModule = [MName \"DescriptorProtos\",MName \"SourceCodeInfo\"], baseName = MName \"Location\"}), hsRawDefault = Nothing, hsDefault = Nothing, isMapField = False, mapKeyVal = Nothing}], descOneofs = fromList [], keys = fromList [], extRanges = [], knownKeys = fromList [], storeUnknown = True, lazyFields = False, makeLenses = False, jsonInstances = False, mapEntry = False}"
 
 instance P'.TextType SourceCodeInfo where
   tellT = P'.tellSubMessage

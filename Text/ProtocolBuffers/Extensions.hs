@@ -32,7 +32,6 @@ module Text.ProtocolBuffers.Extensions
 import Control.Monad.Error.Class(throwError)
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Foldable as F
-import Data.Map(Map)
 import qualified Data.Map as M
 import Data.Maybe(fromMaybe,isJust)
 import Data.Sequence((|>),(><),viewl,ViewL(..))

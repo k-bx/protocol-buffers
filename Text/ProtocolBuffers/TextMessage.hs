@@ -14,7 +14,7 @@ module Text.ProtocolBuffers.TextMessage (
     ) where
 
 import Control.Monad.Identity (Identity)
-import Control.Monad (void)
+import Control.Monad (void, replicateM)
 import Control.Monad.Writer (Writer, execWriter, tell, censor)
 import Data.Char
 import Data.Foldable (toList)
@@ -29,7 +29,7 @@ import Text.ProtocolBuffers.Basic
 import Text.Read
 
 import qualified Data.ByteString.Lazy.Char8 as C8
-import qualified Data.ByteString.Lazy.UTF8 as U8
+import qualified Data.ByteString.Lazy as B
 import qualified Text.Parsec.Token as T
 
 type Log = Seq (Int, String)
@@ -52,7 +52,7 @@ tellShow :: Show a => String -> a -> Output
 tellShow name v = tells $ name ++ ": " ++ show v
 
 tellStr :: String -> ByteString -> Output
-tellStr name s = tells $ name ++ ": \"" ++ dumpDecimal s ++ "\""
+tellStr name s = tells $ name ++ ": \"" ++ dumpOctal s ++ "\""
 
 tellSubMessage :: TextMsg a => String -> a -> Output
 tellSubMessage name m = do
@@ -62,13 +62,14 @@ tellSubMessage name m = do
     where
     indent = censor (fmap (\(!n, s) -> (n + 1, s)))
 
-dumpDecimal :: ByteString -> String
-dumpDecimal = C8.foldr escape []
+dumpOctal :: ByteString -> String
+dumpOctal = C8.foldr escape []
     where
     escape '\n' str = "\\n" ++ str
     escape '\"' str = "\\\"" ++ str
+    escape '\\' str = "\\\\" ++ str
     escape c str | isAscii c && isPrint c = c : str
-    escape c str = printf "\\%03d" c ++ str
+    escape c str = printf "\\%03o" c ++ str
 
 instance TextType Int32 where
     tellT = tellShow
@@ -103,11 +104,16 @@ instance TextType Float where
 
 instance TextType Utf8 where
     tellT name (Utf8 s) = tellStr name s
-    getT name = uFromString <$> getScalar stringLiteral name
+    getT name = do
+        let utf8StringLiteral = do
+                bs <- stringLiteral
+                -- We could verify that it is endeed UTF-8 here
+                return $ Utf8 bs
+        getScalar utf8StringLiteral name
 
 instance TextType ByteString where
     tellT = tellStr
-    getT name = U8.fromString <$> getScalar stringLiteral name
+    getT name = getScalar stringLiteral name
 
 instance TextType a => TextType (Maybe a) where
     tellT _ Nothing = return ()
@@ -157,8 +163,39 @@ integer = fromIntegral <$> T.integer lexer
 float :: Stream s Identity Char => Parsec s () Double
 float = either realToFrac id <$> T.naturalOrFloat lexer
 
-stringLiteral :: Stream s Identity Char => Parsec s () String
-stringLiteral = T.stringLiteral lexer
+-- | Parse a string-literal with C escaping rules (as used by protoc)
+stringLiteral :: Stream s Identity Char => Parsec s () ByteString
+stringLiteral = do
+    let octEscape = do
+            cs <- replicateM 3 octDigit
+            let [n1,n2,n3] = map (\c -> ord c - ord '0') cs
+            return $ n1*64 + n2*8 + n3
+    let escapeChars =
+            [('a', '\x07')
+            ,('b', '\x08')
+            ,('e', '\x1b')
+            ,('f', '\f')
+            ,('n', '\n')
+            ,('r', '\r')
+            ,('t', '\t')
+            ,('v', '\v')
+            ,('\\', '\\')
+            ,('\'', '\'')
+            ,('\"', '\"')
+            ,('?', '\x3f')
+            ]
+    let stringChar = fmap fromIntegral $ do
+            c <- noneOf "\""
+            case c of
+                '\\' -> foldr (\(c, c') acc -> (char c *> pure (ord c')) <|> acc) octEscape escapeChars
+                _ -> return (ord c)
+    T.lexeme lexer $ do
+        str <-
+            between
+            (char '"')
+            (char '"' <?> "end of string")
+            (many stringChar)
+        return (B.pack str)
 
 getRead :: forall a s . (Read a, Stream s Identity Char) => String -> Parsec s () a
 getRead name = try $ do
