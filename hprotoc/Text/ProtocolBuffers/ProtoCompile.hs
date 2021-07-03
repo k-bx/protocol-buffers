@@ -1,12 +1,14 @@
 -- | This is the Main module for the command line program 'hprotoc'
 module Main where
 
-import Control.Monad(unless,forM_)
+import Control.Monad(unless,forM_,foldM)
 import Control.Monad.State(State, execState, modify)
 import qualified Data.ByteString.Lazy.Char8 as LC (hGetContents, hPut, pack, unpack)
 import Data.Foldable (toList)
+import Data.Maybe (fromMaybe)
 import qualified Data.Sequence as Seq (fromList,singleton)
 import Data.Sequence ((|>))
+import Data.List (partition)
 import Data.Version(showVersion)
 import Language.Haskell.Exts.Pretty(prettyPrintStyleMode,Style(..),Mode(..),PPHsMode(..),PPLayout(..))
 import System.Console.GetOpt(OptDescr(Option),ArgDescr(NoArg,ReqArg)
@@ -63,9 +65,9 @@ data Options =
   deriving Show
 
 setPrefix,setTarget,setInclude,setProto,setDesc :: String -> Options -> Options
-setImports,setVerbose,setUnknown,setLazy,setLenses,setDryRun :: Options -> Options
+setImports,setVerbose,setUnknown,setLazy,setLenses,setDryRun,setJson :: Options -> Options
 setPrefix   s o = o { optPrefix = toPrefix s }
-setTarget   s o = o { optTarget = (LocalFP s) }
+setTarget   s o = o { optTarget = LocalFP s }
 setInclude  s o = o { optInclude = LocalFP s : optInclude o }
 setProto    s o = o { optProto = LocalFP s }
 setDesc     s o = o { optDesc = Just (LocalFP s) }
@@ -178,13 +180,27 @@ main = do
     "protoc-gen-haskell" -> pluginMain
     _                    -> standaloneMain
 
+splitOn :: Char -> String -> [String]
+splitOn c s =
+  case break (== c) s of
+    (s, []) -> [s]
+    (s', _:rest) -> s' : splitOn c rest
+
 pluginMain :: IO ()
 pluginMain = do
   defs <- defaultOptions
   inputBytes <- LC.hGetContents stdin
   let req = either error fst $ messageGet inputBytes
-  let prefix = fmap (LC.unpack . utf8) $ parameter req
-  let opts = maybe defs (flip setPrefix $ defs) prefix
+  let parametersString = fmap (LC.unpack . utf8) $ parameter req
+  let allParameters = maybe [] (splitOn ',') $ parametersString
+  let processOpt acc opt =
+        case opt of
+          "json" -> return $ setJson acc
+          _ ->
+            case splitOn '=' opt of
+              ["prefix", prefix] -> return $ setPrefix prefix acc
+              _ -> fail $ "Unrecognized parameter " ++ opt ++ ". Parameters given: " ++ fromMaybe "Nothing" parametersString
+  opts <- foldM processOpt defs allParameters
   let resp = runPlugin opts req
   LC.hPut stdout $ messagePut resp
 
@@ -206,7 +222,7 @@ process options (Mutate f:rest) = process (f options) rest
 process options (Run f:rest) = let options' = f options
                             in runStandalone options' >> process options' rest
 process _options (Switch VersionInfo:_) = putStrLn versionInfo
-  
+
 mkdirFor :: FilePath -> IO ()
 mkdirFor p = createDirectoryIfMissing True (takeDirectory p)
 
