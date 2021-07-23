@@ -16,13 +16,14 @@ source-repository head
 
 Library
   default-language: Haskell2010
-  exposed-modules: Text.ProtocolBuffers.WarpGrpc
+  exposed-modules: Text.ProtocolBuffers.GRPC
 
   build-depends: base >= 4.12.0 && < 5,
                  protocol-buffers,
                  http2-grpc-types,
                  bytestring,
                  binary,
+                 hvect,
                  unliftio-core,
                  warp-grpc
 

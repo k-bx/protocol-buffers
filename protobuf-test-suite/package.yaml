@@ -20,6 +20,7 @@ tests:
       - protobuf-test-suite
       - base
       - aeson
+      - hvect
       - text
       - containers
       - process-extras
@@ -30,6 +31,11 @@ tests:
       - tasty-quickcheck
       - QuickCheck
       - bytestring
+      - wai
+      - http2-client-grpc
+      - warp
+      - http2-client
+      - http2-grpc-types
       - utf8-string
     other-modules:
       - Text.ProtocolBuffers.Test.QuickCheck

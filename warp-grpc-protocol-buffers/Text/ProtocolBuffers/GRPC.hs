@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE TypeOperators #-}
@@ -8,8 +9,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Text.ProtocolBuffers.WarpGrpc (
+module Text.ProtocolBuffers.GRPC (
   makeServiceHandlers,
+  QualifiedMethod(..),
+  QualifiedMethods,
+  qualifiedMethods,
   ServiceHandler(..),
   StreamHandler(..),
   UnaryHandler,
@@ -26,6 +30,7 @@ import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Builder as BSLB
 import Data.Proxy
+import Data.HVect hiding (singleton)
 import GHC.TypeLits
 import Network.GRPC.HTTP2.Encoding
 import Network.GRPC.HTTP2.Types
@@ -34,6 +39,7 @@ import Text.ProtocolBuffers (Method, ReflectDescriptor, Service, Wire, messageGe
 import Text.ProtocolBuffers.WireMessage (messagePut)
 import Network.GRPC.Server.Handlers
 import GHC.Exts
+import Text.ProtocolBuffers.Basic (Service(Service))
 
 data QualifiedMethod (serviceName :: Symbol) (methodName :: Symbol) (input :: Streaming *) (output :: Streaming *) = QualifiedMethod
 
@@ -70,6 +76,18 @@ decoder compression =
       case messageGet (BSL.fromStrict bs) of
         Left e -> Left e
         Right (x, _) -> Right x
+
+class HasQualifiedMethods service where
+  type QualifiedMethods service :: [*]
+  qualifiedMethods :: service -> HVect (QualifiedMethods service)
+
+instance HasQualifiedMethods (Service serviceName '[]) where
+  type QualifiedMethods (Service serviceName '[]) = '[]
+  qualifiedMethods _ = HNil
+
+instance HasQualifiedMethods (Service serviceName rest) => HasQualifiedMethods (Service serviceName (Method methodName i o ': rest)) where
+  type QualifiedMethods (Service serviceName (Method methodName i o ': rest)) = QualifiedMethod serviceName methodName i o ': QualifiedMethods (Service serviceName rest)
+  qualifiedMethods _ = QualifiedMethod :&: (qualifiedMethods (Service :: Service serviceName rest))
 
 class MakeHandlers (methods :: [*]) where
   type MakeHandlersResult methods
