@@ -1,0 +1,55 @@
+name: Haskell-CI
+on:
+  - push
+  - pull_request
+jobs:
+  linux:
+    name: Haskell-CI - Linux - ${{ matrix.compiler }}
+    runs-on: ubuntu-latest
+    container:
+      image: buildpack-deps:bionic
+    strategy:
+      matrix:
+        include:
+          - compiler: ghc-8.10.2
+            compilerVersion: 8.10.2
+          - compiler: ghc-8.8.4
+            compilerVersion: 8.8.4
+          - compiler: ghc-8.6.2
+            compilerVersion: 8.6.2
+          - compiler: ghc-8.4.2
+            compilerVersion: 8.4.2
+          - compiler: ghc-8.2.2
+            compilerVersion: 8.2.2
+          - compiler: ghc-8.0.2
+            compilerVersion: 8.0.2
+      fail-fast: false
+    steps:
+      - name: apt
+        run: |
+          apt-get update
+          apt-get install --yes libgmp-dev protobuf-compiler
+          curl -sSL https://get.haskellstack.org/ | sh
+      - name: Cache stack
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.stack
+          key: stack-${{ runner.os }}-${{ matrix.compiler }}
+      - name: stack
+        run: |
+          mkdir ~/.stack
+          echo 'allow-different-user: yes' > ~/.stack/config.yaml
+      - name: checkout
+        uses: actions/checkout@v2
+      - name: tools
+        run: |
+          rm -f stack.yaml
+          cp -f "stack-$HCVER.yaml" stack.yaml
+          stack --no-terminal --skip-ghc-check setup
+          stack --no-terminal --skip-ghc-check install happy alex
+        env:
+          HCVER: ${{ matrix.compilerVersion }}
+      - name: test
+        run: |
+          make test
