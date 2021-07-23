@@ -3,6 +3,7 @@ packages:
 - descriptor/
 - hprotoc/
 - protobuf-test-suite/
+- warp-grpc-protocol-buffers/
 extra-deps:
 - base16-bytestring-1.0.0.0@sha256:0cde0953fa84b8f5214b07f00153197b883f6801f59f3de6da3f62a55992874c,2749
 - http2-grpc-types-0.5.0.0@sha256:4d34edc06a48496130f19245817a7cd7ea15c78ac8815570c3795ffc4503cf27,1445
