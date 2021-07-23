@@ -1,4 +1,4 @@
-name:           warp-grpc-protocol-buffers
+name:           http2-grpc-protocol-buffers
 version:        2.4.17
 cabal-version:  >= 1.10
 build-type:     Simple

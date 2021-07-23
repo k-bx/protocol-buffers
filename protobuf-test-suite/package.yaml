@@ -24,7 +24,7 @@ tests:
       - text
       - containers
       - process-extras
-      - warp-grpc-protocol-buffers
+      - http2-grpc-protocol-buffers
       - warp-grpc
       - tasty
       - tasty-hunit

@@ -43,11 +43,11 @@ import HSCodeGen.Grpc.HelloResponse
 grpcTests :: TestTree
 grpcTests = testGroup "GRPC tests"
   [ testCase "handler paths" $
-      map grpcHandlerPath handlers @?= ["/grpc.HelloService/BidiHello","/grpc.HelloService/LotsOfGreetings","/grpc.HelloService/LotsOfReplies","/grpc.HelloService/SayHello"]
+      map grpcHandlerPath handlers @?= ["/grpc.HelloService/SayHello","/grpc.HelloService/LotsOfReplies","/grpc.HelloService/LotsOfGreetings","/grpc.HelloService/BidiHello"]
   , testCase "client/server" $ withGprcServer $ \port -> doClientIO $ runClientTest port
   ]
 
-withGprcServer = testWithApplication . return $ grpcApp [uncompressed,gzip] handlers
+withGprcServer = testWithApplication . return $ grpcApp [gzip] handlers
 
 handlers :: [ServiceHandler]
 handlers =

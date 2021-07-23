@@ -87,7 +87,7 @@ instance HasQualifiedMethods (Service serviceName '[]) where
 
 instance HasQualifiedMethods (Service serviceName rest) => HasQualifiedMethods (Service serviceName (Method methodName i o ': rest)) where
   type QualifiedMethods (Service serviceName (Method methodName i o ': rest)) = QualifiedMethod serviceName methodName i o ': QualifiedMethods (Service serviceName rest)
-  qualifiedMethods _ = QualifiedMethod :&: (qualifiedMethods (Service :: Service serviceName rest))
+  qualifiedMethods _ = QualifiedMethod :&: qualifiedMethods (Service :: Service serviceName rest)
 
 class MakeHandlers (methods :: [*]) where
   type MakeHandlersResult methods
@@ -115,7 +115,7 @@ instance (MakeHandlers xs, KnownSymbol methodName) => MakeHandlers (Method metho
             ClientStreamHandler handler -> clientStream method handler
             BiDiStreamHandler handler -> bidiStream method handler
             GeneralStreamHandler handler -> generalStream method handler
-    in makeHandlers serviceName (Proxy :: Proxy xs) ((newEntry:) . acc)
+    in makeHandlers serviceName (Proxy :: Proxy xs) (acc . (newEntry:))
 
 makeServiceHandlers :: forall methods serviceName res . (MakeHandlers methods, KnownSymbol serviceName) => Service serviceName methods -> MakeHandlersResult methods
 makeServiceHandlers _ =

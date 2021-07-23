@@ -3,7 +3,7 @@ packages:
 - descriptor/
 - hprotoc/
 - protobuf-test-suite/
-- warp-grpc-protocol-buffers/
+- http2-grpc-protocol-buffers/
 
 extra-deps:
 - haskell-src-exts-1.22.0@sha256:f558923a9c8f57402c33a8cc871b934027a5c65414404c87239f6cbd7357d54e,4541
