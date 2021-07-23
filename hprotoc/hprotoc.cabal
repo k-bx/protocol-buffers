@@ -15,7 +15,7 @@ category:       Text
 extra-source-files: README,
                     google-proto-files/google/protobuf/descriptor.proto,
                     google-proto-files/google/protobuf/plugin.proto
-Tested-With: GHC == 8.0.2, GHC == 8.2.2, GHC == 8.4.2, GHC == 8.6.2, GHC == 8.8.4, GHC == 8.10.2
+Tested-With: GHC == 8.6.2, GHC == 8.8.4, GHC == 8.10.2
 source-repository head
   type: git
   location: git://github.com/k-bx/protocol-buffers.git
@@ -30,7 +30,7 @@ Executable hprotoc
   build-tools:     alex
   ghc-options:     -O2 -Wall -fspec-constr-count=10
   -- ghc-prof-options: -O2 -auto-all -prof
-  build-depends:   base >= 4.9.0 && < 5,
+  build-depends:   base >= 4.12.0 && < 5,
                    array,
                    binary,
                    bytestring,
@@ -78,7 +78,7 @@ Library
   build-tools:     alex
   ghc-options:     -O2 -Wall -fspec-constr-count=10
   -- ghc-prof-options: -O2 -auto-all -prof
-  build-depends:   base >= 4.9.0 && < 5,
+  build-depends:   base >= 4.12.0 && < 5,
                    array,
                    binary,
                    bytestring,

@@ -9,7 +9,7 @@ maintainer:     Timo von Holtz <tvh@tvholtz.de>
 homepage:       https://github.com/k-bx/protocol-buffers
 package-url:    http://hackage.haskell.org/package/protocol-buffers
 category:       Text
-Tested-With: GHC == 8.0.2, GHC == 8.2.2, GHC == 8.4.2, GHC == 8.6.2, GHC == 8.8.4, GHC == 8.10.2
+Tested-With: GHC == 8.6.2, GHC == 8.8.4, GHC == 8.10.2
 source-repository head
   type: git
   location: git://github.com/k-bx/protocol-buffers.git
@@ -18,7 +18,7 @@ Library
   default-language: Haskell2010
   exposed-modules: Text.ProtocolBuffers.WarpGrpc
 
-  build-depends: base >= 4.9.0 && < 5,
+  build-depends: base >= 4.12.0 && < 5,
                  protocol-buffers,
                  http2-grpc-types,
                  bytestring,

@@ -6,7 +6,7 @@ This the README file for `protocol-buffers`,
 interdependent Haskell packages originally written by Chris Kuklewicz.
 
 Currently, maintainership was taken by Timo von Holtz. It is
-planned to only support GHC 8.0 and newer unless someone explicitly
+planned to only support GHC 8.6 and newer unless someone explicitly
 asks for support of earlier versions.
 
 (Needs check) This README was updated most recently to reflect version
