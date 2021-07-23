@@ -257,7 +257,7 @@ data Method (name :: Symbol) (request :: Streaming *) (response :: Streaming *) 
                                               deriving (Typeable)
 
 -- | A proxy for services.
-data Service (methods :: [*]) = Service
+data Service (service :: Symbol) (methods :: [*]) = Service
                               deriving (Typeable)
 
 -- Base types are not very mergeable, but their Maybe and Seq versions are:

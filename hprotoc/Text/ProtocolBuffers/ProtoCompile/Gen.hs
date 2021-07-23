@@ -171,7 +171,6 @@ importPN r selfMod@(ModuleName () self) part pn =
       m1 = ModuleName () (joinMod (haskellPrefix pn ++ parentModule pn ++ [baseName pn]))
       m2 = ModuleName () (joinMod (parentModule pn))
       fromSource = S.member (FMName self,part,o) (rIBoot r)
-      iabs = IAbs () (NoNamespace ()) (Ident () (mName (baseName pn)))
       ans = if m1 == selfMod && part /= KeyFile then Nothing
               else Just $ ImportDecl () m1 True fromSource False Nothing (Just m2) Nothing
   in ecart (unlines . map (\ (a,b) -> a ++ " = "++b) $
@@ -603,8 +602,11 @@ serviceDecls si' =
   ++ concatMap (methodProxy si') (serviceMethods si')
   where
     serviceDecl si =
-      TypeDecl () (DHead () (serviceTypeName si)) (TyApp () (TyCon () (private "Service")) (
-        TyPromoted () (
+      TypeDecl () (DHead () (serviceTypeName si)) (TyApp ()
+        (TyApp ()
+          (TyCon () (private "Service"))
+          (let s = drop 1 $ toString (fiName (protobufName (serviceName si))) in TyPromoted () (PromotedString () s (show s))))
+        (TyPromoted () (
             PromotedList () True (fmap (\mx -> TyPromoted () (PromotedCon () False (UnQual () (methodTypeName mx)))) (serviceMethods si))
                    )
         ))
@@ -617,7 +619,7 @@ serviceDecls si' =
     methodDecl _si mi =
       TypeDecl () (DHead () (methodTypeName mi)) $
       foldl' (TyApp ()) (TyCon () (private "Method"))
-        [ let s = toString (fiName (protobufName (methodName mi))) in TyPromoted () (PromotedString () s (show s))
+        [ let Ident _ s = baseIdent (methodName mi) in TyPromoted () (PromotedString () s (show s))
         , mkStreaming (methodClientStream mi) (methodInput mi)
         , mkStreaming (methodServerStream mi) (methodOutput mi)
         ]
