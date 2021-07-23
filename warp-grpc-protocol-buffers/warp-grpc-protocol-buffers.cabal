@@ -23,5 +23,6 @@ Library
                  http2-grpc-types,
                  bytestring,
                  binary,
+                 unliftio-core,
                  warp-grpc
 

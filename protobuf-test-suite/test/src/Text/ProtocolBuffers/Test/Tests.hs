@@ -18,4 +18,5 @@ tests = defaultMain $ testGroup "Protocol Buffers tests" $
   , schoolQuickChecks
   , playlistQuickChecks
   , mapQuickChecks
+  , grpcTests
   ]

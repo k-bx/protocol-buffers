@@ -1,12 +1,23 @@
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Text.ProtocolBuffers.WarpGrpc () where
+module Text.ProtocolBuffers.WarpGrpc (
+  makeServiceHandlers,
+  ServiceHandler(..),
+  StreamHandler(..),
+  UnaryHandler,
+  ServerStreamHandler,
+  ClientStreamHandler,
+  BiDiStreamHandler,
+  GeneralStreamHandler,
+) where
 
 import Data.Binary.Builder (fromByteString, putWord32be, singleton)
 import Data.Binary.Get (getByteString, getInt8, getWord32be, runGetIncremental)
@@ -22,8 +33,9 @@ import Network.GRPC.Server.Wai
 import Text.ProtocolBuffers (Method, ReflectDescriptor, Service, Wire, messageGet, Streaming(..))
 import Text.ProtocolBuffers.WireMessage (messagePut)
 import Network.GRPC.Server.Handlers
+import GHC.Exts
 
-data QualifiedMethod (serviceName :: Symbol) (methodName :: Symbol) (input :: Streaming *) (output :: Streaming *)
+data QualifiedMethod (serviceName :: Symbol) (methodName :: Symbol) (input :: Streaming *) (output :: Streaming *) = QualifiedMethod
 
 instance (KnownSymbol serviceName, KnownSymbol methodName) => IsRPC (QualifiedMethod serviceName methodName input output) where
   path rpc = BSC.pack $ "/" <> symbolVal (Proxy :: Proxy serviceName) <> "/" <> symbolVal (Proxy :: Proxy methodName)
@@ -59,20 +71,34 @@ decoder compression =
         Left e -> Left e
         Right (x, _) -> Right x
 
-class IsValidHandler (i :: Streaming *) (o :: Streaming *) handler where
-  makeHandler :: (KnownSymbol serviceName, KnownSymbol methodName) => QualifiedMethod serviceName methodName i o -> handler -> ServiceHandler
+class MakeHandlers (methods :: [*]) where
+  type MakeHandlersResult methods
+  makeHandlers :: KnownSymbol serviceName => proxy serviceName -> Proxy methods -> ([ServiceHandler] -> [ServiceHandler]) -> MakeHandlersResult methods
 
-instance (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => IsValidHandler (Single i) (Single o) (UnaryHandler IO i o) where
-  makeHandler = unary
+instance MakeHandlers '[] where
+  type MakeHandlersResult '[] = [ServiceHandler]
+  makeHandlers _ _ acc = acc []
 
-instance (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => IsValidHandler (Single i) (StreamOf o) (ServerStreamHandler IO i o a) where
-  makeHandler = serverStream
+data StreamHandler m (i :: Streaming *) (o :: Streaming *) where
+  UnaryHandler :: (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => UnaryHandler m i o -> StreamHandler m (Single i) (Single o)
+  ServerStreamHandler :: (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => ServerStreamHandler m i o a -> StreamHandler m (Single i) (StreamOf o)
+  ClientStreamHandler :: (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => ClientStreamHandler m i o a -> StreamHandler m (StreamOf i) (Single o)
+  BiDiStreamHandler :: (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => BiDiStreamHandler m i o a -> StreamHandler m (StreamOf i) (StreamOf o)
+  GeneralStreamHandler :: (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => GeneralStreamHandler m i o a b -> StreamHandler m (StreamOf i) (StreamOf o)
 
-instance (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => IsValidHandler (StreamOf i) (Single o) (ClientStreamHandler IO i o a) where
-  makeHandler = clientStream
+instance (MakeHandlers xs, KnownSymbol methodName) => MakeHandlers (Method methodName i o ': xs) where
+  type MakeHandlersResult (Method methodName i o ': xs) = StreamHandler IO i o -> MakeHandlersResult xs
+  makeHandlers (serviceName :: proxy serviceName) _ acc handler =
+    let method = QualifiedMethod :: QualifiedMethod serviceName methodName i o
+        newEntry =
+          case handler of
+            UnaryHandler handler -> unary method handler
+            ServerStreamHandler handler -> serverStream method handler
+            ClientStreamHandler handler -> clientStream method handler
+            BiDiStreamHandler handler -> bidiStream method handler
+            GeneralStreamHandler handler -> generalStream method handler
+    in makeHandlers serviceName (Proxy :: Proxy xs) ((newEntry:) . acc)
 
-instance (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => IsValidHandler (StreamOf i) (StreamOf o) (BiDiStreamHandler IO i o a) where
-  makeHandler = bidiStream
-
-instance (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => IsValidHandler (StreamOf i) (StreamOf o) (GeneralStreamHandler IO i o a b) where
-  makeHandler = generalStream
+makeServiceHandlers :: forall methods serviceName res . (MakeHandlers methods, KnownSymbol serviceName) => Service serviceName methods -> MakeHandlersResult methods
+makeServiceHandlers _ =
+  makeHandlers (Proxy :: Proxy serviceName) (Proxy :: Proxy methods) id
