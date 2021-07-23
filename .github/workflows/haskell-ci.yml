@@ -30,7 +30,7 @@ jobs:
           apt-get update
           apt-get install --yes libgmp-dev protobuf-compiler
           curl -sSL https://get.haskellstack.org/ | sh
-      - name: Cache stack
+      - name: Cache ~/.stack
         uses: actions/cache@v2
         with:
           path: |
@@ -38,7 +38,7 @@ jobs:
           key: stack-${{ runner.os }}-${{ matrix.compiler }}
       - name: stack
         run: |
-          mkdir ~/.stack
+          mkdir -p ~/.stack
           echo 'allow-different-user: yes' > ~/.stack/config.yaml
       - name: checkout
         uses: actions/checkout@v2
