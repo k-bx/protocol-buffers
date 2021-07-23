@@ -3,5 +3,7 @@ packages:
 - descriptor/
 - hprotoc/
 - protobuf-test-suite/
-extra-deps: []
+extra-deps:
+- http2-grpc-types-0.5.0.0@sha256:4d34edc06a48496130f19245817a7cd7ea15c78ac8815570c3795ffc4503cf27,1445
+- warp-grpc-0.4.0.1@sha256:3859190e4fa23b944cf93ac691b3cec78c2adf4eaff6a4e8070c89fd17915add,1759
 resolver: nightly-2018-05-02
