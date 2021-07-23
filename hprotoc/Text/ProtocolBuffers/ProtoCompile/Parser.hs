@@ -64,7 +64,6 @@ import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.Char(isUpper,toLower)
 import Data.Ix(inRange)
 import Data.Maybe(fromMaybe)
-import Data.Monoid(mconcat,(<>))
 import Data.Sequence((|>),(><))
 import qualified Data.Sequence as Seq(fromList,length,empty)
 import Data.Word(Word8)
@@ -79,11 +78,7 @@ import qualified Text.ProtocolBuffers.Header as P'
 
 default ()
 
-#if MIN_VERSION_parsec(3,0,0)
 type P st = GenParser Lexed st
-#else
-type P = GenParser Lexed
-#endif
 
 parseProto :: String -> ByteString -> Either ParseError D.FileDescriptorProto
 parseProto filename fileContents = do

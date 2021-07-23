@@ -785,9 +785,6 @@ instance Monad Get where
   {-# INLINE return #-}
   m >>= k  = Get (\sc -> unGet m (\ a -> seq a $ unGet (k a) sc))
   {-# INLINE (>>=) #-}
-#if !MIN_VERSION_base(4,11,0)
-  fail = Fail.fail
-#endif
 
 instance Fail.MonadFail Get where
   fail = throwError . strMsg

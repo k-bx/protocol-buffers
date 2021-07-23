@@ -1581,11 +1581,7 @@ mkSimpleIRule con args =
     in IRule () Nothing Nothing instHead
 
 mkDeriving :: [QName ()] -> Deriving ()
-#if MIN_VERSION_haskell_src_exts(1, 20, 0)
 mkDeriving xs = Deriving () Nothing (map (\x -> mkSimpleIRule x []) xs)
-#else
-mkDeriving xs = Deriving () (map (\x -> mkSimpleIRule x []) xs)
-#endif
 
 derives,derivesEnum,derivesTypeable :: Deriving ()
 derives = mkDeriving $ map prelude ["Show","Eq","Ord","Typeable","Data","Generic"]
