@@ -1,14 +1,13 @@
 -- | This is the Main module for the command line program 'hprotoc'
 module Main where
 
-import Control.Monad(unless,forM_,foldM)
+import Control.Monad(unless,forM_,foldM,forM)
 import Control.Monad.State(State, execState, modify)
 import qualified Data.ByteString.Lazy.Char8 as LC (hGetContents, hPut, pack, unpack)
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe)
 import qualified Data.Sequence as Seq (fromList,singleton)
 import Data.Sequence ((|>))
-import Data.List (partition)
 import Data.Version(showVersion)
 import Language.Haskell.Exts.Pretty(prettyPrintStyleMode,Style(..),Mode(..),PPHsMode(..),PPLayout(..))
 import System.Console.GetOpt(OptDescr(Option),ArgDescr(NoArg,ReqArg)
@@ -29,10 +28,10 @@ import qualified Text.DescriptorProtos.FileDescriptorProto as D.FileDescriptorPr
 -- import qualified Text.DescriptorProtos.FileDescriptorSet   as D(FileDescriptorSet)
 import qualified Text.DescriptorProtos.FileDescriptorSet   as D.FileDescriptorSet(FileDescriptorSet(..))
 
-import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(makeResult,displayResult)
+import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(makeResult)
 import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,oneofModule,serviceModule)
 import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
-import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadCodeGenRequest,makeNameMaps,getTLS
+import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProtos,loadCodeGenRequest,makeNameMaps,getTLS
                                                 ,Env,LocalFP(..),CanonFP(..),TopLevel(..)
                                                 ,NameMap(..)
                                                 )
@@ -52,7 +51,7 @@ data Options =
     , optAs :: [(CanonFP,[MName String])]
     , optTarget :: LocalFP
     , optInclude :: [LocalFP]
-    , optProto :: LocalFP
+    , optProto :: [LocalFP]
     , optDesc :: Maybe (LocalFP)
     , optImports :: Bool
     , optVerbose :: Bool
@@ -69,7 +68,7 @@ setImports,setVerbose,setUnknown,setLazy,setLenses,setDryRun,setJson :: Options 
 setPrefix   s o = o { optPrefix = toPrefix s }
 setTarget   s o = o { optTarget = LocalFP s }
 setInclude  s o = o { optInclude = LocalFP s : optInclude o }
-setProto    s o = o { optProto = LocalFP s }
+setProto    s o = o { optProto = optProto o ++ [LocalFP s] }
 setDesc     s o = o { optDesc = Just (LocalFP s) }
 setImports    o = o { optImports = True }
 setVerbose    o = o { optVerbose = True }
@@ -162,7 +161,7 @@ defaultOptions = do
                    , optAs = []
                    , optTarget = pwd
                    , optInclude = [pwd]
-                   , optProto = LocalFP ""
+                   , optProto = []
                    , optDesc = Nothing
                    , optImports = False
                    , optVerbose = False
@@ -213,7 +212,7 @@ standaloneMain = do
     Right todo -> process defs todo
 
 process :: Options -> [OptionAction] -> IO ()
-process options [] = if null (unLocalFP (optProto options))
+process options [] = if null (optProto options)
                        then do putStrLn "No proto file specified (or empty proto file)"
                                putStrLn ""
                                putStrLn usageMsg
@@ -248,7 +247,7 @@ data Output m = Output {
 
 runStandalone :: Options -> IO ()
 runStandalone options = do
-  (env,fdps) <- loadProto (optInclude options) (optProto options)
+  (env,fdps) <- loadProtos (optInclude options) (optProto options)
   putStrLn "All proto files loaded"
   run' standaloneMode options env fdps where
     standaloneMode :: Output IO
@@ -261,7 +260,8 @@ runStandalone options = do
 
 runPlugin :: Options -> CodeGeneratorRequest -> CodeGeneratorResponse
 runPlugin options req = execState (run' pluginOutput options env fdps) defaultValue where
-  (env,fdps) = loadCodeGenRequest req (head requestedFiles)
+  (env,fdps) = loadCodeGenRequest req requestedFiles
+
   pluginOutput :: Output (State CodeGeneratorResponse)
   pluginOutput = Output {
       outputReport = const $ return (),
@@ -278,36 +278,43 @@ runPlugin options req = execState (run' pluginOutput options env fdps) defaultVa
   requestedFiles = map (LocalFP . LC.unpack . utf8) . toList . file_to_generate $ req
 
 -- This run' operates for both runStandalone and runPlugin
-run' :: (Monad m) => Output m -> Options -> Env -> [D.FileDescriptorProto] -> m ()
-run' o@(Output print' writeFile') options env fdps = do
-  let fdp = either error id . top'FDP . fst . getTLS $ env
-  unless (optDryRun options) $ dump o (optImports options) (optDesc options) fdp fdps
-  -- Compute the nameMap that determine how to translate from proto names to haskell names
-  -- This is the part that uses the (optional) package name
-  nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
-  let NameMap _ rm = nameMap  -- DEBUG
-  print' "Haskell name mangling done"
-  let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options,optLenses options, optJson options) nameMap fdp
-      result = makeResult protoInfo
-  seq result (print' "Recursive modules resolved")
-  let produceMSG di = do
-        unless (optDryRun options) $ do
-          -- There might be several modules
-          let fileModules = descriptorModules result di
-          forM_ fileModules $ \ (relPath,modSyn) -> do
-            writeFile' relPath (prettyPrintStyleMode style myMode modSyn)
-      produceENM ei = do
-        let file = joinPath . enumFilePath $ ei
-        writeFile' file (prettyPrintStyleMode style myMode (enumModule ei))
-      produceONO oi = do
-        let file = joinPath . oneofFilePath $ oi
-        writeFile' file (prettyPrintStyleMode style myMode (oneofModule result oi))
-      produceSRV srv = do
-        let file = joinPath . serviceFilePath $ srv
-        writeFile' file (prettyPrintStyleMode style myMode (serviceModule result srv))
-  mapM_ produceMSG (messages protoInfo)
-  mapM_ produceENM (enums protoInfo)
-  mapM_ produceONO (oneofs protoInfo)
-  mapM_ produceSRV (services protoInfo)
-  let file = joinPath . protoFilePath $ protoInfo
-  writeFile' file (prettyPrintStyleMode style myMode (protoModule result protoInfo (serializeFDP fdp)))
+run' :: (Monad m) => Output m -> Options -> [Env] -> [D.FileDescriptorProto] -> m ()
+run' o@(Output print' writeFile') options envs fdps = do
+  let toGenerate = map (\env -> (either error id . top'FDP . fst . getTLS $ env, env)) envs
+  case toGenerate of
+    [(fdp, _)] -> unless (optDryRun options) $ dump o (optImports options) (optDesc options) fdp fdps
+    _ -> return ()
+  results <- forM toGenerate $ \(fdp, env) -> do
+    -- Compute the nameMap that determine how to translate from proto names to haskell names
+    -- This is the part that uses the (optional) package name
+    nameMap <- either error return $ makeNameMaps (optPrefix options) (optAs options) env
+    let NameMap _ rm = nameMap  -- DEBUG
+    print' "Haskell name mangling done"
+    let protoInfo = makeProtoInfo (optUnknownFields options,optLazy options,optLenses options, optJson options) nameMap fdp
+        result = makeResult protoInfo
+    seq result (print' "Recursive modules resolved")
+    let produceMSG di = do
+          unless (optDryRun options) $ do
+            -- There might be several modules
+            let fileModules = descriptorModules result di
+            forM_ fileModules $ \ (relPath,modSyn) -> do
+              writeFile' relPath (prettyPrintStyleMode style myMode modSyn)
+        produceENM ei = do
+          let file = joinPath . enumFilePath $ ei
+          writeFile' file (prettyPrintStyleMode style myMode (enumModule ei))
+        produceONO oi = do
+          let file = joinPath . oneofFilePath $ oi
+          writeFile' file (prettyPrintStyleMode style myMode (oneofModule result oi))
+        produceSRV srv = do
+          let file = joinPath . serviceFilePath $ srv
+          writeFile' file (prettyPrintStyleMode style myMode (serviceModule result srv))
+    mapM_ produceMSG (messages protoInfo)
+    mapM_ produceENM (enums protoInfo)
+    mapM_ produceONO (oneofs protoInfo)
+    mapM_ produceSRV (services protoInfo)
+    return (result, protoInfo, fdp)
+  case results of
+    [(result, protoInfo, fdp)] -> do
+      let file = joinPath . protoFilePath $ protoInfo
+      writeFile' file (prettyPrintStyleMode style myMode (protoModule result protoInfo (serializeFDP fdp)))
+    _ -> return ()

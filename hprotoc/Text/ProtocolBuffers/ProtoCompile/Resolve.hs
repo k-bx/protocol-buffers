@@ -95,7 +95,7 @@
 --
 -- hprotoc will actually resolve more unqualified imported names than Google's protoc which requires
 -- more qualified names.  I do not have the obsessive nature to fix this.
-module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadCodeGenRequest,makeNameMaps,getTLS,getPackageID
+module Text.ProtocolBuffers.ProtoCompile.Resolve(loadProto,loadProtos,loadCodeGenRequest,makeNameMaps,getTLS,getPackageID
                                                 ,Env(..),TopLevel(..),ReMap,NameMap(..),PackageID(..),LocalFP(..),CanonFP(..)) where
 
 import qualified Text.DescriptorProtos.DescriptorProto                as D(DescriptorProto)
@@ -148,7 +148,7 @@ import Text.ProtocolBuffers.ProtoCompile.Instances
 import Text.ProtocolBuffers.ProtoCompile.Parser
 
 import Control.Applicative
-import qualified Control.Monad.Fail as Fail
+import Control.Arrow (first)
 import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Reader
@@ -158,7 +158,6 @@ import Data.Char
 import Data.Ratio
 import Data.Ix(inRange)
 import Data.List(foldl',stripPrefix,isPrefixOf,isSuffixOf)
-import Data.Map(Map)
 import Data.Maybe(mapMaybe,isNothing)
 import Data.Typeable
 -- import Data.Monoid()
@@ -1325,11 +1324,11 @@ findFile paths (LocalFP target) = test paths where
 -- corresponding to it; returns also a canonicalised path.
 type DescriptorReader m = (Monad m) => LocalFP -> m (D.FileDescriptorProto, LocalFP)
 
-loadProto' :: (Functor r,Monad r) => (forall a. String -> StateT (Map LocalFP Env) r a) -> DescriptorReader r -> LocalFP -> r (Env,[D.FileDescriptorProto])
-loadProto' doFail fdpReader protoFile = goState (load Set.empty protoFile) where
+loadProto' :: (Functor r,Monad r) => (forall a. String -> StateT (Map LocalFP Env) r a) -> DescriptorReader r -> [LocalFP] -> r ([Env],[D.FileDescriptorProto])
+loadProto' doFail fdpReader protoFiles = goState (mapM (load Set.empty) protoFiles) where
   goState act = do (env,m) <- runStateT act mempty
                    let fromRight (Right x) = x
-                       fromRight (Left s) = error $ "loadProto failed to resolve a FileDescriptorProto: "++s
+                       fromRight (Left s) = error $ "loadProtos failed to resolve a FileDescriptorProto: "++s
                    return (env,map (fromRight . top'FDP . fst . getTLS) (M.elems m))
   load parentsIn file = do
     built <- get
@@ -1345,21 +1344,6 @@ loadProto' doFail fdpReader protoFile = goState (load Set.empty protoFile) where
                                   (return . fmap (map iToString . snd)) -- 2012-09-19 suspicious
                                   (checkPackageID rawPackage)
 
-{-
--- OLD before 2012-09-19
-            packageName <- either (loadFailed canonicalFile . show)
-                                  (return . PackageID . map iToString . snd) -- 2012-09-19 suspicious
-                                  (checkPackageID rawPackage)
--}
-
-{-
-   -- previously patched solution
-            packageName <- case D.FileDescriptorProto.package parsed'fdp of
-                             Nothing -> return []
-                             Just p  -> either (loadFailed canonicalFile . show)
-                                               (return . map iToString . snd) $
-                                               (checkDIUtf8 p)
--}
             let parents = Set.insert file parentsIn
                 importList = map (fpCanonToLocal . CanonFP . toString) . F.toList . D.FileDescriptorProto.dependency $ parsed'fdp
             imports <- mapM (fmap getTL . load parents) importList
@@ -1373,10 +1357,10 @@ loadProto' doFail fdpReader protoFile = goState (load Set.empty protoFile) where
 loadFailed :: LocalFP -> String -> String
 loadFailed f msg = unlines $ ["Parsing proto:",show (unLocalFP f),"has failed with message",msg]
 
--- | Given a list of paths to search, loads proto files by
--- looking for them in the file system.
+-- | Given a path to search, loads proto file by
+-- looking for it in the file system.
 loadProto :: [LocalFP] -> LocalFP -> IO (Env,[D.FileDescriptorProto])
-loadProto protoDirs protoFile = loadProto' fail findAndParseSource protoFile where
+loadProto protoDirs protoFile = fmap (first head) $ loadProto' fail findAndParseSource [protoFile] where
       findAndParseSource :: DescriptorReader IO
       findAndParseSource file = do
         mayToRead <- liftIO $ findFile protoDirs file
@@ -1390,7 +1374,24 @@ loadProto protoDirs protoFile = loadProto' fail findAndParseSource protoFile whe
                           (parseProto (unCanonFP relpath) protoContents)
             return (parsed'fdp, toRead)
 
-loadCodeGenRequest :: CGR.CodeGeneratorRequest -> LocalFP -> (Env,[D.FileDescriptorProto])
+-- | Given a list of paths to search, loads proto files by
+-- looking for them in the file system.
+loadProtos :: [LocalFP] -> [LocalFP] -> IO ([Env],[D.FileDescriptorProto])
+loadProtos protoDirs protoFiles = loadProto' fail findAndParseSource protoFiles where
+      findAndParseSource :: DescriptorReader IO
+      findAndParseSource file = do
+        mayToRead <- liftIO $ findFile protoDirs file
+        case mayToRead of
+          Nothing -> fail $ loadFailed file (unlines (["loading failed, could not find file: "++show (unLocalFP file)
+                                               ,"Searched paths were:"] ++ map (("  "++).show.unLocalFP) protoDirs))
+          Just (toRead,relpath) -> do
+            protoContents <- liftIO $ do putStrLn ("Loading filepath: "++show (unLocalFP toRead))
+                                         LC.readFile (unLocalFP toRead)
+            parsed'fdp <- either (fail . loadFailed toRead . show) return $
+                          (parseProto (unCanonFP relpath) protoContents)
+            return (parsed'fdp, toRead)
+
+loadCodeGenRequest :: CGR.CodeGeneratorRequest -> [LocalFP] -> ([Env],[D.FileDescriptorProto])
 loadCodeGenRequest req protoFile = runIdentity $ loadProto' error lookUpParsedSource protoFile where
   lookUpParsedSource :: DescriptorReader Identity
   lookUpParsedSource file = case M.lookup file fdpsByName of
