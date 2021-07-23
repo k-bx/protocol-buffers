@@ -4,8 +4,13 @@ packages:
 - hprotoc/
 - protobuf-test-suite/
 - warp-grpc-protocol-buffers/
+
 extra-deps:
 - base16-bytestring-1.0.0.0@sha256:0cde0953fa84b8f5214b07f00153197b883f6801f59f3de6da3f62a55992874c,2749
 - http2-grpc-types-0.5.0.0@sha256:4d34edc06a48496130f19245817a7cd7ea15c78ac8815570c3795ffc4503cf27,1445
 - warp-grpc-0.4.0.1@sha256:3859190e4fa23b944cf93ac691b3cec78c2adf4eaff6a4e8070c89fd17915add,1759
+- http2-client-0.10.0.0@sha256:85b8771e9e8d4fd0b4327373ebb4a7bc7f9a293e5d7a7dc581ca4153a841da67,2604
+- http2-client-grpc-0.8.0.0@sha256:5bea1edf5fa3572155f55c5b38cfab7063cbde613702898986c26d70bc9f3f9e,1861
+
+allow-newer: true
 resolver: nightly-2020-09-21
