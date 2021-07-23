@@ -1,4 +1,4 @@
-[![Build Status](https://github.com/k-bx/protocol-buffers/actions/workflows/haskell-ci.yml/badge.svg)](https://github.com/k-bx/protocol-buffers/actions/workflows/haskell-ci.yml) Haskell Protocol Buffers
+[![Build Status](https://github.com/k-bx/protocol-buffers/actions/workflows/haskell-ci.yml/badge.svg?branch=master)](https://github.com/k-bx/protocol-buffers/actions/workflows/haskell-ci.yml) Haskell Protocol Buffers
 ====================================================
 
 This the README file for `protocol-buffers`,
