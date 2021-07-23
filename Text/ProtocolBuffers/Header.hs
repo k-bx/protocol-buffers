@@ -2,7 +2,7 @@
 -- compile.  This and the Prelude will both be imported qualified as
 -- P', the prime ensuring no name conflicts are possible.
 module Text.ProtocolBuffers.Header
-    ( append, emptyBS
+    ( append, appendMap, emptyBS
     , pack, fromMaybe, ap
     , msum
     , fromDistinctAscList, member
@@ -11,6 +11,7 @@ module Text.ProtocolBuffers.Header
     , (<=<)
     , FromJSON(..), ToJSON(..)
     , Value(..)
+    , mapToList, seqFromList
     , explicitParseField, explicitParseFieldMaybe, withObject, withText
     , module Data.Generics
     , module Text.ProtocolBuffers.Basic
@@ -31,7 +32,8 @@ import Data.ByteString.Lazy(empty)
 import Data.ByteString.Lazy.Char8(pack)
 import Data.Generics(Data(..))
 import Data.Maybe(fromMaybe)
-import Data.Sequence((|>)) -- for append, see below
+import qualified Data.Sequence as Seq
+import qualified Data.Map as Map
 import Data.Set(fromDistinctAscList,member)
 import Text.Parsec(choice, sepEndBy, spaces, try)
 
@@ -74,8 +76,20 @@ import Text.ProtocolBuffers.ProtoJSON
 
 {-# INLINE append #-}
 append :: Seq a -> a -> Seq a
-append = (|>)
+append = (Seq.|>)
+
+{-# INLINE appendMap #-}
+appendMap :: Ord k => Map.Map k v -> (k, v) -> Map.Map k v
+appendMap = flip (uncurry Map.insert)
 
 {-# INLINE emptyBS #-}
 emptyBS :: ByteString
 emptyBS = Data.ByteString.Lazy.empty
+
+{-# INLINE mapToList #-}
+mapToList :: Map a b -> [(a,b)]
+mapToList = Map.toList
+
+{-# INLINE seqFromList #-}
+seqFromList :: [a] -> Seq a
+seqFromList = Seq.fromList

@@ -64,7 +64,7 @@ import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.Char(isUpper,toLower)
 import Data.Ix(inRange)
 import Data.Maybe(fromMaybe)
-import Data.Monoid(mconcat)
+import Data.Monoid(mconcat,(<>))
 import Data.Sequence((|>),(><))
 import qualified Data.Sequence as Seq(fromList,length,empty)
 import Data.Word(Word8)
@@ -74,6 +74,8 @@ import Text.ParserCombinators.Parsec(GenParser,ParseError,runParser,sourceName,a
                                     ,getInput,setInput,getPosition,setPosition,getState,setState
                                     ,(<?>),(<|>),token,choice,between,eof,unexpected,skipMany)
 import Text.ParserCombinators.Parsec.Pos(newPos)
+
+import qualified Text.ProtocolBuffers.Header as P'
 
 default ()
 
@@ -376,6 +378,7 @@ subMessage = (pChar '}') <|> (choice [ eol
                                      , field upNestedMsg Nothing >>= upMsgField
                                      , message upNestedMsg
                                      , enum upNestedEnum
+                                     , mapField
                                      , oneof upMsgOneof
                                      , extensions
                                      , extend upNestedMsg upExtField
@@ -534,6 +537,84 @@ isValidPacked LABEL_REPEATED (Just typeCode) =
     TYPE_ENUM -> True     -- Impossible value for typeCode from parseType, but here for completeness
     _ -> True
 isValidPacked _ _ = False
+
+-- mapField = "map" "<" keyType "," type ">" mapName "=" fieldNumber [ "[" fieldOptions "]" ] ";"
+-- keyType = "int32" | "int64" | "uint32" | "uint64" | "sint32" | "sint64" |
+--           "fixed32" | "fixed64" | "sfixed32" | "sfixed64" | "bool" | "string"
+--
+-- Protobuf:
+-- map<key_type, value_type> map_field = N;
+--
+-- Equivalent to:
+-- message value_type {}
+--
+-- message MapFieldEntry {
+--   key_type key = 1;
+--   value_type value = 2;
+-- }
+--
+-- repeated MapFieldEntry map_field = N;
+--
+-- In Haskell:
+-- module ValueType
+-- module Map_field_Entry where Map_field_Entry { key :: KeyType, value :: ValueType }
+-- Map_field.Entry where Entry { key :: KeyType, value :: ValueType }
+
+mapField :: P D.DescriptorProto.DescriptorProto ()
+mapField = do
+    pName (U.fromString "map")
+    pChar '<'
+    keyType   <- ident1
+    pChar ','
+    valueType <- ident
+    pChar '>'
+    self      <- ident1
+    number    <- pChar '=' >> enumInt
+
+    let typeTypeName t1 =
+            case parseType (uToString t1) of
+              Just t2 -> (Just t2, Nothing)
+              Nothing -> (Nothing, Just t1)
+    -- key
+    let key =
+            let (maybeTypeCode, maybeTypeName)   = typeTypeName keyType in
+            defaultValue {
+                D.FieldDescriptorProto.name      = Just $ P'.Utf8 $ U.fromString "key",
+                D.FieldDescriptorProto.number    = Just 1,
+                D.FieldDescriptorProto.label     = Just LABEL_REQUIRED,
+                D.FieldDescriptorProto.type'     = maybeTypeCode,
+                D.FieldDescriptorProto.type_name = maybeTypeName
+            }
+    -- value
+    let value =
+            let (maybeTypeCode, maybeTypeName)   = typeTypeName valueType in
+            defaultValue {
+                D.FieldDescriptorProto.name      = Just $ P'.Utf8 $ U.fromString "value",
+                D.FieldDescriptorProto.number    = Just 2,
+                D.FieldDescriptorProto.label     = Just LABEL_REQUIRED,
+                D.FieldDescriptorProto.type'     = maybeTypeCode,
+                D.FieldDescriptorProto.type_name = maybeTypeName
+            }
+    -- Map_field_Entry: (key,value) pair
+    let entryName = self <> (P'.Utf8 (U.fromString "_Entry"))
+    let mapFieldEntry = defaultValue {
+          D.DescriptorProto.name    = Just entryName,
+          D.DescriptorProto.field   = Seq.fromList [key, value],
+          D.DescriptorProto.options =
+                Just $ defaultValue {
+                    D.MessageOptions.map_entry = Just True
+                }
+        }
+    let field = defaultValue {
+          D.FieldDescriptorProto.name      = Just self,
+          D.FieldDescriptorProto.number    = Just number,
+          D.FieldDescriptorProto.label     = Just LABEL_REPEATED,
+          D.FieldDescriptorProto.type_name = Just entryName
+        }
+    update' $ \s -> s
+        { D.DescriptorProto.nested_type = D.DescriptorProto.nested_type s |> mapFieldEntry
+        , D.DescriptorProto.field       = D.DescriptorProto.field s       |> field
+        }
 
 enum :: (D.EnumDescriptorProto -> P s ()) -> P s ()
 enum up = pName (U.fromString "enum") >> do

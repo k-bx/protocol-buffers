@@ -22,6 +22,7 @@ tests:
       - aeson
       - text
       - containers
+      - process-extras
       - tasty
       - tasty-hunit
       - tasty-quickcheck
@@ -35,4 +36,5 @@ tests:
       - Text.ProtocolBuffers.Test.Tests.Grpc
       - Text.ProtocolBuffers.Test.Tests.School
       - Text.ProtocolBuffers.Test.Tests.Films
+      - Text.ProtocolBuffers.Test.Tests.Map
 

@@ -9,6 +9,7 @@ import Text.ProtocolBuffers.Test.Tests.AddressBook (addressBookTests, addressBoo
 import Text.ProtocolBuffers.Test.Tests.School (schoolQuickChecks)
 import Text.ProtocolBuffers.Test.Tests.Films (playlistQuickChecks)
 import Text.ProtocolBuffers.Test.Tests.Grpc (grpcTests)
+import Text.ProtocolBuffers.Test.Tests.Map (mapQuickChecks)
 
 tests :: IO ()
 tests = defaultMain $ testGroup "Protocol Buffers tests" $
@@ -16,4 +17,5 @@ tests = defaultMain $ testGroup "Protocol Buffers tests" $
   , addressBookQuickChecks
   , schoolQuickChecks
   , playlistQuickChecks
+  , mapQuickChecks
   ]

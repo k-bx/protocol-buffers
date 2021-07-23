@@ -29,7 +29,6 @@ import Data.Set(Set)
 import qualified Data.Set as Set(fromDistinctAscList)
 import Data.Generics(Data)
 import Data.Typeable(Typeable)
-import Data.Map(Map)
 
 -- | 'makePNF' is used by the generated code to create a ProtoName with less newtype noise.
 makePNF :: ByteString -> [String] -> [String] -> String -> ProtoName
@@ -85,6 +84,7 @@ data DescriptorInfo = DescriptorInfo { descName :: ProtoName
                                      , lazyFields :: Bool
                                      , makeLenses :: Bool
                                      , jsonInstances :: Bool
+                                     , mapEntry   :: Bool
                                      }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 
@@ -116,6 +116,8 @@ data FieldInfo = FieldInfo { fieldName     :: ProtoFName
                            , typeName      :: Maybe ProtoName  -- ^ Set for Messages,Groups,and Enums
                            , hsRawDefault  :: Maybe ByteString -- ^ crappy, but not escaped, thing
                            , hsDefault     :: Maybe HsDefault  -- ^ nice parsed thing
+                           , isMapField    :: Bool             -- ^ whether the field is map field
+                           , mapKeyVal     :: Maybe ((FieldType, Maybe ProtoName), (FieldType, Maybe ProtoName)) -- ^ types of key and value fields
                            }
   deriving (Show,Read,Eq,Ord,Data,Typeable)
 

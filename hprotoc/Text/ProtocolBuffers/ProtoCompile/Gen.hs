@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, CPP #-}
+{-# LANGUAGE NamedFieldPuns, RecordWildCards, ViewPatterns, CPP, MultiWayIf #-}
 -- This module uses the Reflection data structures (ProtoInfo,EnumInfo,DescriptorInfo) to
 -- build an AST using Language.Haskell.Syntax.  This get quite verbose, so a large number
 -- of helper functions (and operators) are defined to aid in specifying the output code.
@@ -29,15 +29,16 @@ import qualified Data.ByteString.Lazy.Char8 as LC(unpack)
 import qualified Data.Foldable as F(foldr,toList)
 import Data.List(sortBy,foldl',foldl1',group,sort,union)
 import Data.Function(on)
+import qualified Data.Char as Char
 import Language.Haskell.Exts.Pretty(prettyPrint)
 import Language.Haskell.Exts.Syntax hiding (Int,String)
 import Language.Haskell.Exts.Syntax as Hse
 import Data.Char(isLower,isUpper)
 import qualified Data.Map as M
-import Data.Maybe(mapMaybe)
+import Data.Maybe(mapMaybe,catMaybes,fromJust)
 import Data.List (dropWhileEnd, nub)
 import           Data.Sequence (ViewL(..),(><))
-import qualified Data.Sequence as Seq(null,length,viewl)
+import qualified Data.Sequence as Seq
 import qualified Data.Set as S
 import System.FilePath(joinPath)
 import Data.Char (toLower)
@@ -172,8 +173,7 @@ importPN r selfMod@(ModuleName () self) part pn =
       fromSource = S.member (FMName self,part,o) (rIBoot r)
       iabs = IAbs () (NoNamespace ()) (Ident () (mName (baseName pn)))
       ans = if m1 == selfMod && part /= KeyFile then Nothing
-              else Just $ ImportDecl () m1 True fromSource False Nothing (Just m2)
-                            (Just (ImportSpecList () False [iabs]))
+              else Just $ ImportDecl () m1 True fromSource False Nothing (Just m2) Nothing
   in ecart (unlines . map (\ (a,b) -> a ++ " = "++b) $
                  [("selfMod",show selfMod)
                  ,("part",show part)
@@ -746,22 +746,109 @@ descriptorNormalModule result di
         extendees' = if sepKey then [] else extendees
         myKeys' = if sepKey then [] else myKeys
         m = ModuleName () (fqMod protoName)
+        -- need to import KEY and VALUE types for each map<KEY,VALUE> field
+        map_field_imports =
+            map
+                (\FieldInfo{mapKeyVal = Just (kt, vt)} ->
+                    catMaybes [mapFieldImportDecl kt, mapFieldImportDecl vt])
+                (F.toList $ Seq.filter isMapField (fields di))
         exportKeys :: [ExportSpec ()]
         exportKeys = map (EVar () . unqualFName . fieldName) myKeys
+        -- MapField_Entry modules ((key,value) wrappers) also export their
+        -- helper functions to convert from record to pair and from Map to
+        -- Sequence
+        map_field_exports =
+            if mapEntry di then
+                [ EVar () $ mapFieldHelperFn (descName di) "ToPair" False
+                , EVar () $ mapFieldHelperFn (descName di) "ToSeq" False
+                ]
+            else
+                []
         imports = (standardImports False (hasExt di) (makeLenses di) ++) . mergeImports . concat $
                     [ mapMaybe (importPN result m Normal) $
                         extendees' ++ mapMaybe typeName (myKeys' ++ (F.toList (fields di)))
                     , concat . mapMaybe (importO result m Normal) $ F.toList (descOneofs di)
                     , mapMaybe (importPFN result m) (map fieldName (myKeys ++ F.toList (knownKeys di))) ]
+                    ++ F.toList map_field_imports
+        mkLenses = Var () (Qual () (ModuleName () "Control.Lens.TH") (Ident () "makeLenses"))
         lenses | makeLenses di = [SpliceDecl () (mkLenses $$ TypQuote () (unqualName protoName))]
                | otherwise = []
         declKeys | sepKey = []
                  | otherwise = keysXTypeVal (descName di) (keys di)
     in Module ()
-              (Just (ModuleHead () m Nothing (Just (ExportSpecList () ((EThingWith () (EWildcard () 0) un [] : exportLenses di ++ exportKeys))))))
+              (Just (ModuleHead () m Nothing (Just (ExportSpecList () ((EThingWith () (EWildcard () 0) un [] : exportLenses di ++ exportKeys ++ map_field_exports))))))
               (modulePragmas $ makeLenses di)
               imports
-              (descriptorX di : lenses ++ declKeys ++ instancesDescriptor di)
+              (descriptorX di : lenses ++ declKeys ++ instancesDescriptor di ++ declMapHelpers di)
+
+-- | Generate imports for map field helper functions
+mapFieldImportDecl :: (FieldType, Maybe ProtoName) -> Maybe (ImportDecl ())
+mapFieldImportDecl = fmap makeImportDecl . makeModNames
+    where
+        makeImportDecl :: (ModuleName (), ModuleName ()) -> ImportDecl ()
+        makeImportDecl (mn, as) =
+            ImportDecl
+                ()        {-location-}
+                mn        {-module name-}
+                True      {-qualified-}
+                False     {-with SOURCE-}
+                False     {-SAFE-}
+                Nothing   {-package name (package imports)-}
+                (Just as) {-... as name-}
+                Nothing   {-import list-}
+
+        makeModNames :: (FieldType, Maybe ProtoName) -> Maybe (ModuleName (), ModuleName ())
+        makeModNames (ft, tn) =
+            case useType (getFieldType ft) of
+                -- no need to import anything
+                Just _ -> Nothing
+                Nothing -> case tn of
+                    Just s -> Just
+                        ( ModuleName () $ fqMod s
+                        , ModuleName () $ joinMod (parentModule s)
+                        )
+                    Nothing -> Nothing
+
+-- | Generate helper functions to convert between Map and Sequence of records
+-- representations of the message
+declMapHelpers :: DescriptorInfo -> [Decl ()]
+declMapHelpers di
+    | not (mapEntry di) = []
+    | otherwise         = [toPair, toSeq]
+    where
+        -- toPair :: MOD -> (KEY, VAL)
+        -- toPair (MOD k v) = (k,v)
+        toPair = FunBind ()
+            [ Match ()
+                (mapFieldHelperName (descName di) "ToPair") {-name-}
+                [PVar () (Ident () "entry")]
+                (Hse.UnGuardedRhs () $           {-rhs-}
+                    Hse.Tuple () Hse.Boxed [App () (lvar "key") (lvar "entry"), App () (lvar "value") (lvar "entry")])
+                Nothing                       {-binds-}
+            ]
+        -- toSeq :: Map.Map KEY VAL -> Seq MOD
+        -- toSeq x = Seq.fromList (Prelude'.map (Prelude'.uncurry Map_field_Entry) (Map.toList x))
+        toSeq = FunBind ()
+            [ Match ()
+                (mapFieldHelperName (descName di) "ToSeq")
+                [PVar () (Ident () "x")]
+                (Hse.UnGuardedRhs () $
+                    App () (pvar "seqFromList")
+                        (App ()
+                            (App ()
+                                (preludevar "map")
+                                (Paren () (Lambda ()
+                                  [PTuple () Boxed [PVar () (Ident () "k"), PVar () (Ident () "v")]]
+                                  (RecUpdate ()
+                                    (pvar "defaultValue")
+                                    [ FieldUpdate () (local "key") (lvar "k")
+                                    , FieldUpdate () (local "value") (lvar "v")
+                                    ])
+                                )))
+                            (App () (pvar "mapToList") (lvar "x")))
+                )
+                noWhere
+            ]
 
 mkLenses :: Exp ()
 mkLenses = Var () (Qual () (ModuleName () "Control.Lens.TH") (Ident () "makeLenses"))
@@ -792,7 +879,8 @@ standardImports isEnumMod ext lenses =
   , ImportDecl () (ModuleName () "Data.Typeable") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "GHC.Generics") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
   , ImportDecl () (ModuleName () "Data.Data") True False False Nothing (Just (ModuleName () "Prelude'")) Nothing
-  , ImportDecl () (ModuleName () "Text.ProtocolBuffers.Header") True False False Nothing (Just (ModuleName () "P'")) Nothing ] ++ lensTH
+  , ImportDecl () (ModuleName () "Text.ProtocolBuffers.Header") True False False Nothing (Just (ModuleName () "P'")) Nothing
+  ] ++ lensTH
  where
        ops | ext = map (IVar () . Symbol ()) $ base ++ ["==","<=","&&"]
            | otherwise = map (IVar () . Symbol ()) base
@@ -855,12 +943,15 @@ descriptorX :: DescriptorInfo -> Decl ()
 descriptorX di = DataDecl () (DataType ()) Nothing (DHead () name) [QualConDecl () Nothing Nothing con] (return derives)
   where self = descName di
         name = baseIdent self
+        (map_fields, normal_fields) = Seq.partition isMapField (fields di)
         con = RecDecl () name eFields
-                where eFields = map (\(ns, t) -> FieldDecl () ns t) $ F.foldr ((:) . fieldX) end (fields di)
+                where eFields = map (\(ns, t) -> FieldDecl () ns t) $ F.foldr ((:) . fieldX) end normal_fields
                       end = (if hasExt di then pure extfield else mempty) <>
                             eOneof <>
+                            eMaps <>
                             (if storeUnknown di then pure unknownField else mempty)
                       eOneof = F.foldr ((:) . fieldOneofX) [] (descOneofs di)
+                      eMaps  = F.foldr ((:) . fieldMapX) [] map_fields
 
         bangType = if lazyFields di then TyParen () {- UnBangedTy -} else TyBang () (BangedTy ()) (NoUnpackPragma ()) . TyParen ()
         -- extfield :: ([Name],BangType)
@@ -882,6 +973,28 @@ descriptorX di = DataDecl () (DataType ()) Nothing (DHead () name) [QualConDecl 
         fieldOneofX :: OneofInfo -> ([Name ()],Type ())
         fieldOneofX oi = ([baseIdent' . oneofFName $ oi], typeApp "Maybe" (TyParen () (TyCon () typed)))
           where typed = qualName (oneofName oi)
+
+        fieldMapX :: FieldInfo -> ([Name ()], Type ())
+        fieldMapX fi = ([baseIdent' . fieldName $ fi], ty)
+            where
+                (ki, vi) = case mapKeyVal fi of
+                    Just x  -> x
+                    Nothing -> error $ "Map FieldInfo without key/value types"
+                ty :: Type ()
+                ty =
+                    TyApp ()
+                        (TyApp ()
+                            (TyCon () (private "Map"))
+                            (TyParen () (TyCon () (typed ki))))
+                        (TyParen () (TyCon () (typed vi)))
+                typed :: (FieldType, Maybe ProtoName) -> QName ()
+                typed t@(ft, tn) = case useType (getFieldType ft) of
+                          Just s -> private s
+                          Nothing -> case tn of
+                            Just s
+                                | self /= s -> qualName s
+                                | otherwise -> unqualName s
+                            Nothing -> error $ "No Name for Field!\n" ++ show t
 
 instancesDescriptor :: DescriptorInfo -> [Decl ()]
 instancesDescriptor di = map ($ di) $
@@ -1071,7 +1184,12 @@ instanceTextMsg di
         getField fi =
             let printname = toPrintName fi
                 Ident () funcname = baseIdent' (fieldName fi)
-                update = if canRepeat fi then pvar "append" $$ Paren () (lvar funcname $$ lvar "o") $$ lvar "v" else lvar "v"
+                update
+                  | isMapField fi =
+                      let fn = mapFieldHelperFn (fromJust (typeName fi)) "ToPair" True in
+                      pvar "appendMap" $$ Paren () (lvar funcname $$ lvar "o") $$ App () (Var () fn) (lvar "v")
+                  | canRepeat fi = pvar "append" $$ Paren () (lvar funcname $$ lvar "o") $$ lvar "v"
+                  | otherwise = lvar "v"
             in preludevar "fmap" $$
                 Paren () (Lambda () [patvar "v", patvar "o"] (RecUpdate () (lvar "o") [ FieldUpdate () (local funcname) update])) $$
                 Paren () (pvar "try" $$ Paren () (pvar "getT" $$ litStr printname))
@@ -1101,7 +1219,10 @@ printField :: String -> FieldInfo -> Exp ()
 printField msgVar fi
   = let Ident () funcname = baseIdent' (fieldName fi)
         printname = toPrintName fi
-    in pvar "tellT" $$ litStr printname $$ Paren () (lvar funcname $$ lvar msgVar)
+        -- if map field, convert to sequence first
+        f x | isMapField fi = Paren () (Var () (mapFieldHelperFn (fromJust (typeName fi)) "ToSeq" True) $$ x)
+            | otherwise     = x
+    in pvar "tellT" $$ litStr printname $$ f (Paren () (lvar funcname $$ lvar msgVar))
 
 toPrintName :: FieldInfo -> String
 toPrintName fi = let IName uname = last $ splitFI $ protobufName' (fieldName fi) in uToString uname
@@ -1217,16 +1338,21 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                              | otherwise = sizesListFields
                 sizesListFields =  concat . zipWith toSize vars . F.toList $
                                      fmap Left fieldInfos >< fmap Right oneofInfos
-        toSize var (Left fi)
-          = let f = if isPacked fi then "wireSizePacked"
-                    else if isRequired fi then "wireSizeReq"
-                         else if canRepeat fi then "wireSizeRep"
-                              else "wireSizeOpt"
-            in [foldl' (App ()) (pvar f) [ litInt (wireTagLength fi)
-                                    , litInt (getFieldType (typeCode fi))
-                                    , var]]
-        toSize var (Right oi) = map (toSize' var) . F.toList . oneofFields $ oi
-          where toSize' var r@(n,fi)
+        toSize var0 (Left fi)
+          = let f = if | isPacked   fi -> "wireSizePacked"
+                       | isRequired fi -> "wireSizeReq"
+                       | canRepeat  fi -> "wireSizeRep"
+                       | otherwise     -> "wireSizeOpt"
+            in
+            -- Map -> Seq
+            let fn  = mapFieldHelperFn (fromJust $ typeName fi) "ToSeq" True in
+            -- map fields are convereted to sequence first
+            let var = if isMapField fi then Var () fn $$ var0 else var0 in
+            [foldl' (App ()) (pvar f) [ litInt (wireTagLength fi)
+                                 , litInt (getFieldType (typeCode fi))
+                                 , var]]
+        toSize var_ (Right oi) = map (toSize' var_) . F.toList . oneofFields $ oi
+          where toSize' var r@(_,fi)
                   = let f = "wireSizeOpt"
                         var' = mkOp "Prelude'.=<<" (Var () (qualName (snd (oneofGet r)))) var
                     in foldl' (App ()) (pvar f) [ litInt (wireTagLength fi)
@@ -1261,15 +1387,20 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                      $ putStmtsList
                 putStmtsList = concat . zipWith toPut vars . F.toList $
                                  fmap Left fieldInfos >< fmap Right oneofInfos
-        toPut var (Left fi)
-          = let f = if isPacked fi then "wirePutPackedWithSize"
-                    else if isRequired fi then "wirePutReqWithSize"
-                         else if canRepeat fi then "wirePutRepWithSize"
-                              else "wirePutOptWithSize"
-            in [(fieldNumber fi,
-                   foldl' (App ()) (pvar f) [ litInt (getWireTag (wireTag fi))
+        toPut var0 (Left fi)
+          = let f = if | isPacked   fi -> "wirePutPackedWithSize"
+                       | isRequired fi -> "wirePutReqWithSize"
+                       | canRepeat  fi -> "wirePutRepWithSize"
+                       | otherwise     -> "wirePutOptWithSize"
+            in
+            -- Map -> Seq
+            let fn = mapFieldHelperFn (fromJust $ typeName fi) "ToSeq" True in
+            -- map fields are convereted to sequence first
+            let var1 = if isMapField fi then Var () fn $$ var0 else var0 in
+            [( fieldNumber fi
+             , foldl' (App ()) (pvar f) [ litInt (getWireTag (wireTag fi))
                                        , litInt (getFieldType (typeCode fi))
-                                       , var]
+                                       , var1]
                  )]
         toPut var (Right oi) = map toPut' . F.toList . oneofFields $ oi
           where toPut' r@(_n,fi)
@@ -1342,7 +1473,6 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                     | otherwise                      = [toUpdateUnpacked (wireTag fi) fi]
 
 
-
         toUpdateUnpacked wt1 fi =
           Alt () (litIntP . getWireTag $ wt1) (UnGuardedRhs () $
             preludevar "fmap" $$ (Paren () $ Lambda () [PBangPat () (patvar "new'Field")] $
@@ -1350,11 +1480,19 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                         [FieldUpdate () (unqualFName . fieldName $ fi)
                                                      (labelUpdateUnpacked fi)])
                         $$ (Paren () (pvar "wireGet" $$ (litInt . getFieldType . typeCode $ fi)))) noWhere
-        labelUpdateUnpacked fi | canRepeat fi = pvar "append" $$ Paren () ((Var () . unqualFName . fieldName $ fi)
-                                                                             $$ lvar "old'Self")
-                                                              $$ lvar "new'Field"
-                               | isRequired fi = qMerge (lvar "new'Field")
-                               | otherwise = qMerge (preludecon "Just" $$ lvar "new'Field")
+        labelUpdateUnpacked fi
+            | isMapField fi =
+                pvar "appendMap" $$
+                    Paren () ((Var () . unqualFName . fieldName $ fi) $$ lvar "old'Self") $$
+                        -- convert a record to (k,v) pair
+                        App () (Var () (mapFieldHelperFn (fromJust (typeName fi)) "ToPair" True))
+                            (lvar "new'Field")
+            | canRepeat fi =
+                pvar "append" $$
+                  Paren () ((Var () . unqualFName . fieldName $ fi) $$ lvar "old'Self") $$
+                  lvar "new'Field"
+            | isRequired fi = qMerge (lvar "new'Field")
+            | otherwise = qMerge (preludecon "Just" $$ lvar "new'Field")
             where qMerge x | fromIntegral (getFieldType (typeCode fi)) `elem` [10,(11::Int)] =
                                pvar "mergeAppend" $$ Paren () ( (Var () . unqualFName . fieldName $ fi)
                                                                $$ lvar "old'Self" )
@@ -1473,3 +1611,27 @@ useType 16 = Just "Int64"
 useType 17 = Just "Int32"
 useType 18 = Just "Int64"
 useType  x = imp $ "useType: Unknown type code (expected 1 to 18) of "++show x
+
+-- | Generate a name of map field helper functions: ModToPair and ModToSeq
+mapFieldHelperFn :: ProtoName -> String -> Bool -> QName ()
+mapFieldHelperFn tn suffix qual =
+    let ident = mapFieldHelperName tn suffix in
+    let mn = joinMod (parentModule tn) in
+    if   qual
+    -- output of the form: MyProto.MyMessage.map_field_Entry{ToPair, ToSeq}
+    then Qual () (ModuleName () mn) ident
+    -- or unqualified (for export lists)
+    else UnQual () ident
+
+mapFieldHelperName :: ProtoName -> String -> Name ()
+mapFieldHelperName tn suffix =
+    -- need to change the first letter of module name to lowercase becuase we
+    -- use it as a prefix for a function name
+    let ident0 = lowercase $ mName $ baseName tn in
+    Ident () (ident0 ++ suffix)
+
+-- | Convert first letter in a stirng to lowercase
+lowercase :: String -> String
+lowercase xs = case xs of
+    []   -> []
+    y:ys -> Char.toLower y : ys
