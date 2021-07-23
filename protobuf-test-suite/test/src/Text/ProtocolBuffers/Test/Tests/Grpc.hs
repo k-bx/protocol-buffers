@@ -23,7 +23,6 @@ import Text.ProtocolBuffers.TextMessage
 import Text.ProtocolBuffers.WireMessage
 import Text.ProtocolBuffers.WarpGrpc
 
-import HSCodeGen.Grpc
 import HSCodeGen.Grpc.HelloService
 
 grpcTests :: TestTree
