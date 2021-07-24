@@ -1,5 +1,5 @@
-package grpc;
 syntax = "proto2";
+package grpc;
 
 service HelloService {
   rpc SayHello (HelloRequest) returns (HelloResponse);
