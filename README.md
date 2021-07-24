@@ -428,14 +428,14 @@ For `SearchService` it generates a module roughly looking like this:
 (omitting imports, exports and code for other messages):
 
 ````haskell
-type SearchService = P'.Service '[Search, Autocomplete]
+type SearchService = P'.Service "Search.SearchService" '[Search, Autocomplete]
 
 searchService :: SearchService
 searchService = P'.Service
 
-type Search = P'.Method ".Search.SearchService.Search" SearchRequest SearchResponse
+type Search = P'.Method "Search" (P'.Single SearchRequest) (P'.Single SearchResponse)
 
-type Autocomplete = P'.Method ".Search.SearchService.Autocomplete" AutocompleteRequest AutocompleteResponse
+type Autocomplete = P'.Method "Autocomplete" (P'.Single AutocompleteRequest) (P'.Single AutocompleteResponse)
 
 search :: Search
 search = P'.Method
