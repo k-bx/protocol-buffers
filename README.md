@@ -1,4 +1,4 @@
-[![Build Status](https://github.com/k-bx/protocol-buffers/actions/workflows/haskell-ci.yml/badge.svg)](https://github.com/k-bx/protocol-buffers/actions/workflows/haskell-ci.yml) Haskell Protocol Buffers
+[![Build Status](https://github.com/k-bx/protocol-buffers/actions/workflows/haskell-ci.yml/badge.svg?branch=master)](https://github.com/k-bx/protocol-buffers/actions/workflows/haskell-ci.yml) Haskell Protocol Buffers
 ====================================================
 
 This the README file for `protocol-buffers`,
@@ -6,7 +6,7 @@ This the README file for `protocol-buffers`,
 interdependent Haskell packages originally written by Chris Kuklewicz.
 
 Currently, maintainership was taken by Timo von Holtz. It is
-planned to only support GHC 8.0 and newer unless someone explicitly
+planned to only support GHC 8.6 and newer unless someone explicitly
 asks for support of earlier versions.
 
 (Needs check) This README was updated most recently to reflect version
@@ -35,9 +35,9 @@ How well does this Haskell package duplicate Google's project?
 - These messages support unknown fields if hprotoc is passed the
   proper flag (-u or --unknown_fields).
 
-- This does not generate anything for Services/Methods.
+- ~~This does not generate anything for Services/Methods.~~
 
-- Adding support for services has not been considered.
+- ~~Adding support for services has not been considered.~~
 
 I think that Google's code checks for some policy violations that are
 not well documented enough for me to reverse engineer. Some (all?) of
@@ -382,3 +382,75 @@ hs >   ./decode ../cpp/serialized.dat
 
 Right (Dormitory {name = "Gryffindor", members = fromList [Member {id = 1, name = "Albus Dumbledore", property = Just (Prop_faculty {prop_faculty = Faculty {subject = "allmighty", title = Just "headmaster", duty = fromList []}})},Member {id = 2, name = "Harry Potter", property = Just (Prop_student {prop_student = Student {grade = 5, specialty = Just "defense of dark arts"}})}]},"")
 ```
+
+New code generation for services
+--------------------------------
+
+`protocol-buffers` support the definition and generation of RPC services. Though
+without specifying a specific transport mechanism. Meaning only stubs are generated.
+True to this motto `hprotoc` generates transport agnostic interfaces for services.
+
+Consider a `Search.proto` definition like the following:
+
+````protobuf
+message SearchRequest {
+    required string query = 1;
+    optional int32 page_number = 2;
+    optional int32 result_per_page = 3;
+}
+
+message SearchResponse {
+    repeated string results = 1;
+}
+
+message AutocompleteRequest {
+    required string query = 1;
+    optional int32 max_results = 2;
+}
+
+message AutocompleteResponse {
+    repeated string results = 1;
+}
+
+service SearchService {
+    rpc Search (SearchRequest) returns (SearchResponse);
+    rpc Autocomplete(AutocompleteRequest) returns (AutocompleteResponse);
+}
+````
+
+We define two request-response pairs `SearchRequest`, `SearchResponse` and
+`AutocompleteRequest`, `AutocompleteResponse`  and a service definition
+`SearchService`. The service has two methods `Search` and `Autocomplete`.
+Each taking one of the request-response pair as parameter respectively as
+output.
+
+For `SearchService` it generates a module roughly looking like this:
+(omitting imports, exports and code for other messages):
+
+````haskell
+type SearchService = P'.Service "Search.SearchService" '[Search, Autocomplete]
+
+searchService :: SearchService
+searchService = P'.Service
+
+type Search = P'.Method "Search" (P'.Single SearchRequest) (P'.Single SearchResponse)
+
+type Autocomplete = P'.Method "Autocomplete" (P'.Single AutocompleteRequest) (P'.Single AutocompleteResponse)
+
+search :: Search
+search = P'.Method
+
+autocomplete :: Autocomplete
+autocomplete = P'.Method
+````
+
+A translated service consists of a type-level list itself consisting of `Method` types.
+Each `Method` is parameterized with its method name as type-level string (via `DataKinds` extension),
+its input parameter type and its output parameter type.
+
+For every RPC method there will be one type alias for some parameterized `Method` type. For convenience `hprotoc`
+will generate proxy functions (`searchService`, `search` and `autocomplete`) so
+users won't have to tinker with proxying their types manually.
+
+As the `protocol-buffer` does not specify any transport mechanism for services implementors
+have to build the transports on their own.

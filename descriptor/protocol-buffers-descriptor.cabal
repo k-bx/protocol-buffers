@@ -14,7 +14,7 @@ description:    Uses protocol-buffers package
 category:       Text
 data-files:     descriptor.proto
 extra-source-files: README
-Tested-With: GHC == 8.0.2, GHC == 8.2.2, GHC == 8.4.2, GHC == 8.6.2, GHC == 8.8.4, GHC == 8.10.2
+Tested-With: GHC == 8.6.2, GHC == 8.8.4, GHC == 8.10.2
 source-repository head
   type: git
   location: git://github.com/k-bx/protocol-buffers.git
@@ -24,7 +24,7 @@ source-repository head
 
 Library
   default-language: Haskell2010
-  build-depends: base >= 4.9.0 && < 5,
+  build-depends: base >= 4.12.0 && < 5,
                  protocol-buffers == 2.4.17,
                  bytestring,
                  containers

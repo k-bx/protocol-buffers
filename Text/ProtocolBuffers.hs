@@ -1,4 +1,4 @@
-{- | 
+{- |
 
 "Text.ProtocolBuffers" exposes the client API.  This merely re-exports parts of the
 other modules in protocol-buffers.  The exposed parts are:
@@ -53,7 +53,8 @@ module Text.ProtocolBuffers(
 import Text.ProtocolBuffers.Basic
   ( Seq,isValidUTF8,toUtf8,utf8,Utf8(Utf8),Int32,Int64,Word32,Word64
   , WireTag,FieldId,WireType,FieldType,EnumCode,WireSize
-  , Mergeable(mergeAppend,mergeConcat),Default(defaultValue))
+  , Mergeable(mergeAppend,mergeConcat),Default(defaultValue)
+  , Method(..), Service(..), Streaming(..))
 import Text.ProtocolBuffers.Extensions
   ( Key,ExtKey(getExt,putExt,clearExt),MessageAPI(getVal,isSet)
   , getKeyFieldId,getKeyFieldType,getKeyDefaultValue)

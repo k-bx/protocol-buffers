@@ -14,13 +14,13 @@
 -- The names are also assumed to have become fully-qualified, and all
 -- the optional type codes have been set.
 --
-module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,oneofModule,prettyPrint) where
+module Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,oneofModule,serviceModule,prettyPrint) where
 
 import Text.DescriptorProtos.FieldDescriptorProto.Type hiding (Type)
 
 import Text.ProtocolBuffers.Basic
 import Text.ProtocolBuffers.Identifiers
-import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),DescriptorInfo(..),ProtoInfo(..),OneofInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..))
+import Text.ProtocolBuffers.Reflections(KeyInfo,HsDefault(..),SomeRealFloat(..),DescriptorInfo(..),ProtoInfo(..),OneofInfo(..),EnumInfo(..),ProtoName(..),ProtoFName(..),FieldInfo(..),ServiceInfo(..),MethodInfo(..))
 
 import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(Result(..),VertexKind(..),pKey,pfKey,getKind,Part(..))
 
@@ -36,11 +36,12 @@ import Language.Haskell.Exts.Syntax as Hse
 import Data.Char(isLower,isUpper)
 import qualified Data.Map as M
 import Data.Maybe(mapMaybe,catMaybes,fromJust)
-import Data.List (dropWhileEnd)
+import Data.List (dropWhileEnd, nub)
 import           Data.Sequence (ViewL(..),(><))
 import qualified Data.Sequence as Seq
 import qualified Data.Set as S
 import System.FilePath(joinPath)
+import Data.Char (toLower)
 
 ecart :: String -> a -> a
 ecart _ x = x
@@ -170,7 +171,6 @@ importPN r selfMod@(ModuleName () self) part pn =
       m1 = ModuleName () (joinMod (haskellPrefix pn ++ parentModule pn ++ [baseName pn]))
       m2 = ModuleName () (joinMod (parentModule pn))
       fromSource = S.member (FMName self,part,o) (rIBoot r)
-      iabs = IAbs () (NoNamespace ()) (Ident () (mName (baseName pn)))
       ans = if m1 == selfMod && part /= KeyFile then Nothing
               else Just $ ImportDecl () m1 True fromSource False Nothing (Just m2) Nothing
   in ecart (unlines . map (\ (a,b) -> a ++ " = "++b) $
@@ -309,7 +309,7 @@ oneofGet (p,fi) =
 modulePragmas :: Bool -> [ModulePragma ()]
 modulePragmas templateHaskell =
   [ LanguagePragma () (map (Ident ()) $
-      thPragma ++ ["BangPatterns","DeriveDataTypeable","DeriveGeneric","FlexibleInstances","MultiParamTypeClasses","OverloadedStrings"]
+      thPragma ++ ["BangPatterns", "DataKinds","DeriveDataTypeable","DeriveGeneric","FlexibleInstances","MultiParamTypeClasses","OverloadedStrings"]
     )
   , OptionsPragma () (Just GHC) " -w "
   ]
@@ -548,6 +548,91 @@ instanceReflectEnum ei
 
 hasExt :: DescriptorInfo -> Bool
 hasExt di = not (null (extRanges di))
+
+--------------------------------------------
+-- ServiceDescriptor module creation
+--------------------------------------------
+
+serviceModule :: Result -> ServiceInfo -> Module ()
+serviceModule result si =
+  Module () (Just (ModuleHead () moduleName Nothing (Just exports))) (modulePragmas False)
+    (nub imports)
+    (serviceDecls si)
+  where
+    moduleName = ModuleName () (fqMod (serviceName si))
+    imports =
+      standardImports True False False ++
+      mapMaybe (importPN result moduleName Normal) (fmap methodInput (serviceMethods si)) ++
+      mapMaybe (importPN result moduleName Normal) (fmap methodOutput (serviceMethods si))
+
+    exports :: ExportSpecList ()
+    exports =
+      ExportSpecList () (
+         [ mkAbs (UnQual () (serviceTypeName si))
+         , mkEvar (UnQual () (serviceProxyName si))
+         ]
+         ++ fmap (\mi -> mkAbs (UnQual () (methodTypeName mi))) (serviceMethods si)
+         ++ fmap (\mi -> mkEvar (UnQual () (methodProxyName mi))) (serviceMethods si)
+        )
+
+    mkAbs = EAbs () (NoNamespace ())
+    mkEvar = EVar ()
+
+
+serviceTypeName :: ServiceInfo -> Name ()
+serviceTypeName si = baseIdent (serviceName si)
+
+serviceProxyName :: ServiceInfo -> Name ()
+serviceProxyName si = Ident () (toLower s : sx)
+  where Ident () (s:sx) = baseIdent (serviceName si)
+
+methodProxyName :: MethodInfo -> Name ()
+methodProxyName mi = Ident () (toLower s : sx)
+  where Ident () (s:sx) = baseIdent (methodName mi)
+
+methodTypeName :: MethodInfo -> Name ()
+methodTypeName mi = Ident () s
+  where Ident _ s = baseIdent (methodName mi)
+
+serviceDecls :: ServiceInfo -> [Decl ()]
+serviceDecls si' =
+  [ serviceDecl si']
+  ++ serviceProxy si'
+  ++ fmap (methodDecl si') (serviceMethods si')
+  ++ concatMap (methodProxy si') (serviceMethods si')
+  where
+    serviceDecl si =
+      TypeDecl () (DHead () (serviceTypeName si)) (TyApp ()
+        (TyApp ()
+          (TyCon () (private "Service"))
+          (let s = drop 1 $ toString (fiName (protobufName (serviceName si))) in TyPromoted () (PromotedString () s (show s))))
+        (TyPromoted () (
+            PromotedList () True (fmap (\mx -> TyPromoted () (PromotedCon () False (UnQual () (methodTypeName mx)))) (serviceMethods si))
+                   )
+        ))
+
+    serviceProxy si =
+      [ TypeSig () [serviceProxyName si] (TyCon () (UnQual () (serviceTypeName si)))
+      , PatBind () (PVar () (serviceProxyName si)) (UnGuardedRhs () (Con () (private "Service"))) Nothing
+      ]
+
+    methodDecl _si mi =
+      TypeDecl () (DHead () (methodTypeName mi)) $
+      foldl' (TyApp ()) (TyCon () (private "Method"))
+        [ let Ident _ s = baseIdent (methodName mi) in TyPromoted () (PromotedString () s (show s))
+        , mkStreaming (methodClientStream mi) (methodInput mi)
+        , mkStreaming (methodServerStream mi) (methodOutput mi)
+        ]
+
+    mkStreaming streamFlag ty =
+      let streamTy = TyPromoted () (PromotedCon () False (private (if streamFlag then "StreamOf" else "Single")))
+          ty' = TyCon () (qualName ty)
+      in TyParen () (TyApp () streamTy ty')
+
+    methodProxy _si mi =
+      [ TypeSig () [methodProxyName mi] (TyCon () (UnQual () (methodTypeName mi)))
+      , PatBind () (PVar () (methodProxyName mi)) (UnGuardedRhs () (Con () (private "Method"))) Nothing -- (BDecls [])
+      ]
 
 --------------------------------------------
 -- FileDescriptorProto module creation
@@ -1496,11 +1581,7 @@ mkSimpleIRule con args =
     in IRule () Nothing Nothing instHead
 
 mkDeriving :: [QName ()] -> Deriving ()
-#if MIN_VERSION_haskell_src_exts(1, 20, 0)
 mkDeriving xs = Deriving () Nothing (map (\x -> mkSimpleIRule x []) xs)
-#else
-mkDeriving xs = Deriving () (map (\x -> mkSimpleIRule x []) xs)
-#endif
 
 derives,derivesEnum,derivesTypeable :: Deriving ()
 derives = mkDeriving $ map prelude ["Show","Eq","Ord","Typeable","Data","Generic"]

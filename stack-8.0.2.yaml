@@ -1,7 +1,0 @@
-packages:
-- '.'
-- descriptor/
-- hprotoc/
-- protobuf-test-suite/
-extra-deps: []
-resolver: lts-9.10

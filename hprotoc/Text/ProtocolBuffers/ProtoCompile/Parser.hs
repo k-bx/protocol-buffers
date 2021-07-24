@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BangPatterns, RankNTypes, ScopedTypeVariables, CPP #-}
 -- | This "Parser" module takes a filename and its contents as a
 -- bytestring, and uses Lexer.hs to make a stream of tokens that it
@@ -63,7 +64,6 @@ import qualified Data.ByteString.Lazy.UTF8 as U(fromString,toString)
 import Data.Char(isUpper,toLower)
 import Data.Ix(inRange)
 import Data.Maybe(fromMaybe)
-import Data.Monoid(mconcat,(<>))
 import Data.Sequence((|>),(><))
 import qualified Data.Sequence as Seq(fromList,length,empty)
 import Data.Word(Word8)
@@ -78,11 +78,7 @@ import qualified Text.ProtocolBuffers.Header as P'
 
 default ()
 
-#if MIN_VERSION_parsec(3,0,0)
 type P st = GenParser Lexed st
-#else
-type P = GenParser Lexed
-#endif
 
 parseProto :: String -> ByteString -> Either ParseError D.FileDescriptorProto
 parseProto filename fileContents = do
@@ -687,12 +683,17 @@ serviceOption = pOptionWith getOld >>= setOption >>= setNew >> eol where
 
 rpc = pName (U.fromString "rpc") >> do
   name <- ident1
-  input <- between (pChar '(') (pChar ')') ident
+  let withStreaming =
+        (pName (U.fromString "stream") >> (,True) <$> ident) <|> (,False) <$> ident
+  (input, inputStream) <- between (pChar '(') (pChar ')') withStreaming
   _ <- pName (U.fromString "returns")
-  output <- between (pChar '(') (pChar ')') ident
+  (output, outputStream) <- between (pChar '(') (pChar ')') withStreaming
   let m1 = defaultValue { D.MethodDescriptorProto.name=Just name
                         , D.MethodDescriptorProto.input_type=Just input
-                        , D.MethodDescriptorProto.output_type=Just output }
+                        , D.MethodDescriptorProto.client_streaming=Just inputStream
+                        , D.MethodDescriptorProto.output_type=Just output
+                        , D.MethodDescriptorProto.server_streaming=Just outputStream
+                        }
   m <- (eol >> return m1) <|> subParser (pChar '{' >> subRpc) m1
   update' (\s -> s {D.ServiceDescriptorProto.method=D.ServiceDescriptorProto.method s |> m})
 

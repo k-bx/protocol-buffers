@@ -1,0 +1,29 @@
+name:           http2-grpc-protocol-buffers
+version:        2.4.17
+cabal-version:  >= 1.10
+build-type:     Simple
+license:        BSD3
+copyright:      (c) 2021 Timo von Holtz
+author:         Timo von Holtz
+maintainer:     Timo von Holtz <tvh@tvholtz.de>
+homepage:       https://github.com/k-bx/protocol-buffers
+package-url:    http://hackage.haskell.org/package/protocol-buffers
+category:       Text
+Tested-With: GHC == 8.6.2, GHC == 8.8.4, GHC == 8.10.2
+source-repository head
+  type: git
+  location: git://github.com/k-bx/protocol-buffers.git
+
+Library
+  default-language: Haskell2010
+  exposed-modules: Text.ProtocolBuffers.GRPC
+
+  build-depends: base >= 4.12.0 && < 5,
+                 protocol-buffers,
+                 http2-grpc-types,
+                 bytestring,
+                 binary,
+                 hvect,
+                 unliftio-core,
+                 warp-grpc
+

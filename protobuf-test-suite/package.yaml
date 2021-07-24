@@ -20,19 +20,28 @@ tests:
       - protobuf-test-suite
       - base
       - aeson
+      - hvect
       - text
       - containers
       - process-extras
+      - http2-grpc-protocol-buffers
+      - warp-grpc
       - tasty
       - tasty-hunit
       - tasty-quickcheck
       - QuickCheck
       - bytestring
+      - wai
+      - http2-client-grpc
+      - warp
+      - http2-client
+      - http2-grpc-types
       - utf8-string
     other-modules:
       - Text.ProtocolBuffers.Test.QuickCheck
       - Text.ProtocolBuffers.Test.Tests
       - Text.ProtocolBuffers.Test.Tests.AddressBook
+      - Text.ProtocolBuffers.Test.Tests.Grpc
       - Text.ProtocolBuffers.Test.Tests.School
       - Text.ProtocolBuffers.Test.Tests.Films
       - Text.ProtocolBuffers.Test.Tests.Map

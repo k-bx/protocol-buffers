@@ -17,12 +17,6 @@ jobs:
             compilerVersion: 8.8.4
           - compiler: ghc-8.6.2
             compilerVersion: 8.6.2
-          - compiler: ghc-8.4.2
-            compilerVersion: 8.4.2
-          - compiler: ghc-8.2.2
-            compilerVersion: 8.2.2
-          - compiler: ghc-8.0.2
-            compilerVersion: 8.0.2
       fail-fast: false
     steps:
       - name: apt

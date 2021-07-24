@@ -15,7 +15,7 @@ category:       Text
 extra-source-files: TODO
                     README.md
                     Changes
-Tested-With: GHC == 8.0.2, GHC == 8.2.2, GHC == 8.4.2, GHC == 8.6.2, GHC == 8.8.4, GHC == 8.10.2
+Tested-With: GHC == 8.6.2, GHC == 8.8.4, GHC == 8.10.2
 source-repository head
   type: git
   location: git://github.com/k-bx/protocol-buffers.git
@@ -37,7 +37,7 @@ Library
                    Text.ProtocolBuffers.WireMessage
                    Text.ProtocolBuffers.ProtoJSON
 
-  build-depends: base >= 4.9.0 && < 5,
+  build-depends: base >= 4.12.0 && < 5,
                  aeson >= 1.1.0.0,
                  array,
                  base16-bytestring,

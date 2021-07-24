@@ -20,7 +20,7 @@ import System.IO (stdin, stdout)
 
 import Text.ProtocolBuffers.Basic(defaultValue, Utf8(..), utf8)
 import Text.ProtocolBuffers.Identifiers(MName,checkDIString,mangle)
-import Text.ProtocolBuffers.Reflections(ProtoInfo(..),EnumInfo(..),OneofInfo(..))
+import Text.ProtocolBuffers.Reflections(ProtoInfo(..),EnumInfo(..),OneofInfo(..),ServiceInfo(..))
 import Text.ProtocolBuffers.WireMessage (messagePut, messageGet)
 
 import qualified Text.DescriptorProtos.FileDescriptorProto as D(FileDescriptorProto)
@@ -29,7 +29,7 @@ import qualified Text.DescriptorProtos.FileDescriptorProto as D.FileDescriptorPr
 import qualified Text.DescriptorProtos.FileDescriptorSet   as D.FileDescriptorSet(FileDescriptorSet(..))
 
 import Text.ProtocolBuffers.ProtoCompile.BreakRecursion(makeResult)
-import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,oneofModule)
+import Text.ProtocolBuffers.ProtoCompile.Gen(protoModule,descriptorModules,enumModule,oneofModule,serviceModule)
 import Text.ProtocolBuffers.ProtoCompile.MakeReflections(makeProtoInfo,serializeFDP)
 import Text.ProtocolBuffers.ProtoCompile.Resolve(loadProtos,loadCodeGenRequest,makeNameMaps,getTLS
                                                 ,Env,LocalFP(..),CanonFP(..),TopLevel(..)
@@ -305,9 +305,13 @@ run' o@(Output print' writeFile') options envs fdps = do
         produceONO oi = do
           let file = joinPath . oneofFilePath $ oi
           writeFile' file (prettyPrintStyleMode style myMode (oneofModule result oi))
+        produceSRV srv = do
+          let file = joinPath . serviceFilePath $ srv
+          writeFile' file (prettyPrintStyleMode style myMode (serviceModule result srv))
     mapM_ produceMSG (messages protoInfo)
     mapM_ produceENM (enums protoInfo)
     mapM_ produceONO (oneofs protoInfo)
+    mapM_ produceSRV (services protoInfo)
     return (result, protoInfo, fdp)
   case results of
     [(result, protoInfo, fdp)] -> do
