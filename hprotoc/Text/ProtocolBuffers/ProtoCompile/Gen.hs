@@ -37,7 +37,7 @@ import Data.Char(isLower,isUpper)
 import qualified Data.Map as M
 import Data.Maybe(mapMaybe,catMaybes,fromJust)
 import Data.List (dropWhileEnd, nub)
-import           Data.Sequence (ViewL(..),(><))
+import           Data.Sequence (ViewL(..),(><),empty,singleton)
 import qualified Data.Sequence as Seq
 import qualified Data.Set as S
 import System.FilePath(joinPath)
@@ -1301,6 +1301,8 @@ instanceMessageAPI protoName
         [ inst "getVal" [patvar "m'",patvar "f'"] (App () (lvar "f'" ) (lvar "m'")) ]
   where un = unqualName protoName
 
+data WireVars = WVarsField FieldInfo | WVarsExt | WVarsOneof OneofInfo
+
 instanceWireDescriptor :: DescriptorInfo -> Decl ()
 instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                           , fields = fieldInfos
@@ -1339,8 +1341,9 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                 sizesListExt | Just v <- mExt = sizesListFields ++ [ pvar "wireSizeExtField" $$ v ]
                              | otherwise = sizesListFields
                 sizesListFields =  concat . zipWith toSize vars . F.toList $
-                                     fmap Left fieldInfos >< fmap Right oneofInfos
-        toSize var0 (Left fi)
+                                     fmap WVarsField fieldInfos >< extWVars >< fmap WVarsOneof oneofInfos
+                  where extWVars = if extensible then singleton WVarsExt else empty
+        toSize var0 (WVarsField fi)
           = let f = if | isPacked   fi -> "wireSizePacked"
                        | isRequired fi -> "wireSizeReq"
                        | canRepeat  fi -> "wireSizeRep"
@@ -1353,7 +1356,8 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
             [foldl' (App ()) (pvar f) [ litInt (wireTagLength fi)
                                  , litInt (getFieldType (typeCode fi))
                                  , var]]
-        toSize var_ (Right oi) = map (toSize' var_) . F.toList . oneofFields $ oi
+        toSize _ WVarsExt = []
+        toSize var_ (WVarsOneof oi) = map (toSize' var_) . F.toList . oneofFields $ oi
           where toSize' var r@(_,fi)
                   = let f = "wireSizeOpt"
                         var' = mkOp "Prelude'.=<<" (Var () (qualName (snd (oneofGet r)))) var
@@ -1388,8 +1392,9 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                      . sortBy (compare `on` fst)                      -- sort by number
                                      $ putStmtsList
                 putStmtsList = concat . zipWith toPut vars . F.toList $
-                                 fmap Left fieldInfos >< fmap Right oneofInfos
-        toPut var0 (Left fi)
+                                 fmap WVarsField fieldInfos >< extWVars >< fmap WVarsOneof oneofInfos
+                  where extWVars = if extensible then singleton WVarsExt else empty
+        toPut var0 (WVarsField fi)
           = let f = if | isPacked   fi -> "wirePutPackedWithSize"
                        | isRequired fi -> "wirePutReqWithSize"
                        | canRepeat  fi -> "wirePutRepWithSize"
@@ -1404,7 +1409,8 @@ instanceWireDescriptor di@(DescriptorInfo { descName = protoName
                                        , litInt (getFieldType (typeCode fi))
                                        , var1]
                  )]
-        toPut var (Right oi) = map toPut' . F.toList . oneofFields $ oi
+        toPut _ WVarsExt = []
+        toPut var (WVarsOneof oi) = map toPut' . F.toList . oneofFields $ oi
           where toPut' r@(_n,fi)
                   = let f = "wirePutOptWithSize"
                         var' = mkOp "Prelude'.=<<" (Var () (qualName (snd (oneofGet r)))) var

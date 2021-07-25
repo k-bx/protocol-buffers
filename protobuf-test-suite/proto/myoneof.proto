@@ -1,0 +1,7 @@
+message OneofWithExtension {
+    required string a = 1;
+    oneof b {
+        string c = 2;
+    }
+    extensions 100 to 9999;
+}
