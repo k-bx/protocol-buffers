@@ -25,5 +25,6 @@ Library
                  binary,
                  hvect,
                  unliftio-core,
-                 warp-grpc
+                 warp-grpc,
+                 wai
 
