@@ -217,20 +217,16 @@ importO r selfMod@(ModuleName () self) part oi =
   let pn = oneofName oi
       o = pKey pn
       m1 = ModuleName () (joinMod (haskellPrefix pn ++ parentModule pn ++ [baseName pn]))
-      m2 = ModuleName () (joinMod (parentModule pn))
       m3 = ModuleName () (joinMod (parentModule pn ++ [baseName pn]))
       fromSource = S.member (FMName self,part,o) (rIBoot r)
-      iabs1 = IAbs () (NoNamespace ()) (Ident () (mName (baseName pn)))
       iabsget = map (IAbs () (NoNamespace ()) . Ident () . fst . oneofGet) . F.toList .  oneofFields $ oi
       ithall = IThingAll () (Ident () (mName (baseName pn)))
 
-      ans1 = ImportDecl () m1 True fromSource False Nothing (Just m2)
-                (Just (ImportSpecList () False [iabs1]))
       ans2 = ImportDecl () m1 True fromSource False Nothing (Just m3)
                 (Just (ImportSpecList () False (ithall:iabsget)))
   in  if m1 == selfMod && part /= KeyFile
         then Nothing
-        else Just [ans1,ans2]
+        else Just [ans2]
 
 -- Several items might be taken from the same module, combine these statements
 mergeImports :: [ImportDecl ()] -> [ImportDecl ()]
@@ -974,7 +970,9 @@ descriptorX di = DataDecl () (DataType ()) Nothing (DHead () name) [QualConDecl 
                                        Nothing -> error $  "No Name for Field!\n" ++ show fi
         fieldOneofX :: OneofInfo -> ([Name ()],Type ())
         fieldOneofX oi = ([baseIdent' . oneofFName $ oi], typeApp "Maybe" (TyParen () (TyCon () typed)))
-          where typed = qualName (oneofName oi)
+          where
+            pn = oneofName oi
+            typed = local (joinMod (parentModule pn ++ [baseName pn, baseName pn]))
 
         fieldMapX :: FieldInfo -> ([Name ()], Type ())
         fieldMapX fi = ([baseIdent' . fieldName $ fi], ty)

@@ -5,3 +5,13 @@ message OneofWithExtension {
     }
     extensions 100 to 9999;
 }
+
+// Simplified version of envoy.config.core.v3.address.proto
+// Important detail: the oneof-field and the message have the same name
+message Address {
+    oneof address {
+        string socket_address = 1;
+        string pipe = 2;
+        string envoy_internal_address = 3;
+    }
+}
