@@ -820,8 +820,10 @@ declMapHelpers di
             [ Match ()
                 (mapFieldHelperName (descName di) "ToPair") {-name-}
                 [PVar () (Ident () "entry")]
-                (Hse.UnGuardedRhs () $           {-rhs-}
-                    Hse.Tuple () Hse.Boxed [App () (lvar "key") (lvar "entry"), App () (lvar "value") (lvar "entry")])
+                (let keyName = if makeLenses di then "_key" else "key"
+                     valueName = if makeLenses di then "_value" else "value"
+                  in Hse.UnGuardedRhs () $           {-rhs-}
+                    Hse.Tuple () Hse.Boxed [App () (lvar keyName) (lvar "entry"), App () (lvar valueName) (lvar "entry")])
                 Nothing                       {-binds-}
             ]
         -- toSeq :: Map.Map KEY VAL -> Seq MOD
@@ -839,9 +841,12 @@ declMapHelpers di
                                   [PTuple () Boxed [PVar () (Ident () "k"), PVar () (Ident () "v")]]
                                   (RecUpdate ()
                                     (pvar "defaultValue")
-                                    [ FieldUpdate () (local "key") (lvar "k")
-                                    , FieldUpdate () (local "value") (lvar "v")
-                                    ])
+                                    (let keyName = if makeLenses di then "_key" else "key"
+                                         valueName = if makeLenses di then "_value" else "value"
+                                     in [ FieldUpdate () (local keyName) (lvar "k")
+                                        , FieldUpdate () (local valueName) (lvar "v")
+                                        ]
+                                    ))
                                 )))
                             (App () (pvar "mapToList") (lvar "x")))
                 )
@@ -1039,7 +1044,7 @@ instanceToJSON di
         msgVar = distinctVar "msg"
         reservedVars = map toPrintName flds
         distinctVar var = if var `elem` reservedVars then distinctVar (var ++ "'") else var
-        getFname fld = fName $ baseName' $ fieldName fld
+        getFname fld = let Ident () funcname = baseIdent' $ fieldName fld in funcname
         toJSONFun fld = case toEnum (getFieldType (typeCode fld)) of
             TYPE_INT64 -> pvar "toJSONShowWithPayload"
             TYPE_UINT64 -> pvar "toJSONShowWithPayload"
@@ -1127,8 +1132,8 @@ instanceFromJSON di
                        ]
             in Generator () (patvar fldName) parseFieldCall''
         updates =
-                (map (\fld -> FieldUpdate () (local (getFname fld)) (lvar (getFname fld))) flds) ++
-                (map (\oi -> FieldUpdate () (local (getOneofFname oi)) (lvar (getOneofFname oi))) os)
+                (map (\fld -> FieldUpdate () (UnQual () $ baseIdent' $ fieldName fld) (lvar (getFname fld))) flds) ++
+                (map (\oi -> FieldUpdate () (UnQual () $ baseIdent' $ oneofFName oi) (lvar (getOneofFname oi))) os)
         retVal =
             case updates of
               [] -> pvar "defaultValue"

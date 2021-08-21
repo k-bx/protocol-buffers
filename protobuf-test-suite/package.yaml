@@ -6,6 +6,7 @@ library:
   dependencies:
     - base
     - filepath
+    - lens
     - process
     - protocol-buffers
     - protocol-buffers-descriptor
