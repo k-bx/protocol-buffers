@@ -40,7 +40,7 @@ import Data.Binary.Get (getByteString, getInt8, getWord32be, runGetIncremental)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.ByteString.Lazy.Builder as BSLB
+import qualified Data.ByteString.Builder as BSLB
 import Data.HVect hiding (singleton)
 import Data.Proxy
 import GHC.Exts

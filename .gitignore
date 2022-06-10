@@ -1,4 +1,5 @@
 .stack-work
+stack.yaml.lock
 .cabal-sandbox/
 cabal.sandbox.config
 dist
