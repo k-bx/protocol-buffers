@@ -1,0 +1,19 @@
+packages:
+- '.'
+- descriptor/
+- hprotoc/
+- protobuf-test-suite/
+- http2-grpc-protocol-buffers/
+
+extra-deps:
+- git: https://github.com/factisresearch/http2-client.git
+  commit: 7366f97a7cd6d0f72a2c46d067b7ccd8d49d6676
+- git: https://github.com/factisresearch/http2-grpc-haskell.git
+  commit: baf8e7cf8c58d9ab6004dedda089bd6492f25393
+  subdirs:
+    - 'http2-client-grpc'
+    - 'http2-grpc-types'
+    - 'warp-grpc'
+
+allow-newer: true
+resolver: nightly-2022-06-10
