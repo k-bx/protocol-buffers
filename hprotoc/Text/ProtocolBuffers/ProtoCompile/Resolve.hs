@@ -470,7 +470,8 @@ resolvePredEnv userMessage accept nameU envIn = do
     <|>
     (matchPrefix (top'Package tl) xs >>= filteredLookup (top'mVals tl))
     <|>
-    (testPrefix main (top'Package tl) >> filteredLookup (top'mVals tl) xs)
+    (if matchesParent main (top'Package tl) (init xs) then filteredLookup (top'mVals tl) [last xs] else Nothing)
+
    where matchesMain (PackageID {_getPackageID=a}) (PackageID {_getPackageID=b}) = a==b
          matchesMain (NoPackageID {}) (PackageID {})   = False  -- XXX XXX XXX 2012-09-19 suspicious
          matchesMain (PackageID {})   (NoPackageID {}) = True
@@ -479,8 +480,14 @@ resolvePredEnv userMessage accept nameU envIn = do
          matchPrefix (NoPackageID {}) _ = Nothing
          matchPrefix (PackageID {_getPackageID=a}) ys = stripPrefix a ys
 
-         testPrefix (PackageID {_getPackageID=child}) (PackageID {_getPackageID=parent}) = stripPrefix parent child
-         testPrefix _ _ = Nothing
+         matchesParent (PackageID {_getPackageID=a}) (PackageID {_getPackageID=b}) child = ((commonPrefix a b) ++ child) == b
+         matchesParent (NoPackageID {}) (PackageID {}) _  = False
+         matchesParent (PackageID {})   (NoPackageID {}) _ = True
+         matchesParent (NoPackageID {}) (NoPackageID {}) _ = True
+
+         commonPrefix _ [] = []
+         commonPrefix [] _ = []
+         commonPrefix (a:as) (b:bs) = if a==b then a:(commonPrefix as bs) else []
 
   filteredLookup valsIn namesIn =
     let lookupVals :: EMap -> [IName String] -> Maybe E'Entity
