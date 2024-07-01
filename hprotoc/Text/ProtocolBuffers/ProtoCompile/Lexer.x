@@ -2,7 +2,6 @@
 {-# OPTIONS_GHC -Wwarn #-}
 module Text.ProtocolBuffers.ProtoCompile.Lexer (Lexed(..), alexScanTokens,getLinePos)  where
 
-import Control.Monad.Error()
 import Codec.Binary.UTF8.String(encode)
 import qualified Data.ByteString.Lazy as DBL
 import Data.Char(ord,isHexDigit,isOctDigit,toLower)

@@ -149,10 +149,11 @@ import Text.ProtocolBuffers.ProtoCompile.Parser
 
 import Control.Applicative
 import Control.Arrow (first)
+import Control.Monad ((>=>), liftM, when)
 import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Monad.Error
+import Control.Monad.Error.Class (MonadError(..))
 import Control.Monad.Writer
 import Data.Char
 import Data.Ratio
@@ -187,13 +188,13 @@ errMsg s = "Text.ProtocolBuffers.ProtoCompile.Resolve fatal error encountered, m
 err :: forall b. String -> b
 err = error . errMsg
 
-throw :: (Error e, MonadError e m) =>  String -> m a
-throw s = throwError (strMsg (errMsg s))
+throw :: (MonadError String m) =>  String -> m a
+throw s = throwError (errMsg s)
 
 annErr :: (MonadError String m) => String -> m a -> m a
 annErr s act = catchError act (\e -> throwError ("Text.ProtocolBuffers.ProtoCompile.Resolve annErr: "++s++'\n':indent e))
 
-getJust :: (Error e,MonadError e m, Typeable a) => String -> Maybe a -> m a
+getJust :: (MonadError String m, Typeable a) => String -> Maybe a -> m a
 {-#  INLINE getJust #-}
 getJust s ma@Nothing = throw $ "Impossible? Expected Just of type "++show (typeOf ma)++" but got nothing:\n"++indent s
 getJust _s (Just a) = return a
