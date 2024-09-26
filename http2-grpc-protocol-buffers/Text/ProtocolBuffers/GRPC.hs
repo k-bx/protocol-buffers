@@ -117,6 +117,7 @@ data StreamHandler m (i :: Streaming *) (o :: Streaming *) where
   ClientStreamHandler :: (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => ClientStreamHandler m i o a -> StreamHandler m (StreamOf i) (Single o)
   BiDiStreamHandler :: (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => BiDiStreamHandler m i o a -> StreamHandler m (StreamOf i) (StreamOf o)
   GeneralStreamHandler :: (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => GeneralStreamHandler m i o a b -> StreamHandler m (StreamOf i) (StreamOf o)
+  ExplicitStreamHandler :: (Wire i, Wire o, ReflectDescriptor i, ReflectDescriptor o) => ExplicitStreamHandler m i o -> StreamHandler m (StreamOf i) (StreamOf o)
 
 instance (MakeHandlers xs a, KnownSymbol methodName) => MakeHandlers (Method methodName i o ': xs) a where
   type MakeHandlersResult (Method methodName i o ': xs) a = StreamHandler IO i o -> MakeHandlersResult xs a
@@ -129,6 +130,7 @@ instance (MakeHandlers xs a, KnownSymbol methodName) => MakeHandlers (Method met
             ClientStreamHandler handler -> clientStream method handler
             BiDiStreamHandler handler -> bidiStream method handler
             GeneralStreamHandler handler -> generalStream method handler
+            ExplicitStreamHandler handler -> explicitStream method handler
      in makeHandlers serviceName (Proxy :: Proxy xs) (acc . (newEntry :))
 
 makeServiceHandlers :: forall methods serviceName. (MakeHandlers methods [ServiceHandler], KnownSymbol serviceName) => Service serviceName methods -> MakeHandlersResult methods [ServiceHandler]
